@@ -53,6 +53,18 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | recursive `rmSync(root/.git)` | `GitDirectoryCleaner` trait only | blocked | Production provider must prove no-follow, root identity, repository ownership, bounded traversal, and Windows reparse-point behavior. See CT-RS-014. |
 | inherited Git templates/config/hooks | no provider yet | blocked | Git init can copy configured templates and Git commit can execute configured hooks; production execution must isolate or explicitly approve this behavior. |
 
+## Default-example routing tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| exported `Set(["basic", "default"])` | `DEFAULT_EXAMPLES` array | implemented | Preserves the two values and source iteration order without mutable global state. |
+| `Set.has(example)` | `is_default_example(&str)` | implemented | Exact `basic` and `default` membership only. |
+| case-sensitive membership | borrowed literal match | implemented | `Basic`, `BASIC`, `Default`, and `DEFAULT` remain false. |
+| no trimming or normalization | borrowed literal match | implemented | Whitespace, controls, composed/decomposed Unicode, joiners, and full-width/confusable forms remain false. |
+| arbitrary prefix/suffix/path-like input | borrowed literal match | implemented | No substring, regex, path, or fuzzy matching can broaden the default acquisition route. |
+| large untrusted example name | no allocation and two literal comparisons | intentional-hardening | Rust borrows the input and does not construct a set, normalized copy, or regex. See CT-RS-016. |
+| use inside `create` acquisition orchestration | TypeScript caller remains | partial | Rust predicate is not yet bound into the production command path. |
+
 ## Existing TypeScript test mapping
 
 | TypeScript test group | Rust test coverage | Status |
@@ -64,6 +76,8 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | `.gitignore` transform source branches | five translated source-contract tests | implemented |
 | Git/Mercurial detection and exact initialization order | nine Git initialization parity tests | implemented core |
 | Git initialization root/cleanup regressions absent from the TypeScript suite | seven Git initialization security tests | intentional-deviation evidence |
+| `isDefaultExample` source contract without direct Jest coverage | six translated parity tests | implemented and stronger than the source suite |
+| default-route confusable/prefix/control/large-input regressions | five robustness/security tests | intentional-hardening evidence |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -72,7 +86,7 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | --- | --- | --- |
 | CLI argument parsing and help/version output | not-implemented | Translate CLI fixtures and process-level output/exit tests. |
 | interactive prompts | not-implemented | Preserve defaults, cancellation, validation, non-TTY behavior, and ordering. |
-| example resolution and download | not-implemented | Reuse the reviewed `turbo-utils-rs` provider after redirect, proxy, extraction, and atomic-promotion contracts are closed. |
+| example resolution and download | partial | Exact default-route predicate is ported; discovery, GitHub/network/archive providers, redirects, extraction, and atomic promotion remain. |
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |

@@ -139,6 +139,16 @@ References:
 - <https://rustsec.org/advisories/RUSTSEC-2026-0194.html>
 - <https://rustsec.org/advisories/RUSTSEC-2026-0195.html>
 
+### RF-013: Default-example acquisition routing must remain exact
+
+**Status:** Fixed in the Rust predicate core; production caller remains TypeScript.
+
+`create-turbo` passes `isDefaultExample(exampleName)` into project acquisition. Broadening that predicate through trimming, case folding, Unicode normalization, prefixes, suffixes, path matching, or fuzzy matching could classify attacker-controlled names as built-in defaults.
+
+The Rust core exports the exact source-order values `basic` and `default` and matches only those two borrowed ASCII strings. Regression tests reject case variants, whitespace, controls, NUL, prefixes, suffixes, path-like values, Unicode confusables, normalization variants, joiners, and a 4 MiB arbitrary input.
+
+Required closure is to bind the Rust predicate into production acquisition orchestration and run shared TypeScript/Rust routing fixtures before the TypeScript helper is removed.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:

@@ -6,12 +6,15 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/git-ignore.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
+- `packages/create-turbo/src/utils/is-default-example.ts`
 
 It is a tranche review, not a claim that the full `create-turbo` package has been audited or migrated.
 
 ## Trust boundaries
 
-Repository-controlled or attacker-influenced inputs include the selected package manager, project-root path, `README.md`, `.gitignore`, Markdown bytes, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
+Repository-controlled or attacker-influenced inputs include the selected package manager, project-root path, example name, `README.md`, `.gitignore`, Markdown bytes, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
+
+The example name determines whether acquisition is classified as a built-in default path. That routing decision must use exact membership so prefixes, paths, Unicode lookalikes, whitespace, controls, or normalization do not silently broaden trust.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -165,10 +168,23 @@ The first RED draft used a different commit message and added an unobserved `git
 
 Regression tests: `initial_commit_message_matches_the_typescript_source`, `returns_false_when_inside_mercurial_repository`, `returns_false_when_git_init_is_unavailable_or_fails`, and `runs_the_exact_typescript_command_sequence_on_success`.
 
+### CT-RS-016: Default-example routing must not broaden beyond exact membership
+
+**Severity:** Medium
+
+`isDefaultExample` controls whether the selected example is classified as one of the built-in default acquisition paths. Replacing exact `Set.has` behavior with trimming, case folding, Unicode normalization, substring matching, path matching, or a permissive regex could route an attacker-controlled name through a more trusted code path.
+
+The Rust implementation exposes the exact source-order literals and uses `matches!(example, "basic" | "default")` over a borrowed `&str`. It performs no allocation, mutable global lookup, trimming, normalization, or pattern expansion.
+
+Parity tests prove exact values, case sensitivity, whitespace sensitivity, and non-default rejection. Robustness/security tests reject prefixes, suffixes, path-like values, controls, NUL, Unicode confusables, normalization variants, joiners, and a 4 MiB arbitrary input.
+
+Residual risk: production routing still calls the TypeScript helper. This fix protects only the Rust core until the caller is bound and differentially tested.
+
 ## Security invariants
 
 - No `unsafe` or shell command construction is introduced by these tranches.
-- README and `.gitignore` operations add no network, package acquisition, credential, or telemetry behavior.
+- README, `.gitignore`, and default-example operations add no network, package acquisition, credential, or telemetry behavior.
+- The default-example route uses exact borrowed ASCII literals only.
 - The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
 - Untrusted README size is bounded before allocation and writing.
 - Rejected README inputs remain unchanged.
@@ -193,6 +209,7 @@ Authoritative sources checked:
 
 Disposition:
 
+- The default-example tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
 - The Git core adds no external Rust crate and does not yet execute an external tool.
 - A production Git/Hg provider cannot be approved until its exact executable versions, resolution path, environment/config policy, and supported platforms are reviewed.
 - The repository-wide lockfile audit remains authoritative for transitive workspace dependencies.
@@ -203,6 +220,7 @@ Repeat the lookup before merge when dependencies, subprocess providers, network 
 ## Production cutover blockers
 
 - map typed failures to the existing JavaScript public contracts;
+- bind `is_default_example` into acquisition orchestration and compare TypeScript/Rust routing over shared fixtures;
 - run TypeScript-versus-Rust differential host fixtures on Linux, macOS, and Windows;
 - implement handle-relative publication and atomic Windows replacement with an explicit metadata/ACL policy;
 - implement and review production Git/Hg runner and `.git` cleanup providers;

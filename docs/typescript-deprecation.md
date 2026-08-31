@@ -10,10 +10,10 @@ The migration program currently contains these Rust migration cores on the singl
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 26 translated parity tests and 21 security regression tests across README rewriting, `.gitignore` creation, and the injected Git-initialization core.
+- `packages/create-turbo/rust`: 32 translated parity tests and 26 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, and default-example routing.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **207 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest Git-initialization tranche remains unvalidated until its merge-head workflow compiles, tests, formats, and lints it successfully.
+That is **218 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -34,7 +34,7 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **68%**. Across the complete repository production program it is about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **69%**. Across the complete repository production program it remains about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
 
 This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
@@ -60,7 +60,7 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
 | `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
-| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, and Git orchestration cores are ported. CLI, prompts, acquisition, production VCS providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
+| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, and exact default-example routing cores are ported. CLI, prompts, discovery/acquisition, production VCS providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
 | `packages/turbo-workspaces` | Rust CLI/library | Queued | Package-manager adapters and lock/workspace mutation semantics. |
@@ -116,6 +116,12 @@ The Rust core preserves the exact safe command sequence and boolean failure cont
 
 Production Git/Hg execution and `.git` cleanup remain blocked until executable resolution, environment/config/template/hook isolation, deadlines, bounded output, process cleanup, no-follow deletion, and Windows behavior are proven.
 
+### Default-example routing
+
+The Rust predicate preserves the exported source-order values `basic` and `default` and returns true only for exact borrowed-string membership. It intentionally performs no trimming, case folding, Unicode normalization, substring/path matching, mutable set lookup, or input copy.
+
+This closes the pure routing core but not the production route. The TypeScript `create` command still owns acquisition orchestration, so binding and shared differential fixtures remain required.
+
 TDD history:
 
 - README RED: `a0930bc5bd0eee5bc7c6edf09daf8caf38875781`.
@@ -125,6 +131,8 @@ TDD history:
 - Git RED import: `e57cc31afd1d83a015ae49136d71c7daa3217fb7`.
 - corrected Git oracle/security RED: `221586118db79fca2f94cebb15785de4111bde8e`.
 - Git implementation: `1d7b485d597b70f40bb4aa492f45d1c0638f844e`.
+- default-example RED: `edc3b96b106e2c0bebaee299690c7769f9ba6bc2`.
+- default-example implementation: `57f19c56209312fb2d04423fdd86ad239150a753`.
 
 ## Current `turbo-utils` tranche
 
