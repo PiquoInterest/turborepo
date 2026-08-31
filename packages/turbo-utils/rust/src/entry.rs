@@ -8,6 +8,7 @@ mod managers;
 mod network;
 mod notify;
 mod project;
+mod repository;
 mod root;
 
 pub use archive::{
@@ -40,5 +41,9 @@ pub use project::{
     CreateProjectError, CreateProjectOptions, CreateProjectResult, GitHubRepositoryUrl,
     PROJECT_DOWNLOAD_ATTEMPTS, ProjectSource, ProjectSourceError, RepoInfo, create_project,
     is_valid_github_repo_url,
+};
+pub use repository::{
+    GITHUB_REPOSITORY_URL_MAX_CHARS, GIT_REFERENCE_MAX_CHARS, GitHubRepositoryLocation,
+    GitHubRepositoryLocationError, parse_github_repository_location,
 };
 pub use root::{TurboRootOptions, clear_turbo_root_cache, get_turbo_root};
