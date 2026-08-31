@@ -110,7 +110,8 @@ jobs:
             packages/turbo-utils/rust/src/network.rs \
             packages/turbo-utils/rust/src/entry.rs \
             packages/turbo-utils/rust/tests/network_authority_bounds.rs \
-            packages/turbo-utils/rust/tests/network_security.rs
+            packages/turbo-utils/rust/tests/network_security.rs \
+            packages/turbo-utils/rust/tests/redirect_policy_security.rs
           git diff --cached --check
           git commit -m "fix(turbo-utils): Bound request authority policy"
           echo "GREEN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

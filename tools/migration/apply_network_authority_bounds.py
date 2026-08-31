@@ -141,6 +141,52 @@ fn github_authorization_requires_https_without_userinfo_or_non_default_ports() {
 }""",
     )
 
+    replace_once(
+        "packages/turbo-utils/rust/tests/redirect_policy_security.rs",
+        """#[test]
+fn explicit_port_redirect_target_does_not_receive_github_authorization() {
+    let environment = NetworkEnvironment {
+        github_token: Some("token".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        redirect_request_policy(
+            "https://api.github.com/repos/user/repo",
+            "https://api.github.com:443/repositories/1",
+            1,
+            &environment,
+        ),
+        Ok(RedirectRequestPolicy {
+            authorization_header: None,
+            proxy_url: None,
+        })
+    );
+}
+""",
+        """#[test]
+fn non_default_port_redirect_target_does_not_receive_github_authorization() {
+    let environment = NetworkEnvironment {
+        github_token: Some("token".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        redirect_request_policy(
+            "https://api.github.com/repos/user/repo",
+            "https://api.github.com:444/repositories/1",
+            1,
+            &environment,
+        ),
+        Ok(RedirectRequestPolicy {
+            authorization_header: None,
+            proxy_url: None,
+        })
+    );
+}
+""",
+    )
+
 
 def apply_docs(green_sha: str) -> None:
     replace_once(
