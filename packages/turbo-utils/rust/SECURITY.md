@@ -114,17 +114,43 @@ TypeScript renders package names, upgrade commands, and debug errors without a u
 
 ## TU-021: Archive path semantics and cross-platform prefixes
 
-**Boundary:** every tar entry name after configured path stripping.
+TypeScript normalizes backslashes and resolves below the destination, but checks `relativePath.startsWith("..")`. That string-prefix test rejects safe names such as `..cache`, has no explicit entry-name bound, and does not define one platform-independent rule for Windows drive, UNC, or alternate-data-stream syntax.
 
-TypeScript normalizes backslashes and resolves the path below the destination, but checks `relativePath.startsWith("..")`. That string-prefix test rejects safe names such as `..cache`, even though the component is not `..`. It also has no explicit entry-name length/component bound and does not define one platform-independent rule for Windows drive, UNC, or alternate-data-stream syntax.
+Rust processes components instead. It permits `..` only while lexical depth remains above the root, accepts safe `..`-prefixed normal names, and rejects NULs, absolute paths, UNC paths, drive prefixes, colons/alternate streams, paths over 4,096 scalar values, and paths over 256 non-empty components on every platform. Symbolic and hard-link classification retains TypeScript behavior.
 
-Rust processes path components rather than string prefixes. It permits `..` only while lexical depth remains above the root, accepts safe `..`-prefixed normal names, and rejects NULs, absolute paths, UNC paths, drive prefixes, colons/alternate streams, paths over 4,096 scalar values, and paths over 256 non-empty components on every platform. Symbolic and hard-link entry classification retains TypeScript behavior.
+**Residual:** the production extractor must combine this pure policy with private staging or descriptor-relative no-follow writes and reject links/device nodes at the parser boundary.
 
-**Intentional incompatibilities:** safe `..cache`-style names now work; colon-containing Unix archive names are rejected to avoid cross-platform alternate-stream ambiguity; oversized/deep names fail before allocation or writes.
+**Regressions:** all tests in `archive_parity.rs` and `archive_security.rs`.
 
-**Residual:** this pure policy does not itself prevent a destination directory or ancestor from being replaced. The production extractor must apply it together with private staging or descriptor-relative no-follow writes and must reject links/device nodes at the archive parser boundary.
+## TU-022: GitHub bearer credentials can cross an insecure transport boundary
 
-**Regressions:** all tests in `archive_parity.rs` and `archive_security.rs`, including `dot_dot_prefixed_normal_names_are_not_parent_traversal`.
+**TypeScript behavior:** `getGitHubAuthHeaders` parses the URL and checks only `hostname` against `api.github.com` and `codeload.github.com`. Because `URL.hostname` omits scheme, credentials, and port, the helper can attach a bearer token to plaintext `http://api.github.com/...` or to an explicitly redirected/custom port on an otherwise matching hostname.
+
+**Impact:** a token can be disclosed to an insecure transport or to a service reached through a nonstandard authority. The effect depends on network and redirect behavior, but the credential attachment decision itself is too broad.
+
+**Rust fix:** emit a bearer value only for syntactically valid, credential-free HTTPS URLs whose complete authority is exactly `api.github.com` or `codeload.github.com`, with no explicit port. Malformed URLs, look-alike domains, whitespace, controls, userinfo, HTTP, and custom ports receive no credential.
+
+**Intentional incompatibility:** hostname-equivalent URLs that are not exact HTTPS authorities no longer receive tokens.
+
+**Regressions:** `authorization_is_limited_to_exact_github_api_hosts`, `github_authorization_requires_https_without_credentials_or_ports`, and `malformed_and_control_bearing_urls_never_receive_credentials`.
+
+## TU-023: Token validation, fallback, and diagnostic boundaries
+
+**TypeScript behavior:** the selected token is trimmed and rejected only when it contains CR, LF, or NUL. There is no explicit size or printable-character bound. `GITHUB_TOKEN` takes precedence through JavaScript `||`; once a non-empty primary token is selected, an invalid value is ignored rather than falling back to `GH_TOKEN`.
+
+**Rust fix:** preserve that selection precedence, including no fallback from an invalid non-empty primary token. The selected token must be non-empty after trimming, at most 4,096 characters, and composed only of ASCII graphic bytes. `NetworkEnvironment` intentionally does not implement `Debug`, reducing accidental secret exposure in generic diagnostics.
+
+**Regressions:** `github_token_takes_precedence_over_gh_token`, `invalid_primary_token_does_not_fall_back_to_secondary_credentials`, and `tokens_are_ascii_graphic_and_size_bounded`.
+
+## TU-024: Invalid proxy configuration can create a policy bypass
+
+**TypeScript behavior:** proxy precedence is defined, but validation is deferred to `ProxyAgent` construction. A future caller that catches that error and retries without the dispatcher could silently bypass an administrator-selected proxy. The helper also has no explicit URL-length or allowed-scheme policy and does not model `NO_PROXY`.
+
+**Rust fix:** preserve the existing lower/uppercase precedence, but return a typed error when the winning non-empty value is malformed or is not a bounded absolute HTTP(S) URL. Lower-precedence proxies are not consulted after a value wins, and direct connection is not treated as a fallback.
+
+**Residual:** production request execution must define and test `NO_PROXY`/`no_proxy`, proxy authentication redaction, DNS behavior, certificate trust, redirects, and whether all GitHub endpoints are required to use the selected proxy.
+
+**Regressions:** `https_proxy_precedence_matches_the_typescript_helper`, `invalid_selected_proxy_is_an_error_instead_of_direct_connection_fallback`, `proxy_urls_are_bounded_and_restricted_to_http_or_https`, and `malformed_request_url_is_an_error_before_proxy_selection`.
 
 ## Advisory lookup record
 
@@ -136,10 +162,10 @@ Sources checked:
 - GitHub Advisory Database.
 - Official upstream security notices and release information for direct dependencies and externally executed tools changed by these tranches.
 
-The project, notification, and archive-policy tranches add no new Rust dependency. They use the standard library plus existing workspace-managed dependencies.
+The project, notification, archive-policy, and network-policy tranches add no new Rust dependency. They use the standard library plus existing workspace-managed dependencies.
 
 The resolved `unsafe-libyaml` version is `0.2.11`, above the `0.2.10` patched floor for `RUSTSEC-2023-0075`. Long-term YAML maintenance/replacement policy remains open and is distinct from a vulnerability in this resolved version.
 
 The lookup found `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33` for `webbrowser`; affected releases include versions through `1.2.1`, and `1.2.2` or later is patched. The workspace declares `0.8.7`. The observed `turborepo-query` call uses constant `http://localhost:8000`, limiting current attacker-controlled-scheme reachability, but the dependency must be upgraded or removed before migration merge.
 
-Migration CI audits the complete lockfile and temporarily ignores only that separately tracked advisory so additional findings fail the gate. The exception must be removed with the dependency remediation.
+Migration CI audits the complete lockfile and temporarily ignores only that separately tracked advisory so additional findings fail the gate. The exception must be removed with dependency remediation.
