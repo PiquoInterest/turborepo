@@ -464,3 +464,104 @@ pub fn redirect_request_policy(
         proxy_url,
     })
 }
+/// Stateful redirect policy for one request chain.
+///
+/// The chain owns the redirect count and the authorization provenance of the
+/// request that actually reached the current URL. Once authorization is
+/// stripped by a cross-origin redirect, later hops cannot reconstruct it from
+/// the destination hostname alone.
+pub struct RedirectChain<'a> {
+    environment: &'a NetworkEnvironment,
+    current_url: String,
+    authorization_header: Option<String>,
+    proxy_url: Option<String>,
+    redirect_hops: usize,
+}
+
+impl<'a> RedirectChain<'a> {
+    pub fn new(
+        initial_url: &str,
+        environment: &'a NetworkEnvironment,
+    ) -> Result<Self, NetworkPolicyError> {
+        let initial =
+            parse_absolute_url(initial_url).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+        if !is_http_request_scheme(initial.scheme) || parse_request_endpoint(initial).is_none() {
+            return Err(NetworkPolicyError::InvalidRequestUrl);
+        }
+
+        Ok(Self {
+            environment,
+            current_url: initial_url.to_owned(),
+            authorization_header: github_authorization_header(initial_url, environment),
+            proxy_url: proxy_for_url(initial_url, environment)?,
+            redirect_hops: 0,
+        })
+    }
+
+    #[must_use]
+    pub fn current_url(&self) -> &str {
+        &self.current_url
+    }
+
+    #[must_use]
+    pub const fn redirect_hops(&self) -> usize {
+        self.redirect_hops
+    }
+
+    #[must_use]
+    pub fn current_policy(&self) -> RedirectRequestPolicy {
+        RedirectRequestPolicy {
+            authorization_header: self.authorization_header.clone(),
+            proxy_url: self.proxy_url.clone(),
+        }
+    }
+
+    pub fn follow(
+        &mut self,
+        target_url: &str,
+    ) -> Result<RedirectRequestPolicy, NetworkPolicyError> {
+        let next_hop = self
+            .redirect_hops
+            .checked_add(1)
+            .filter(|hop| *hop <= REDIRECT_MAX_HOPS)
+            .ok_or(NetworkPolicyError::RedirectLimitExceeded)?;
+
+        let source =
+            parse_absolute_url(&self.current_url).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+        let target = parse_absolute_url(target_url).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+        if !is_http_request_scheme(source.scheme) || !is_http_request_scheme(target.scheme) {
+            return Err(NetworkPolicyError::InvalidRequestUrl);
+        }
+
+        let source_endpoint =
+            parse_request_endpoint(source).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+        let target_endpoint =
+            parse_request_endpoint(target).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+
+        if source.scheme.eq_ignore_ascii_case("https") && target.scheme.eq_ignore_ascii_case("http")
+        {
+            return Err(NetworkPolicyError::InsecureRedirect);
+        }
+
+        let authorization_header = if self.authorization_header.is_some()
+            && same_request_origin(source, source_endpoint, target, target_endpoint)
+        {
+            github_authorization_header(target_url, self.environment)
+        } else {
+            None
+        };
+        let proxy_url = proxy_for_url(target_url, self.environment)?;
+        let policy = RedirectRequestPolicy {
+            authorization_header: authorization_header.clone(),
+            proxy_url: proxy_url.clone(),
+        };
+
+        self.current_url.clear();
+        self.current_url.push_str(target_url);
+        self.authorization_header = authorization_header;
+        self.proxy_url = proxy_url;
+        self.redirect_hops = next_hop;
+
+        Ok(policy)
+    }
+}

@@ -1,8 +1,7 @@
 use std::error::Error;
 
 use turbo_utils_rs::{
-    NetworkEnvironment, NetworkPolicyError, REDIRECT_MAX_HOPS, RedirectChain,
-    RedirectRequestPolicy,
+    NetworkEnvironment, NetworkPolicyError, REDIRECT_MAX_HOPS, RedirectChain, RedirectRequestPolicy,
 };
 
 #[test]
@@ -11,13 +10,10 @@ fn authorization_cannot_reappear_after_a_cross_origin_redirect() -> Result<(), B
         github_token: Some("token".into()),
         ..Default::default()
     };
-    let mut chain = RedirectChain::new(
-        "https://api.github.com/repos/user/repo",
-        &environment,
-    )?;
+    let mut chain = RedirectChain::new("https://api.github.com/repos/user/repo", &environment)?;
 
     assert_eq!(
-        chain.current_policy()?,
+        chain.current_policy(),
         RedirectRequestPolicy {
             authorization_header: Some("Bearer token".into()),
             proxy_url: None,
