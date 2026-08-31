@@ -147,16 +147,24 @@ jobs:
           ):
               raise SystemExit(f"an affected h2 version remains locked: {sorted(h2_versions)}")
 
-      - name: Validate the repaired Rust graph
+      - name: Validate repository diff and metadata
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           cargo metadata --locked --no-deps >/dev/null
-          cargo fmt --all --check
-          cargo check --locked -p turborepo-lockfiles --all-targets
-          cargo clippy --locked -p turborepo-lockfiles --all-targets -- -D warnings
-          cargo lint
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Check the lockfile crate
+        run: cargo check --locked -p turborepo-lockfiles --all-targets
+
+      - name: Lint the lockfile crate
+        run: cargo clippy --locked -p turborepo-lockfiles --all-targets -- -D warnings
+
+      - name: Run workspace Rust lint
+        run: cargo lint
 
       - name: Commit the validated repair and remove the one-shot workflow
         shell: bash
