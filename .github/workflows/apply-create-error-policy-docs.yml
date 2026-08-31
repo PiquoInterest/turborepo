@@ -67,9 +67,10 @@ jobs:
         with:
           version: "0.15.2"
 
-      - name: Prepare a temporary coherent Biome graph
+      - name: Prepare a temporary coherent and bounded Rust graph
         run: |
           set -euo pipefail
+          cp Cargo.lock /tmp/create-error-policy-Cargo.lock.original
 
           python3 <<'PY'
           from pathlib import Path
@@ -82,6 +83,7 @@ jobs:
               'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
               'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
               'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = { version = "1.11.1" }': 'unrs_resolver = { version = "=1.11.1" }',
           }
           for old, new in replacements.items():
               if text.count(old) != 1:
@@ -128,16 +130,86 @@ jobs:
           import tomllib
           from pathlib import Path
 
-          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
-          mismatches = {
+          def identities(path: str) -> set[tuple[str, str, str, str]]:
+              lock = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+              return {
+                  (
+                      package["name"],
+                      package["version"],
+                      package.get("source", ""),
+                      package.get("checksum", ""),
+                  )
+                  for package in lock.get("package", [])
+              }
+
+          original = identities("/tmp/create-error-policy-Cargo.lock.original")
+          current = identities("Cargo.lock")
+
+          original_lock = tomllib.loads(
+              Path("/tmp/create-error-policy-Cargo.lock.original").read_text(encoding="utf-8")
+          )
+          current_lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+
+          current_unrs = [
+              package["version"]
+              for package in current_lock.get("package", [])
+              if package.get("name") == "unrs_resolver"
+          ]
+          if current_unrs != ["1.11.1"]:
+              raise SystemExit(
+                  f"source-compatible unrs_resolver lock changed: {current_unrs}"
+              )
+
+          mismatched_biome = {
               package["name"]: package["version"]
-              for package in lock.get("package", [])
+              for package in current_lock.get("package", [])
               if package.get("name", "").startswith("biome_")
               and package.get("version", "").startswith("0.5.")
               and package.get("version") != "0.5.7"
           }
-          if mismatches:
-              raise SystemExit(f"Biome dependency family is still incoherent: {mismatches}")
+          if mismatched_biome:
+              raise SystemExit(
+                  f"Biome dependency family is still incoherent: {mismatched_biome}"
+              )
+
+          removed = {(name, version) for name, version, _, _ in original - current}
+          added = {(name, version) for name, version, _, _ in current - original}
+
+          unexpected_removed = {
+              identity
+              for identity in removed
+              if not identity[0].startswith("biome_")
+              and identity
+              not in {
+                  ("enumflags2", "0.7.12"),
+                  ("enumflags2_derive", "0.7.12"),
+                  ("result", "1.0.0"),
+                  ("serde_ini", "0.2.0"),
+                  ("void", "1.0.2"),
+              }
+          }
+          unexpected_added = {
+              identity
+              for identity in added
+              if not identity[0].startswith("biome_")
+              and identity not in {("memoffset", "0.8.0")}
+          }
+          if unexpected_removed or unexpected_added:
+              raise SystemExit(
+                  "temporary Biome repair changed unreviewed packages: "
+                  f"removed={sorted(unexpected_removed)}, "
+                  f"added={sorted(unexpected_added)}"
+              )
+
+          original_unrs = [
+              package["version"]
+              for package in original_lock.get("package", [])
+              if package.get("name") == "unrs_resolver"
+          ]
+          if original_unrs != current_unrs:
+              raise SystemExit(
+                  f"unrs_resolver drifted from {original_unrs} to {current_unrs}"
+              )
           PY
 
       - name: Build the exact repository Turbo for the pre-push hook
