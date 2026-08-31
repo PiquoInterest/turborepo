@@ -74,7 +74,9 @@ export async function directory({ dir }: { dir: CreateCommandArgument }) {
     transformer: (d: string) => d.trim()
   });
 
-  return validateDirectoryOrThrow(projectDirectory.trim());
+  // Inquirer transformers affect rendering only. Validate the exact answer that
+  // was accepted rather than silently rewriting the requested directory.
+  return validateDirectoryOrThrow(projectDirectory);
 }
 
 export async function packageManager({

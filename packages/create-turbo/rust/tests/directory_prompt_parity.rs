@@ -1,9 +1,9 @@
 use std::{error::Error, fmt};
 
 use create_turbo_rs::{
-    DEFAULT_PROJECT_DIRECTORY, DIRECTORY_PROMPT_MESSAGE, DirectoryPromptError,
-    DirectoryPromptRequest, DirectoryPrompter, DirectoryValidator, MAX_DIRECTORY_INPUT_BYTES,
-    resolve_directory_prompt,
+    DEFAULT_PROJECT_DIRECTORY, DIRECTORY_PROMPT_MESSAGE, DirectoryDisplayTransform,
+    DirectoryPromptError, DirectoryPromptRequest, DirectoryPrompter, DirectoryValidator,
+    MAX_DIRECTORY_INPUT_BYTES, resolve_directory_prompt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,19 +150,28 @@ fn missing_argument_uses_the_exact_prompt_request() {
             message: DIRECTORY_PROMPT_MESSAGE,
             default: DEFAULT_PROJECT_DIRECTORY,
             max_input_bytes: MAX_DIRECTORY_INPUT_BYTES,
+            display_transform: DirectoryDisplayTransform::TrimEcmascriptWhitespace,
         }]
     );
 }
 
 #[test]
-fn prompted_value_uses_ecmascript_trim_semantics() {
-    let mut prompter = RecordingPrompter::succeeds("\u{feff}\u{00a0}project\u{3000}");
+fn prompt_transform_is_display_only_and_raw_answer_is_validated() {
+    let raw_answer = "  project  ";
+    let mut prompter = RecordingPrompter::succeeds(raw_answer);
     let mut validator = RecordingValidator::accepting();
 
     let result = resolve_directory_prompt(None, &mut prompter, &mut validator);
 
-    assert_eq!(result, Ok(ValidatedDirectory("project".to_owned())));
-    assert_eq!(validator.calls, ["project"]);
+    assert_eq!(result, Ok(ValidatedDirectory(raw_answer.to_owned())));
+    assert_eq!(validator.calls, [raw_answer]);
+    assert_eq!(prompter.calls.len(), 1);
+    assert_eq!(
+        prompter.calls[0]
+            .display_transform
+            .apply("\u{feff}\u{00a0}project\u{3000}"),
+        "project"
+    );
 }
 
 #[test]

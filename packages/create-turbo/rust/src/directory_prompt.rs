@@ -5,10 +5,25 @@ pub const DEFAULT_PROJECT_DIRECTORY: &str = "./my-turborepo";
 pub const MAX_DIRECTORY_INPUT_BYTES: usize = 4_096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirectoryDisplayTransform {
+    TrimEcmascriptWhitespace,
+}
+
+impl DirectoryDisplayTransform {
+    #[must_use]
+    pub fn apply<'a>(self, value: &'a str) -> &'a str {
+        match self {
+            Self::TrimEcmascriptWhitespace => value.trim_matches(is_ecmascript_whitespace),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DirectoryPromptRequest {
     pub message: &'static str,
     pub default: &'static str,
     pub max_input_bytes: usize,
+    pub display_transform: DirectoryDisplayTransform,
 }
 
 pub trait DirectoryPrompter {
@@ -107,12 +122,15 @@ where
             message: DIRECTORY_PROMPT_MESSAGE,
             default: DEFAULT_PROJECT_DIRECTORY,
             max_input_bytes: MAX_DIRECTORY_INPUT_BYTES,
+            display_transform: DirectoryDisplayTransform::TrimEcmascriptWhitespace,
         })
         .map_err(DirectoryPromptError::Prompt)?;
-    let directory = trim_ecmascript_whitespace(&prompted);
-    validate_directory_input(directory).map_err(DirectoryPromptError::Input)?;
+
+    // Inquirer's transformer is display-only. Security checks and validation
+    // apply to the exact accepted answer, not to its rendered representation.
+    validate_directory_input(&prompted).map_err(DirectoryPromptError::Input)?;
     validator
-        .validate(directory)
+        .validate(&prompted)
         .map_err(DirectoryPromptError::Validation)
 }
 
@@ -141,10 +159,6 @@ fn is_unsafe_control(character: char) -> bool {
                 | '\u{2060}'..='\u{206f}'
                 | '\u{feff}'
         )
-}
-
-fn trim_ecmascript_whitespace(value: &str) -> &str {
-    value.trim_matches(is_ecmascript_whitespace)
 }
 
 fn is_ecmascript_whitespace(character: char) -> bool {

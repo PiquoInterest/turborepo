@@ -10,9 +10,9 @@ mod transform_pipeline;
 
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use directory_prompt::{
-    DEFAULT_PROJECT_DIRECTORY, DIRECTORY_PROMPT_MESSAGE, DirectoryInputRejection,
-    DirectoryPromptError, DirectoryPromptRequest, DirectoryPrompter, DirectoryValidator,
-    MAX_DIRECTORY_INPUT_BYTES, resolve_directory_prompt,
+    DEFAULT_PROJECT_DIRECTORY, DIRECTORY_PROMPT_MESSAGE, DirectoryDisplayTransform,
+    DirectoryInputRejection, DirectoryPromptError, DirectoryPromptRequest, DirectoryPrompter,
+    DirectoryValidator, MAX_DIRECTORY_INPUT_BYTES, resolve_directory_prompt,
 };
 pub use git_ignore::{
     DEFAULT_IGNORE, GIT_IGNORE_TRANSFORM_NAME, GitIgnoreError, create_git_ignore,
