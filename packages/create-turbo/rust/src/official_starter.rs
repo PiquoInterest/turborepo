@@ -93,10 +93,7 @@ pub fn plan_official_starter(
             };
 
             if is_default_example(input.example_name) {
-                package.insert(
-                    "name".into(),
-                    Value::String(input.project_name.to_owned()),
-                );
+                package.insert("name".into(), Value::String(input.project_name.to_owned()));
             }
 
             if let Some(Value::Object(dev_dependencies)) = package.get_mut("devDependencies")
@@ -107,16 +104,13 @@ pub fn plan_official_starter(
                 let version = input
                     .requested_turbo_version
                     .filter(|version| !version.is_empty())
-                    .map_or_else(
-                        || format!("^{}", input.invocation_version),
-                        str::to_owned,
-                    );
+                    .map_or_else(|| format!("^{}", input.invocation_version), str::to_owned);
                 dev_dependencies.insert("turbo".into(), Value::String(version));
             }
 
             let normalized = normalize_javascript_property_order(Value::Object(package));
-            let mut rendered =
-                serde_json::to_string_pretty(&normalized).map_err(OfficialStarterError::Serialize)?;
+            let mut rendered = serde_json::to_string_pretty(&normalized)
+                .map_err(OfficialStarterError::Serialize)?;
             rendered.push('\n');
             Some(rendered)
         }
