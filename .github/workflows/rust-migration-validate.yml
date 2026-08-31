@@ -262,6 +262,10 @@ jobs:
         with:
           node-version: 24
 
+      - name: Format migration documentation for repository hooks
+        run: |
+          pnpm exec oxfmt docs/typescript-deprecation.md packages/turbo-ignore/rust/PARITY_MATRIX.md packages/turbo-utils/rust/PARITY_MATRIX.md
+
       - name: Install global Turbo for repository push hooks
         uses: ./.github/actions/install-global-turbo
 
@@ -273,7 +277,7 @@ jobs:
           TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
         run: |
           set -euo pipefail
-          git add Cargo.lock packages/turbo-ignore/rust packages/turbo-utils/rust
+          git add Cargo.lock docs/typescript-deprecation.md packages/turbo-ignore/rust packages/turbo-utils/rust
           if git diff --cached --quiet; then
             echo "No generated migration changes remain."
             exit 0
