@@ -2,6 +2,13 @@ name: Rust migration validation
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/rust-migration-validate.yml
+      - Cargo.toml
+      - Cargo.lock
+      - packages/turbo-ignore/rust/**
+      - packages/turbo-utils/rust/**
   push:
     branches:
       - rust/typescript-deprecation
@@ -16,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rust-migration-validation-${{ github.ref }}
+  group: rust-migration-validation-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,11 +44,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache-key: rust-typescript-deprecation
 
-      - name: Resolve workspace lock entries and compile tests
-        run: cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
-
       - name: Format Rust workspace
         run: cargo fmt --all
+
+      - name: Resolve workspace lock entries and compile tests
+        run: cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
 
       - name: Verify formatting is stable
         run: cargo fmt --all --check
