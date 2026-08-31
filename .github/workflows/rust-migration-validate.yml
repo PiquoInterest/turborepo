@@ -5,8 +5,11 @@ on:
   pull_request:
     paths:
       - .github/workflows/rust-migration-validate.yml
+      - AGENTS.md
       - Cargo.toml
       - Cargo.lock
+      - docs/rust-migration-security-findings.md
+      - docs/typescript-deprecation.md
       - packages/turbo-ignore/rust/**
       - packages/turbo-utils/rust/**
   push:
@@ -14,8 +17,11 @@ on:
       - rust/typescript-deprecation
     paths:
       - .github/workflows/rust-migration-validate.yml
+      - AGENTS.md
       - Cargo.toml
       - Cargo.lock
+      - docs/rust-migration-security-findings.md
+      - docs/typescript-deprecation.md
       - packages/turbo-ignore/rust/**
       - packages/turbo-utils/rust/**
 
@@ -37,6 +43,32 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+
+      - name: Verify migration workflow and evidence documents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -Fq '## TypeScript-to-Rust Deprecation Workflow' AGENTS.md
+          grep -Fq 'current advisory lookup' AGENTS.md
+          grep -Fq 'README.md' AGENTS.md
+          grep -Fq 'PARITY_MATRIX.md' AGENTS.md
+          grep -Fq 'SECURITY.md' AGENTS.md
+
+          migration_components=(
+            packages/turbo-ignore/rust
+            packages/turbo-utils/rust
+          )
+
+          for component in "${migration_components[@]}"; do
+            test -s "${component}/Cargo.toml"
+            test -s "${component}/README.md"
+            test -s "${component}/PARITY_MATRIX.md"
+            test -s "${component}/SECURITY.md"
+            grep -Fq "\`${component}\`" docs/typescript-deprecation.md
+          done
+
+          test -s docs/rust-migration-security-findings.md
 
       - name: Set up repository Rust toolchain
         uses: ./.github/actions/setup-rust
