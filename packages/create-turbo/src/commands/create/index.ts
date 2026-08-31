@@ -38,7 +38,10 @@ function handleErrors(
   telemetry?.trackCommandStatus({ command: "create", status: "error" });
   // handle errors from ../../transforms
   if (err instanceof TransformError) {
-    error(picocolors.bold(err.transform), picocolors.red(err.message));
+    error(
+      picocolors.bold(err.terminalTransform),
+      picocolors.red(err.terminalMessage)
+    );
     if (err.fatal) {
       process.exit(1);
     }

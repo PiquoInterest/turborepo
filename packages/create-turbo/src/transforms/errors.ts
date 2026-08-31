@@ -8,17 +8,20 @@ export interface TransformErrorOptions {
 export class TransformError extends Error {
   public transform: string;
   public fatal: boolean;
-  public readonly rawMessage: string;
-  public readonly rawTransform: string;
 
   constructor(message: string, opts?: TransformErrorOptions) {
-    const rawTransform = opts?.transform ?? "unknown";
-    super(sanitizeTerminalText(message));
+    super(message);
     this.name = "TransformError";
-    this.rawMessage = message;
-    this.rawTransform = rawTransform;
-    this.transform = sanitizeTerminalText(rawTransform);
+    this.transform = opts?.transform ?? "unknown";
     this.fatal = opts?.fatal ?? true;
     Error.captureStackTrace(this, TransformError);
+  }
+
+  public get terminalMessage(): string {
+    return sanitizeTerminalText(this.message);
+  }
+
+  public get terminalTransform(): string {
+    return sanitizeTerminalText(this.transform);
   }
 }

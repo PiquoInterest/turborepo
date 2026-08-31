@@ -72,6 +72,7 @@ jobs:
       - name: Check focused TypeScript formatting
         run: >-
           pnpm exec oxfmt --check
+          packages/create-turbo/src/commands/create/index.ts
           packages/create-turbo/src/transforms/errors.ts
           packages/create-turbo/src/transforms/terminal.ts
           packages/create-turbo/__tests__/transform-error-security.test.ts
