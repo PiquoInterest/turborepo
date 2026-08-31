@@ -1,6 +1,4 @@
-use create_turbo_rs::{
-    MAX_TERMINAL_DIAGNOSTIC_SCALARS, TransformFailure, sanitize_terminal_text,
-};
+use create_turbo_rs::{MAX_TERMINAL_DIAGNOSTIC_SCALARS, TransformFailure, sanitize_terminal_text};
 
 #[test]
 fn terminal_rendering_neutralizes_controls_and_bidirectional_formatting() {
@@ -11,8 +9,7 @@ fn terminal_rendering_neutralizes_controls_and_bidirectional_formatting() {
         "failed\\u{1b}[31m\\nnext\\rline\\tcol\\u{202e}txt\\u{2066}iso\\u{200b}hidden\\u{9b}csi";
     let expected_transform = "../../official-starter\\0\\u{2069}";
 
-    let failure =
-        TransformFailure::with_options(raw_message, Some(raw_transform), Some(false));
+    let failure = TransformFailure::with_options(raw_message, Some(raw_transform), Some(false));
 
     assert_eq!(sanitize_terminal_text(raw_message), expected_message);
     assert_eq!(failure.to_string(), expected_message);
