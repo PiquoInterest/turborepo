@@ -38,6 +38,7 @@ jobs:
       - name: Validate focused Rust crate
         run: |
           set -euo pipefail
+          cargo fmt --all
           cargo fmt --all --check
           cargo check --locked -p create-turbo-rs --all-targets
           cargo test --locked -p create-turbo-rs --all-targets
@@ -60,6 +61,9 @@ jobs:
         uses: ./.github/actions/setup-node
         with:
           node-version: 22
+
+      - name: Build the TypeScript workspace dependency
+        run: pnpm --filter @turbo/workspaces exec tsdown
 
       - name: Run expected-failure legacy security evidence
         run: pnpm --filter create-turbo exec jest --runInBand __tests__/create-error-security.test.ts
