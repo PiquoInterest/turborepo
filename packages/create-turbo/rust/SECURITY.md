@@ -1,149 +1,151 @@
 # create-turbo Rust migration security review
 
-This review covers the current Rust port of `packages/create-turbo/src/transforms/update-commands-in-readme.ts`. It is a tranche review, not a claim that the full `create-turbo` package has been audited or migrated.
+This review covers the current Rust ports of:
+
+- `packages/create-turbo/src/transforms/update-commands-in-readme.ts`
+- `packages/create-turbo/src/transforms/git-ignore.ts`
+- the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
+
+It is a tranche review, not a claim that the full `create-turbo` package has been audited or migrated.
 
 ## Trust boundaries
 
-Attacker-influenced or repository-controlled inputs include:
+Repository-controlled or attacker-influenced inputs include the selected package manager, project-root path, `README.md`, `.gitignore`, Markdown bytes, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
 
-- the selected package-manager value;
-- the project root path;
-- the existence, type, size, bytes, permissions, and replacement of `README.md`;
-- Markdown code regions and all text inside them;
-- concurrent filesystem changes while the transform is reading or writing;
-- pre-created temporary filenames in the project directory.
-
-The transform does not perform network access, package acquisition, subprocess execution, credential handling, telemetry, archive extraction, or privileged operations. Those package-level boundaries remain outside this tranche.
+These tranches perform no network access, package acquisition, subprocess execution, credentials, telemetry, archives, or privileged operations. Those boundaries remain outside the current implementation.
 
 ## Findings and fixes
 
-### CT-RS-001: Unbounded README processing can exhaust memory and CPU
+### CT-RS-001: Unbounded README processing
 
 **Severity:** Medium
 
-**TypeScript behavior:** the production transform reads the complete `README.md` into memory and runs whole-document regular-expression replacements without an explicit size limit.
+The TypeScript transform reads the complete README and applies whole-document regular expressions without an explicit limit. A generated repository can therefore cause excessive memory and CPU use.
 
-**Impact:** a generated or attacker-controlled repository can provide a very large README and consume excessive memory and processing time during project creation.
+The Rust implementation limits both in-memory and filesystem input to 4 MiB and uses a linear scanner.
 
-**Rust fix:** both in-memory and filesystem inputs are limited to 4 MiB. The parser performs a bounded linear scan and does not compile or execute attacker-controlled regular expressions.
+Regression tests: `rejects_oversized_in_memory_markdown`, `rejects_oversized_readme_without_modifying_it`, and `unmatched_fence_is_bounded_and_left_unchanged`.
 
-**Regression tests:**
-
-- `rejects_oversized_in_memory_markdown`
-- `rejects_oversized_readme_without_modifying_it`
-- `unmatched_fence_is_bounded_and_left_unchanged`
-
-**Residual risk:** the limit is a policy value and may need adjustment based on production fixtures. Changing it requires fixture and denial-of-service review.
-
-### CT-RS-002: Malformed UTF-8 is silently replaced by the TypeScript path
+### CT-RS-002: Malformed UTF-8 can be silently rewritten
 
 **Severity:** Low
 
-**TypeScript behavior:** Node's UTF-8 string decoding can replace malformed byte sequences, after which the file is written back and the original bytes are lost.
+Node string decoding can replace malformed byte sequences before rewriting the file. Rust rejects malformed UTF-8 and leaves the original bytes unchanged.
 
-**Impact:** a malformed README can be silently corrupted even when the package-manager text is unrelated to the malformed region.
+Regression test: `rejects_invalid_utf8_without_modifying_it`.
 
-**Rust fix:** invalid UTF-8 is rejected before transformation or writing. The original file remains byte-for-byte unchanged.
-
-**Regression test:** `rejects_invalid_utf8_without_modifying_it`
-
-**Intentional compatibility difference:** this is stricter than the TypeScript implementation. A future binding must map the failure to the established non-fatal transform error contract rather than silently decoding replacement characters.
-
-### CT-RS-003: Symlink following can modify a file outside the generated project
+### CT-RS-003: README symlink following can modify an external file
 
 **Severity:** High
 
-**TypeScript behavior:** `existsSync`, `readFile`, and `writeFile` follow a symlinked project root or `README.md` by default.
+The TypeScript read/write path follows a symlinked root or README. Rust requires a real root directory and regular README, and Unix builds compare device/inode identity after opening and before replacement.
 
-**Impact:** when project contents or the destination directory are attacker-controlled, the transform can overwrite an external file reachable through a symbolic link.
+Regression tests: `rejects_non_regular_readme_paths`, `rejects_symlinked_readme_without_touching_target`, and `rejects_symlinked_project_root`.
 
-**Rust fix:** the provided project root must be a real directory rather than a symlink, and `README.md` must be a real regular file. Unix builds compare device and inode metadata after opening and again before replacement to detect ordinary path substitution races.
+Residual risk: portable path APIs do not close every malicious concurrent-replacement race. Descriptor-relative operations and Windows identity handling remain cutover blockers.
 
-**Regression tests:**
-
-- `rejects_non_regular_readme_paths`
-- `rejects_symlinked_readme_without_touching_target`
-- `rejects_symlinked_project_root`
-
-**Residual risk:** standard path-based filesystem APIs cannot completely eliminate malicious concurrent replacement without descriptor-relative platform APIs. Windows identity checks remain incomplete and block production cutover.
-
-### CT-RS-004: In-place truncating writes can leave a partial README
+### CT-RS-004: In-place README writes can leave a partial file
 
 **Severity:** Medium
 
-**TypeScript behavior:** the transform writes directly to `README.md`. A process crash, storage failure, or interrupted write after truncation can leave a partially written or empty file.
+The TypeScript transform truncates and writes the original path. Rust writes a newly created sibling file, synchronizes it, applies the original permissions, revalidates the root and README, and then replaces the original. Ordinary failures remove the temporary file.
 
-**Impact:** generated project documentation can be corrupted, and retries may no longer have the original input.
+Regression tests: `preserves_existing_readme_permissions`, `successful_write_leaves_no_temporary_files`, and all rejected-input unchanged tests.
 
-**Rust fix:** transformed content is written to a same-directory file opened with `create_new`, synchronized, assigned the original permissions, revalidated against the original root and README identity, and then moved into place. Temporary files are removed on ordinary failure paths.
+Residual risk: portable replacement does not preserve every ownership, ACL, extended-attribute, or hard-link property. The Windows fallback is not atomic.
 
-**Regression tests:**
-
-- `preserves_existing_readme_permissions`
-- `successful_write_leaves_no_temporary_files`
-- the oversized and invalid-UTF-8 tests verify that rejected inputs do not modify the original file.
-
-**Residual risk:** on Unix, replacement is atomic but ownership, ACLs, extended attributes, and hard-link identity are not fully preserved by a portable standard-library rename. On Windows, the current standard-library fallback removes the target before rename and is not atomic. A reviewed platform-specific replacement implementation and metadata policy are required before production cutover.
-
-### CT-RS-005: Temporary-file substitution and collisions
+### CT-RS-005: README temporary-file substitution and collisions
 
 **Severity:** Low
 
-**TypeScript behavior:** not applicable because the current implementation writes in place.
+The Rust safety strategy introduces temporary files. They use process/monotonic suffixes, `create_new`, and a 32-attempt bound. Existing names are never followed or overwritten.
 
-**Rust risk introduced by the safer write strategy:** a predictable temporary pathname could otherwise be pre-created or redirected.
+Regression test: `successful_write_leaves_no_temporary_files`.
 
-**Rust fix:** temporary files use a process and monotonic sequence suffix, are opened with `create_new`, and are never followed when already present. Creation is bounded to 32 attempts.
-
-**Regression test:** `successful_write_leaves_no_temporary_files`
-
-**Residual risk:** filenames are not intended to be secret. Directory write access still permits denial of service by exhausting all attempts, which returns a deterministic error without modifying the original README.
-
-### CT-RS-006: Regex behavior must not broaden substitutions into prose or identifiers
+### CT-RS-006: Command rewriting can broaden into prose or identifiers
 
 **Severity:** Low
 
-**Impact:** an incorrect port could rewrite prose, package names embedded inside identifiers, `npx`, or command syntax, damaging generated documentation.
+A faulty port could rewrite prose, `npx`, or embedded identifiers. The Rust scanner preserves the TypeScript region precedence, ordered replacements, JavaScript ASCII word-boundary behavior, and whitespace-plus-`run` exclusion.
 
-**Rust fix:** the scanner preserves the TypeScript region precedence and JavaScript-style ASCII word-boundary behavior. It applies the same ordered compound and bare-manager passes, including the JavaScript whitespace plus `run` negative lookahead.
+Evidence: all 12 README parity tests.
 
-**Regression tests:** all 12 parity tests in `readme_transform_parity.rs`, especially prose isolation, subcommand preservation, identity replacement, and the realistic `npx` fixture.
+### CT-RS-007: `.gitignore` check/write race can overwrite a concurrent path
+
+**Severity:** Medium
+
+The TypeScript transform performs `existsSync` and then `writeFileSync`. A destination can appear between those operations; the write call is overwrite-capable.
+
+Rust writes the exact constant to a newly created sibling temporary file, synchronizes it, and publishes through `hard_link`, which fails when any destination already exists. A concurrent regular path wins and is returned as `not-applicable`; it is never overwritten.
+
+Regression tests: `regular_existing_file_is_never_overwritten` and `successful_creation_has_only_the_expected_file`.
+
+Residual risk: a malicious actor with write access can continuously win publication and cause denial of service. That is preferable to overwriting their path.
+
+### CT-RS-008: Broken `.gitignore` symlink can create or overwrite an external target
+
+**Severity:** High
+
+`existsSync` returns false for a broken symlink. The subsequent TypeScript write follows the link and can create the target outside the generated project. An existing symlink is also treated as an ordinary already-present path, hiding an unsafe project state.
+
+Rust uses `symlink_metadata` and rejects both broken and existing destination symlinks. It also rejects a symlinked project root.
+
+Regression tests: `broken_symlink_is_rejected_without_creating_its_external_target`, `existing_symlink_is_rejected_without_modifying_its_target`, and `symlinked_project_root_is_rejected_without_writing_through_it`.
+
+### CT-RS-009: `.gitignore` publication must not expose partial content
+
+**Severity:** Low
+
+Writing directly to the final path exposes a partially written file to concurrent readers. Rust fully writes and synchronizes the temporary inode before linking it under `.gitignore`.
+
+Regression test: `successful_creation_has_only_the_expected_file`.
+
+### CT-RS-010: Project-root replacement remains a descriptor-relative gap
+
+**Severity:** Medium
+
+The Rust implementation revalidates root identity, but a malicious concurrent actor may still exchange path components between path-based checks and filesystem operations. This cannot be completely solved with portable standard-library path APIs.
+
+Current mitigation: reject root symlinks, compare root identity on Unix, use no-overwrite target publication, and never follow destination symlinks.
+
+Required closure: descriptor-relative directory handles on Unix and reviewed Windows handle-based operations before the Rust transform becomes the production path in attacker-writable directories.
 
 ## Security invariants
 
-- Production Rust code in this tranche contains no `unsafe`, shell invocation, subprocess execution, network access, package acquisition, or credential handling.
+- No `unsafe`, shell invocation, subprocess, network, archive, package acquisition, credential, or telemetry code is introduced by these tranches.
 - No new third-party Rust dependency is introduced.
-- The transformer accepts only the four enumerated package managers.
-- Untrusted input size is bounded before output allocation and before filesystem writes.
-- Rejected inputs do not intentionally modify the original README.
-- A symlinked root or README is an error rather than a compatibility path.
-- Security incompatibilities are recorded in this file and `PARITY_MATRIX.md` and have regression tests.
+- Untrusted README size is bounded before allocation and writing.
+- Rejected README inputs remain unchanged.
+- Existing `.gitignore` content is never overwritten.
+- Broken or existing destination symlinks are errors.
+- Temporary files use `create_new`, bounded retries, and ordinary failure cleanup.
+- Every intentional incompatibility is recorded here and in `PARITY_MATRIX.md` with regression coverage.
 
 ## Advisory lookup
 
 **Lookup date: 2026-08-31**
 
-Sources checked:
+Authoritative sources checked:
 
 - RustSec Advisory Database: <https://rustsec.org/>
 - RustSec advisory repository: <https://github.com/RustSec/advisory-db>
 - GitHub Advisory Database, Rust ecosystem: <https://github.com/advisories?query=ecosystem%3Arust>
-- Rust Project security policy and published Rust advisories: <https://www.rust-lang.org/policies/security> and <https://github.com/rust-lang/rust/security>
+- Rust Project security policy and advisories: <https://www.rust-lang.org/policies/security> and <https://github.com/rust-lang/rust/security>
 
 Disposition:
 
-- This tranche adds no external crates and executes no external tools, so there is no new package-specific advisory exposure to resolve.
-- It relies on stable standard-library filesystem, UTF-8, and string APIs. The reviewed code does not invoke Windows batch files, `remove_dir_all`, or Cygwin path classification, which are the boundaries highlighted by currently published Rust Project advisories visible during the lookup.
+- These tranches add no external crate or externally executed tool, so there is no new package-specific advisory exposure.
+- They rely on standard-library string and filesystem APIs and do not invoke Windows batch files, Cygwin path classification, or process execution.
 - The repository-wide lockfile audit remains authoritative for transitive workspace dependencies.
-- The existing repository advisory for `webbrowser` (`RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`) is unrelated to this transform but remains an open repository blocker until upgraded or removed.
+- The existing `webbrowser` finding (`RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`) is unrelated to these transforms but remains an open repository blocker.
 
-The advisory lookup must be repeated before merge if dependencies, externally executed tools, archive handling, network access, or platform-specific filesystem code are added.
+Repeat the lookup before merge when dependencies, subprocesses, network access, archives, or platform-specific filesystem APIs change.
 
 ## Production cutover blockers
 
-- map typed Rust failures to the existing JavaScript `TransformError` contract;
-- execute TypeScript-versus-Rust differential fixtures on Linux, macOS, and Windows;
-- implement atomic Windows replacement and decide ACL/ownership/extended-attribute preservation;
-- integrate the transform into the Rust `create-turbo` orchestration path;
-- migrate downstream callers and package/release entry points;
-- prove through artifact tests that this TypeScript transform is no longer loaded or shipped before deleting it.
+- map typed failures to the existing JavaScript `TransformError` contract and fatality metadata;
+- run TypeScript-versus-Rust differential host fixtures on Linux, macOS, and Windows;
+- implement handle-relative publication and atomic Windows replacement with an explicit metadata/ACL policy;
+- integrate both transforms into Rust orchestration;
+- migrate package entry points and downstream callers;
+- prove through artifact/removal tests that the TypeScript transforms are neither loaded nor shipped before deletion.

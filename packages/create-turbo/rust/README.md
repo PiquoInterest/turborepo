@@ -2,50 +2,59 @@
 
 This crate is the Rust migration target for executable behavior in `packages/create-turbo`.
 
-The current tranche ports the `update-commands-in-readme` transform. It preserves the TypeScript transform's safe-input behavior for package-manager command references inside inline Markdown code and triple-backtick fenced blocks. Prose outside code regions remains unchanged.
+Current Rust tranches cover:
 
-## Current scope
+1. `update-commands-in-readme` package-manager command rewriting.
+2. `git-ignore` creation using the exact TypeScript default content.
 
-Implemented:
+The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, Git, packaging, and downstream cutover work is complete.
+
+## Implemented behavior
+
+### README command transform
 
 - package-manager command rewriting for `pnpm`, `npm`, `yarn`, and `bun`;
 - exact distinction between `<manager> run <script>` and bare manager subcommands;
 - inline-code and triple-backtick fenced-code discovery;
+- prose and `npx` isolation;
 - `not-applicable` behavior when no package manager or README is present;
-- deterministic `success` result and transform name after a completed write;
+- deterministic success metadata after a completed write;
 - bounded UTF-8 reads and linear-time rewriting;
-- regular-file and symlink checks for the project root and README;
-- same-file checks on Unix before replacement;
-- same-directory temporary writes, permission preservation, synchronization, and replacement;
-- cleanup of temporary files on ordinary failure paths.
+- no-follow checks, Unix identity checks, synchronized temporary writes, and permission preservation.
 
-Not yet implemented in Rust:
+### `.gitignore` transform
 
-- the `create-turbo` CLI and prompts;
-- example discovery and network acquisition;
+- exact `DEFAULT_IGNORE` bytes, including `.turbo` and the leading/trailing newline contract;
+- `success` after creating a missing `.gitignore`;
+- `not-applicable` for an existing regular file or directory, without modification;
+- the public `Unable to write .gitignore` error text when the project root cannot be written;
+- no-overwrite publication through a fully written temporary file and `hard_link`;
+- rejection of symlinked project roots and existing or broken `.gitignore` symlinks;
+- bounded temporary-name retries and ordinary failure cleanup.
+
+## Not yet implemented in Rust
+
+- CLI argument parsing, help/version output, and prompts;
+- example discovery and secure network/archive acquisition;
 - package-manager installation orchestration;
-- Git initialization and commit behavior;
+- Git and Mercurial repository detection, Git initialization, staging, and commit behavior;
 - the remaining source transforms;
 - telemetry binding;
-- npm/native packaging and production entry-point cutover.
-
-The TypeScript implementation remains the production entry point and test oracle until those boundaries are closed.
+- native/JavaScript host boundary and npm packaging;
+- production entry-point and downstream-caller cutover.
 
 ## Architecture
 
-`replace_package_manager_references` is a pure bounded transformer. It scans for the same two Markdown regions as the TypeScript regular expression, then applies the same ordered replacements:
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication.
 
-1. `<manager> run` becomes `<selected-manager> run`;
-2. a bare manager becomes the selected manager unless JavaScript whitespace plus `run` follows it.
+The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
-The implementation uses a linear scanner rather than a backtracking regular expression. `transform_readme` owns filesystem policy and writes through a same-directory temporary file.
-
-## Tests
-
-The RED contract was committed before the implementation:
+## TDD history
 
 ```text
-a0930bc5bd0eee5bc7c6edf09daf8caf38875781
+README RED:       a0930bc5bd0eee5bc7c6edf09daf8caf38875781
+README GREEN:     0af47426b5ef00bbff6dfc7d60aaca23daa71720
+.gitignore RED:   f8edbb984cd7255f1d7630689384324009de5ac4
 ```
 
 Focused validation:
@@ -58,8 +67,8 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The Rust crate currently contains 12 translated parity tests and 9 security regression tests.
+The crate contains 17 translated parity tests and 14 security regression tests, for 31 focused Rust tests.
 
 ## Production status
 
-This is an in-progress migration core, not a production cutover. No TypeScript source is deleted by this tranche. `PARITY_MATRIX.md`, `SECURITY.md`, and `docs/typescript-deprecation.md` record the exact remaining closure work.
+This is an in-progress migration core, not a production cutover. No TypeScript source is deleted by these tranches. `PARITY_MATRIX.md`, `SECURITY.md`, and `docs/typescript-deprecation.md` contain the exact remaining closure requirements.
