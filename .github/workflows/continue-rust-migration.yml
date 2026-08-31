@@ -1,4 +1,4 @@
-name: Continue Rust migration repair
+name: Repair consolidated Rust migration dependencies
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
       - .github/workflows/continue-rust-migration.yml
 
 concurrency:
-  group: continue-rust-migration-repair-${{ github.ref }}
-  cancel-in-progress: true
+  group: repair-consolidated-rust-migration-dependencies
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -20,11 +20,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Checkout the integration branch
+      - name: Checkout the exact integration branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: rust/typescript-deprecation
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Set up the repository Rust toolchain
         uses: ./.github/actions/setup-rust
@@ -32,7 +32,8 @@ jobs:
           cache: false
           save-cache: false
 
-      - name: Install full-workspace build prerequisites
+      - name: Install required native build tools
+        shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -44,28 +45,7 @@ jobs:
         with:
           version: "0.15.2"
 
-      - name: Persist the migration operating contract
-        shell: python
-        run: |
-          from pathlib import Path
-
-          path = Path("AGENTS.md")
-          text = path.read_text(encoding="utf-8")
-          anchor = "- Keep one integration line: `rust/typescript-deprecation` and its repository-wide pull request. Focused branches must target that branch, must be merged into it in dependency order, and must be closed once their exact history and reviewed content are consolidated. Do not open competing repository-wide migration PRs and do not push migration work directly to `main`."
-          additions = """
-          - Push each completed migration tranche to the existing integration pull request. Use a focused branch only when preserving an auditable RED-first commit requires it; merge that branch into `rust/typescript-deprecation` promptly after its applicable gates pass, then close the duplicate pull request and continue on the integration line.
-          - Do not stop after consolidating pull requests, fixing one CI failure, or porting one helper when another safe, evidence-backed tranche is unblocked. Continue iterating through implementation, tests, security review, documentation, integration, and the next highest-impact surface in the same execution.
-          - Treat the user's standing requirements as durable program requirements until explicitly superseded: migrate the entire repository from executable TypeScript to Rust, use the existing tests as the oracle, follow RED-first TDD, migrate every applicable test, correct and document TypeScript logic and security flaws, keep security review current, and continue until production cutover and removal proof are complete.
-          - Recalculate and publish the weighted repository completion percentage after every meaningful implementation tranche, consolidation, dependency remediation, or cutover step. Keep core implementation, integration readiness, production cutover, and TypeScript removal percentages separate; never use raw lines changed, commit count, or test count as the production percentage.
-          - The integration pull request is the sole delivery vehicle for this program. Do not merge it into `main`, mark it ready, or claim TypeScript deprecation until every in-scope surface has passed inventory/oracle, Rust core, translated and security tests, supported-platform differential tests, bindings, packaging/release/provenance, downstream caller migration, and removal proof.
-          """.strip()
-          if additions not in text:
-              if text.count(anchor) != 1:
-                  raise SystemExit("AGENTS.md migration anchor changed; refusing an ambiguous edit")
-              text = text.replace(anchor, anchor + "\n" + additions)
-              path.write_text(text, encoding="utf-8")
-
-      - name: Pin a coherent Biome dependency family
+      - name: Pin coherent dependency families
         shell: python
         run: |
           from pathlib import Path
@@ -78,6 +58,7 @@ jobs:
               'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
               'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
               'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
           }
           for old, new in replacements.items():
               if old in text:
@@ -124,42 +105,67 @@ jobs:
           downgrade_if_locked biome_text_edit 0.5.8 0.5.7
           downgrade_if_locked biome_text_size 0.5.8 0.5.7
           downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
 
-          python <<'PY'
+      - name: Verify the resolved dependency policy
+        shell: python
+        run: |
           import tomllib
           from pathlib import Path
 
           lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
-          versions = {
+          packages = lock.get("package", [])
+
+          biome_mismatches = {
               package["name"]: package["version"]
-              for package in lock.get("package", [])
+              for package in packages
               if package.get("name", "").startswith("biome_")
               and package.get("version", "").startswith("0.5.")
+              and package.get("version") != "0.5.7"
           }
-          mismatches = {
-              name: version for name, version in versions.items() if version != "0.5.7"
+          if biome_mismatches:
+              raise SystemExit(
+                  f"Biome 0.5 dependency family is incoherent: {biome_mismatches}"
+              )
+
+          unrs_versions = {
+              package["version"]
+              for package in packages
+              if package.get("name") == "unrs_resolver"
           }
-          if mismatches:
-              raise SystemExit(f"Biome dependency family is still incoherent: {mismatches}")
-          PY
+          if unrs_versions != {"1.11.1"}:
+              raise SystemExit(
+                  f"unrs_resolver drifted from the workspace pin: {sorted(unrs_versions)}"
+              )
+
+          h2_versions = {
+              package["version"] for package in packages if package.get("name") == "h2"
+          }
+          if not h2_versions or any(
+              tuple(map(int, version.split("."))) < (0, 4, 16)
+              for version in h2_versions
+          ):
+              raise SystemExit(f"an affected h2 version remains locked: {sorted(h2_versions)}")
 
       - name: Validate the repaired Rust graph
+        shell: bash
         run: |
           set -euo pipefail
+          git diff --check
+          cargo metadata --locked --no-deps >/dev/null
           cargo fmt --all --check
           cargo check --locked -p turborepo-lockfiles --all-targets
           cargo clippy --locked -p turborepo-lockfiles --all-targets -- -D warnings
           cargo lint
 
-      - name: Commit the validated repair
+      - name: Commit the validated repair and remove the one-shot workflow
+        shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add AGENTS.md Cargo.toml Cargo.lock
-          if git diff --cached --quiet; then
-            echo "Validated files already match the required state"
-            exit 0
-          fi
-          git commit -m "fix: Restore coherent Rust migration dependencies"
+          git rm .github/workflows/continue-rust-migration.yml
+          git add Cargo.toml Cargo.lock
+          git commit -m "fix: Restore coherent Rust dependency resolution"
+          git pull --rebase origin rust/typescript-deprecation
           git push origin HEAD:rust/typescript-deprecation
