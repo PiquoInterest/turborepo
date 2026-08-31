@@ -9,6 +9,7 @@ on:
       - packages/create-turbo/rust/**
       - packages/create-turbo/src/commands/create/index.ts
       - packages/create-turbo/__tests__/index.test.ts
+      - packages/create-turbo/__tests__/create-install-policy.test.ts
       - Cargo.toml
       - Cargo.lock
 
@@ -103,8 +104,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run the legacy create-command oracle tests
+      - name: Run the TypeScript create-command oracle tests
         run: |
           set -euo pipefail
+          pnpm exec oxfmt --check \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
           pnpm --filter @turbo/workspaces exec tsdown
-          pnpm --filter create-turbo exec jest --runInBand __tests__/index.test.ts
+          pnpm --filter create-turbo exec jest --runInBand \
+            __tests__/index.test.ts \
+            __tests__/create-install-policy.test.ts
