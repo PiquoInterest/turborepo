@@ -9,10 +9,10 @@ struct UnknownError(String);
 
 #[test]
 fn terminal_escape_osc_bell_and_line_controls_are_escaped() {
-    let message = "failed\u{1b}]8;;https://attacker.invalid\u{7}click\u{1b}]8;;\u{7}\rspoofed\nline\tcolumn";
-    let outcome = classify_create_command_error(CreateCommandError::<UnknownError>::Download {
-        message,
-    });
+    let message =
+        "failed\u{1b}]8;;https://attacker.invalid\u{7}click\u{1b}]8;;\u{7}\rspoofed\nline\tcolumn";
+    let outcome =
+        classify_create_command_error(CreateCommandError::<UnknownError>::Download { message });
     let rendered = &outcome.lines[1].message;
 
     assert!(!rendered.contains('\u{1b}'));
@@ -30,9 +30,8 @@ fn terminal_escape_osc_bell_and_line_controls_are_escaped() {
 #[test]
 fn bidi_and_zero_width_format_controls_are_escaped() {
     let message = "safe\u{202e}txt\u{2066}isolated\u{200f}mark";
-    let outcome = classify_create_command_error(CreateCommandError::<UnknownError>::Download {
-        message,
-    });
+    let outcome =
+        classify_create_command_error(CreateCommandError::<UnknownError>::Download { message });
     let rendered = &outcome.lines[1].message;
 
     assert!(!rendered.contains('\u{202e}'));
@@ -58,7 +57,10 @@ fn oversized_error_message_is_bounded_after_escaping() {
 
 #[test]
 fn oversized_transform_label_is_bounded_and_cannot_create_lines() {
-    let transform = format!("{}\nforged", "x".repeat(CREATE_COMMAND_ERROR_TRANSFORM_LIMIT * 4));
+    let transform = format!(
+        "{}\nforged",
+        "x".repeat(CREATE_COMMAND_ERROR_TRANSFORM_LIMIT * 4)
+    );
     let outcome = classify_create_command_error(CreateCommandError::<UnknownError>::Transform {
         transform: &transform,
         message: "failure",

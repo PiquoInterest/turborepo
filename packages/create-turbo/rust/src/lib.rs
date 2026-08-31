@@ -1,3 +1,4 @@
+mod create_error_policy;
 mod default_example;
 mod git_ignore;
 mod git_init;
@@ -7,6 +8,12 @@ mod package_manager_transform;
 mod readme_transform;
 mod transform_pipeline;
 
+pub use create_error_policy::{
+    CREATE_COMMAND_ERROR_EXIT_CODE, CREATE_COMMAND_ERROR_MESSAGE_LIMIT,
+    CREATE_COMMAND_ERROR_TRANSFORM_LIMIT, ConvertErrorType, CreateCommandError,
+    CreateCommandErrorAction, CreateCommandErrorLine, CreateCommandErrorOutcome,
+    DOWNLOAD_ERROR_HEADING, classify_create_command_error, sanitize_terminal_text,
+};
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use git_ignore::{
     DEFAULT_IGNORE, GIT_IGNORE_TRANSFORM_NAME, GitIgnoreError, create_git_ignore,

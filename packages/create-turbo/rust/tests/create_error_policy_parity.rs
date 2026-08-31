@@ -1,7 +1,6 @@
 use create_turbo_rs::{
-    CREATE_COMMAND_ERROR_EXIT_CODE, DOWNLOAD_ERROR_HEADING, ConvertErrorType,
-    CreateCommandError, CreateCommandErrorAction, CreateCommandErrorLine,
-    classify_create_command_error,
+    CREATE_COMMAND_ERROR_EXIT_CODE, ConvertErrorType, CreateCommandError, CreateCommandErrorAction,
+    CreateCommandErrorLine, DOWNLOAD_ERROR_HEADING, classify_create_command_error,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
