@@ -152,6 +152,83 @@ Rust processes components instead. It permits `..` only while lexical depth rema
 
 **Regressions:** `https_proxy_precedence_matches_the_typescript_helper`, `invalid_selected_proxy_is_an_error_instead_of_direct_connection_fallback`, `proxy_urls_are_bounded_and_restricted_to_http_or_https`, and `malformed_request_url_is_an_error_before_proxy_selection`.
 
+## TU-025: Option-like project names bypass the TypeScript check
+
+**Severity:** Medium
+
+**TypeScript behavior:** `validateDirectory` resolves the supplied text to an absolute path and then checks `root.startsWith("-")`. A relative input such as `-danger` therefore becomes an absolute path beginning with `/` or a drive prefix, so the intended option-confusion check is ineffective.
+
+**Impact:** the project basename can retain a leading hyphen and later cross display, package, or subprocess boundaries that may interpret it as an option if they do not independently use a `--` terminator or typed argument contract.
+
+**Rust fix:** validate the resolved basename itself and reject names beginning with `-` before any later provider is invoked.
+
+**Intentional incompatibility:** a relative project directory whose basename begins with `-` is rejected even though current TypeScript accepts it.
+
+**Regression:** `option_like_project_name_is_rejected`.
+
+## TU-026: Final-component-only symlink checks miss redirected ancestors
+
+**Severity:** High until handle-relative mutation is implemented
+
+**TypeScript behavior:** `lstatSync(root)` inspects only the final requested path. A path such as `redirect/project` can traverse an existing symlink at `redirect` while the final `project` entry itself is an ordinary directory.
+
+**Impact:** validation and later writes can occur outside the caller's intended directory tree. A malicious actor who can replace path components can also race path-based checks.
+
+**Rust fix:** inspect every existing component of the stable requested path and reject a symbolic-link component before directory enumeration.
+
+**Residual risk:** this is still a portable path-based check. A component can be replaced after validation, and conservative component walking may differ on platforms that expose system paths through symlink aliases. Production writes require directory handles with no-follow semantics on Unix and reviewed Windows handle/reparse-point logic. Supported-platform differential tests remain mandatory.
+
+**Regression:** `symlinked_ancestor_is_rejected_before_directory_enumeration`.
+
+## TU-027: Filename-only allow-listing accepts symlink entries
+
+**Severity:** High
+
+**TypeScript behavior:** `isFolderEmpty` calls `readdirSync` for names and allow-lists entries such as `.git`, `LICENSE`, and any `*.iml` file without checking their type.
+
+**Impact:** an allow-listed symlink can redirect later consumers or hide an unsafe pre-existing project state while the folder is reported empty.
+
+**Rust fix:** inspect each entry type and treat every symlink as a conflict, even when its name would normally be allowed.
+
+**Intentional incompatibility:** symlink entries with allow-listed names are no longer considered harmless.
+
+**Regression:** `allowlisted_symlink_is_never_treated_as_an_empty_directory`.
+
+## TU-028: Lossy filename conversion can alias an allow-listed name
+
+**Severity:** Medium
+
+A Rust port that calls `to_string_lossy()` before applying the allow-list can replace invalid bytes with Unicode replacement characters and then make a non-UTF-8 filename appear to end in an allowed suffix such as `.iml`.
+
+**Impact:** an unrepresentable entry may be hidden from conflict reporting, and any displayed name would no longer identify the real filesystem bytes.
+
+**Rust fix:** require exact UTF-8 for the current string-based public result and fail closed when an entry name cannot be represented. No lossy string participates in the security decision.
+
+**Regression:** `non_utf8_iml_name_is_not_silently_allowlisted`.
+
+## TU-029: Directory enumeration and conflict collection are unbounded
+
+**Severity:** Medium
+
+**TypeScript behavior:** `readdirSync` returns the complete entry list and the implementation filters it into another conflict array without an explicit count bound.
+
+**Impact:** a generated or attacker-controlled directory with a very large number of entries can consume excessive memory and CPU before project creation starts.
+
+**Rust fix:** stop after 256 entries and return `InvalidData`. Validation converts that uncertainty into an invalid directory rather than continuing.
+
+**Intentional incompatibility:** directories above the inspection limit are rejected even when every filename is otherwise allow-listed.
+
+**Regression:** `folder_scan_is_bounded_before_collecting_untrusted_entries`.
+
+## Directory-provider TDD and validation record
+
+- Test-first contract: `53a55eefd92b919824374eb27159ff876e008147`.
+- GREEN implementation: `c77464a7e6f36813a3b52262e78caa9ee449bb72`.
+- Formatting correction: `8ee51022fd84264e0abeee17014802da3afcae20`.
+- Clippy lifetime correction: `e47b4994e0d97641c2f976231aa89833aa142913`.
+
+The first RED workflow stopped at formatting, so it is retained as chronological test-first evidence rather than a clean behavioral RED execution. At merge head, formatting, compilation, and all migration parity/security tests passed before Clippy exposed the unrelated explicit lifetime consolidated from the create-directory tranche. The lifetime was then removed without changing behavior.
+
 ## Advisory lookup record
 
 Lookup date: **2026-08-31**.
@@ -161,6 +238,8 @@ Sources checked:
 - RustSec Advisory Database and package/advisory index.
 - GitHub Advisory Database.
 - Official upstream security notices and release information for direct dependencies and externally executed tools changed by these tranches.
+
+The directory-provider tranche adds no dependency, network destination, subprocess, parser, credential, or unsafe block. Its advisory disposition is therefore unchanged from the resolved workspace graph.
 
 The project, notification, archive-policy, and network-policy tranches add no new Rust dependency. They use the standard library plus existing workspace-managed dependencies.
 
