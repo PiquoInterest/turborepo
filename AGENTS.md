@@ -27,7 +27,24 @@ When making changes to the codebase, check if the following docs need updates:
 
 ## TypeScript-to-Rust Deprecation Workflow
 
-The long-lived integration branch for this program is `rust/typescript-deprecation`. Read [docs/typescript-deprecation.md](./docs/typescript-deprecation.md) before changing a migration tranche. Do not declare repository-wide parity while its ledger still contains executable TypeScript runtime entries.
+The long-lived integration branch for this program is `rust/typescript-deprecation`, represented by the single repository-wide integration pull request. Read [docs/typescript-deprecation.md](./docs/typescript-deprecation.md) before changing a migration tranche. Do not declare repository-wide parity while its ledger still contains executable TypeScript runtime entries.
+
+### Non-negotiable migration program contract
+
+- The objective is a repository-wide replacement of executable TypeScript business logic with Rust. Completing one helper, package, test group, or focused PR is not a stopping condition. Continue in reviewable tranches until every production-cutover and removal gate in this file is satisfied.
+- Keep one integration line: `rust/typescript-deprecation` and its repository-wide pull request. Focused branches must target that branch, must be merged into it in dependency order, and must be closed once their exact history and reviewed content are consolidated. Do not open competing repository-wide migration PRs and do not push migration work directly to `main`.
+- Keep the integration pull request in draft and do not merge it to `main` while any required test, lint, differential, platform, packaging, provenance, security, advisory, caller-cutover, or removal gate is red, skipped, unknown, or blocked.
+- Use RED-first TDD for every behavior tranche. Commit or otherwise retain the failing translated test contract before adding the Rust implementation. Keep the TypeScript tests and implementation as the behavioral oracle until the production cutover is proven.
+- Migrate all relevant tests, fixtures, failure contracts, ordering rules, side effects, and platform branches. A passing subset, matching line count, successful compilation, or broad smoke test is not evidence of complete parity.
+- Security takes precedence over blindly reproducing unsafe TypeScript behavior. Research trust boundaries and current advisories before implementation and repeat that review before merge. Fix discovered TypeScript logic or security flaws in Rust, add a regression test, and record the exact incompatibility and rationale.
+- Audit the complete resolved Rust lockfile. Never add a broad advisory ignore, warning suppression, or CI bypass to make the migration appear green. When an upstream constraint blocks a patched version, keep the gate red and document the exact advisory, affected version, reverse dependency chain, attempted remediation, and required upstream or direct-dependency change.
+- Do not use `--no-verify`, force-push shared migration history, weaken required checks, remove tests merely because they fail, or relabel a skipped or unavailable validation as passing.
+- Every tranche must update its package `README.md`, `PARITY_MATRIX.md`, and `SECURITY.md`, plus `docs/typescript-deprecation.md` and `docs/rust-migration-security-findings.md`, in the same reviewed change.
+- Production completion includes native/WASM or minimal host bindings, npm/native packaging, signing and provenance, release and rollback behavior, all downstream callers, supported-platform differential tests, and removal tests proving that executable TypeScript is neither loaded nor shipped. Only then may the corresponding runtime TypeScript be deleted.
+- Report migration progress from an explicit inventory of executable TypeScript surfaces and weighted completion stages. Report Rust core implementation progress separately from production cutover/removal progress. Never infer a percentage from lines of code or raw test counts, and never round an estimate up to suggest completion.
+- Human-facing implementation guidance and requested code output must use complete, copy-paste-ready files or commands rather than omitted sections or unexplained fragments.
+- Agents must perform the work they report in the current execution and leave exact commits, tests, documentation, and blockers in the repository. Do not promise asynchronous or background completion.
+- After each successful consolidation or tranche, immediately select the next highest-impact unblocked migration surface and continue. Stop only for a concrete tool, evidence, safety, or CI blocker, and record that blocker precisely without claiming the migration is complete.
 
 ### 1. Inventory the complete behavior surface
 
@@ -62,6 +79,7 @@ Every migrated component must contain and keep current:
 - `PARITY_MATRIX.md`: each TypeScript source/test boundary mapped to Rust, with implemented, intentional-deviation, partial, blocked, or not-implemented status.
 - `SECURITY.md`: trust boundaries, findings, severity, impact, fix, regression tests, advisory lookup record, and residual risk.
 - `docs/typescript-deprecation.md`: repository ledger status, test totals, production cutover state, and exact blockers.
+- `docs/rust-migration-security-findings.md`: repository-level finding index, exact remediation status, regression coverage, and unresolved dependency or platform blockers.
 
 Do not leave these files as placeholders. Behavior, test, security, dependency, packaging, or cutover changes must update the relevant Markdown files in the same tranche. Update `AGENTS.md` whenever this workflow or its required gates change.
 
@@ -100,10 +118,11 @@ Executable TypeScript may be deleted only after all of these are true:
 ### 7. Commits and pull requests
 
 - Work in reviewable tranches on `rust/typescript-deprecation` or a focused branch targeting it. Never force-push shared migration history.
-- Keep tests, implementation, security notes, parity notes, and ledger updates together so the branch never loses its evidence trail.
+- Keep tests, implementation, security notes, parity notes, ledger updates, and the repository finding index together so the branch never loses its evidence trail.
+- Merge only a tranche whose applicable focused Rust checks, translated tests, security regressions, TypeScript oracle tests, and differential fixtures pass. A focused branch may remain blocked while the integration pull request continues with an independent unblocked tranche.
 - Use Conventional Commit titles and never bypass hooks with `--no-verify`.
 - PR descriptions must list exact commands and results, test counts, security findings and intentional deviations, advisory sources checked, production cutover status, and remaining blockers.
-- Never use “1:1 parity”, “complete”, or “TypeScript deprecated” unless the evidence and repository ledger satisfy every gate above.
+- Never use “1:1 parity”, “complete”, “100%”, or “TypeScript deprecated” unless the evidence and repository ledger satisfy every gate above.
 
 ## Pull Request Guidelines
 
