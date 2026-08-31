@@ -141,4 +141,37 @@ describe("validateDirectory", () => {
       projectName: "project"
     });
   });
+
+  test.each([
+    ["-rf", "-rf"],
+    ["--help", "--help"],
+    ["nested/-C", "-C"]
+  ])(
+    "rejects option-like final directory component %s before filesystem inspection",
+    (directory, projectName) => {
+      mockFs.existsSync.mockReturnValue(false);
+      mockFs.lstatSync.mockReturnValue(undefined as any);
+
+      const result = validateDirectory(directory);
+
+      expect(result.valid).toBe(false);
+      expect(result.projectName).toBe(projectName);
+      expect(result.error).toContain("is not a valid directory");
+      expect(mockFs.lstatSync).not.toHaveBeenCalled();
+      expect(mockIsFolderEmpty).not.toHaveBeenCalled();
+    }
+  );
+
+  test("keeps ordinary hyphenated project names valid", () => {
+    mockFs.existsSync.mockReturnValue(false);
+    mockFs.lstatSync.mockReturnValue(undefined as any);
+
+    const result = validateDirectory("app-name");
+
+    expect(result).toEqual({
+      valid: true,
+      root: path.resolve("app-name"),
+      projectName: "app-name"
+    });
+  });
 });
