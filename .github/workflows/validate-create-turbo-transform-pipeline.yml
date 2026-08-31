@@ -1,0 +1,45 @@
+name: Validate create-turbo transform pipeline tranche
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-transform-pipeline
+    paths:
+      - .github/workflows/validate-create-turbo-transform-pipeline.yml
+      - packages/create-turbo/rust/**
+      - docs/typescript-deprecation.md
+      - docs/rust-migration-security-findings.md
+      - Cargo.toml
+      - Cargo.lock
+
+concurrency:
+  group: validate-create-turbo-transform-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact tranche head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Validate focused crate
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
