@@ -4,6 +4,9 @@ use crate::TransformStatus;
 
 pub const MAX_TERMINAL_DIAGNOSTIC_SCALARS: usize = 512;
 
+const TERMINAL_TRUNCATION_MARKER: char = '…';
+const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+
 pub const TRANSFORM_PIPELINE: [TransformKind; 4] = [
     TransformKind::OfficialStarter,
     TransformKind::GitIgnore,
@@ -13,7 +16,76 @@ pub const TRANSFORM_PIPELINE: [TransformKind; 4] = [
 
 #[must_use]
 pub fn sanitize_terminal_text(input: &str) -> String {
-    input.to_owned()
+    let mut output = String::with_capacity(
+        input
+            .len()
+            .min(MAX_TERMINAL_DIAGNOSTIC_SCALARS.saturating_mul(4)),
+    );
+    let mut characters = input.chars();
+
+    for _ in 0..MAX_TERMINAL_DIAGNOSTIC_SCALARS {
+        let Some(character) = characters.next() else {
+            return output;
+        };
+
+        if is_unsafe_terminal_scalar(character) {
+            push_terminal_escape(&mut output, character);
+        } else {
+            output.push(character);
+        }
+    }
+
+    if characters.next().is_some() {
+        output.push(TERMINAL_TRUNCATION_MARKER);
+    }
+
+    output
+}
+
+fn is_unsafe_terminal_scalar(character: char) -> bool {
+    matches!(
+        u32::from(character),
+        0x0000..=0x001f
+            | 0x007f..=0x009f
+            | 0x061c
+            | 0x070f
+            | 0x180e
+            | 0x200b..=0x200f
+            | 0x2028..=0x202e
+            | 0x2060..=0x206f
+            | 0xfeff
+            | 0xfff9..=0xfffb
+    )
+}
+
+fn push_terminal_escape(output: &mut String, character: char) {
+    match character {
+        '\0' => output.push_str("\\0"),
+        '\t' => output.push_str("\\t"),
+        '\n' => output.push_str("\\n"),
+        '\r' => output.push_str("\\r"),
+        _ => push_unicode_escape(output, u32::from(character)),
+    }
+}
+
+fn push_unicode_escape(output: &mut String, mut value: u32) {
+    let mut digits = [0_u8; 6];
+    let mut first_digit = digits.len();
+
+    loop {
+        first_digit -= 1;
+        digits[first_digit] = HEX_DIGITS[(value & 0x0f) as usize];
+        value >>= 4;
+        if value == 0 {
+            break;
+        }
+    }
+
+    output.push_str("\\u{");
+    for digit in &digits[first_digit..] {
+        output.push(char::from(*digit));
+    }
+    output.push('}');
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

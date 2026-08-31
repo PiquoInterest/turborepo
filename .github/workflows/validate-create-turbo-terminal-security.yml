@@ -32,8 +32,13 @@ jobs:
           cache: false
           save-cache: false
 
-      - name: Run focused Rust security contract
-        run: cargo test --locked -p create-turbo-rs --test transform_diagnostic_security
+      - name: Validate the complete create-turbo Rust crate
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 
   typescript-security-contract:
     runs-on: ubuntu-24.04
@@ -60,6 +65,19 @@ jobs:
 
       - name: Install workspace dependencies without lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check focused TypeScript formatting
+        run: >-
+          pnpm exec oxfmt --check
+          packages/create-turbo/src/transforms/errors.ts
+          packages/create-turbo/src/transforms/terminal.ts
+          packages/create-turbo/__tests__/transform-error-security.test.ts
+
+      - name: Type-check create-turbo
+        run: >-
+          pnpm --filter create-turbo exec tsc
+          --noEmit
+          --project tsconfig.json
 
       - name: Run focused TypeScript security contract
         run: >-
