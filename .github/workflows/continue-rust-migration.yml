@@ -7,6 +7,10 @@ on:
     paths:
       - .github/workflows/continue-rust-migration.yml
 
+concurrency:
+  group: continue-rust-migration-repair-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
