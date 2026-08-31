@@ -1,8 +1,6 @@
 use std::path::Path;
 
-use turbo_utils_rs::{
-    ARCHIVE_MAX_PATH_CHARS, ARCHIVE_MAX_PATH_COMPONENTS, is_archive_path_safe,
-};
+use turbo_utils_rs::{ARCHIVE_MAX_PATH_CHARS, ARCHIVE_MAX_PATH_COMPONENTS, is_archive_path_safe};
 
 #[test]
 fn nul_bytes_are_rejected() {

@@ -21,11 +21,7 @@ fn parent_traversal_outside_the_root_is_blocked() {
 #[test]
 fn nested_parent_traversal_outside_the_root_is_blocked() {
     let root = Path::new("/tmp/extract");
-    assert!(!is_archive_path_safe(
-        root,
-        "foo/../../../etc/passwd",
-        None
-    ));
+    assert!(!is_archive_path_safe(root, "foo/../../../etc/passwd", None));
     assert!(!is_archive_path_safe(
         root,
         "foo/bar/../../../etc/passwd",
@@ -54,11 +50,7 @@ fn a_pre_resolved_root_uses_the_same_contract() {
     let root = Path::new("relative-is-not-used");
     let resolved = Path::new("/tmp/extract");
     assert!(is_archive_path_safe(root, "file.txt", Some(resolved)));
-    assert!(!is_archive_path_safe(
-        root,
-        "../etc/passwd",
-        Some(resolved)
-    ));
+    assert!(!is_archive_path_safe(root, "../etc/passwd", Some(resolved)));
 }
 
 #[test]

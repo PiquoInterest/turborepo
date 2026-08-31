@@ -30,10 +30,7 @@ impl FakeChecker {
 }
 
 impl UpdateChecker for FakeChecker {
-    fn check(
-        &self,
-        _package_info: &PackageInfo,
-    ) -> Result<Option<UpdateInfo>, UpdateCheckError> {
+    fn check(&self, _package_info: &PackageInfo) -> Result<Option<UpdateInfo>, UpdateCheckError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         self.result.lock().expect("checker result").clone()
     }
@@ -137,11 +134,7 @@ fn dynamic_upgrade_command_is_resolved_after_update_detection() {
     let command = FakeUpgradeCommand::new(Ok(Some("npm install -g create-turbo".into())));
     let notification = PreparedUpdateNotification::prepare(package_info(), &checker);
 
-    let outcome = notification.notify(
-        ExitCode::Success,
-        UpgradeCommand::Dynamic(&command),
-        false,
-    );
+    let outcome = notification.notify(ExitCode::Success, UpgradeCommand::Dynamic(&command), false);
 
     assert_eq!(command.calls(), 1);
     assert_eq!(
@@ -161,11 +154,7 @@ fn dynamic_none_suppresses_the_command_line() {
     let command = FakeUpgradeCommand::new(Ok(None));
     let notification = PreparedUpdateNotification::prepare(package_info(), &checker);
 
-    let outcome = notification.notify(
-        ExitCode::Success,
-        UpgradeCommand::Dynamic(&command),
-        false,
-    );
+    let outcome = notification.notify(ExitCode::Success, UpgradeCommand::Dynamic(&command), false);
 
     assert_eq!(command.calls(), 1);
     assert_eq!(
@@ -194,11 +183,7 @@ fn no_update_skips_the_dynamic_command() {
     let command = FakeUpgradeCommand::new(Ok(Some("must not run".into())));
     let notification = PreparedUpdateNotification::prepare(package_info(), &checker);
 
-    let outcome = notification.notify(
-        ExitCode::Failure,
-        UpgradeCommand::Dynamic(&command),
-        true,
-    );
+    let outcome = notification.notify(ExitCode::Failure, UpgradeCommand::Dynamic(&command), true);
 
     assert_exit(&outcome, ExitCode::Failure);
     assert_eq!(command.calls(), 0);
@@ -224,20 +209,15 @@ fn dynamic_command_failure_preserves_exit_code_and_debug_behavior() {
     let command = FakeUpgradeCommand::new(Err(UpgradeCommandError::new("command failed")));
     let notification = PreparedUpdateNotification::prepare(package_info(), &checker);
 
-    let quiet = notification.notify(
-        ExitCode::Failure,
-        UpgradeCommand::Dynamic(&command),
-        false,
-    );
+    let quiet = notification.notify(ExitCode::Failure, UpgradeCommand::Dynamic(&command), false);
     assert_exit(&quiet, ExitCode::Failure);
-    assert_eq!(quiet.stdout, ["", "A new version of `create-turbo` is available!"]);
+    assert_eq!(
+        quiet.stdout,
+        ["", "A new version of `create-turbo` is available!"]
+    );
     assert!(quiet.stderr.is_empty());
 
-    let debug = notification.notify(
-        ExitCode::Success,
-        UpgradeCommand::Dynamic(&command),
-        true,
-    );
+    let debug = notification.notify(ExitCode::Success, UpgradeCommand::Dynamic(&command), true);
     assert_exit(&debug, ExitCode::Success);
     assert_eq!(debug.stderr, ["Update check failed: command failed"]);
     assert_eq!(command.calls(), 2);
