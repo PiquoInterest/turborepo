@@ -38,13 +38,10 @@ fn invalid_or_control_character_project_names_are_rejected() -> Result<(), Box<d
 }
 
 #[test]
-fn option_like_project_names_are_rejected_before_filesystem_inspection() -> Result<(), Box<dyn Error>> {
+fn option_like_project_names_are_rejected_before_filesystem_inspection()
+-> Result<(), Box<dyn Error>> {
     let current_directory = tempfile::tempdir()?;
-    for (directory, project_name) in [
-        ("-rf", "-rf"),
-        ("--help", "--help"),
-        ("nested/-C", "-C"),
-    ] {
+    for (directory, project_name) in [("-rf", "-rf"), ("--help", "--help"), ("nested/-C", "-C")] {
         let result = validate_directory(directory, current_directory.path());
 
         assert!(!result.valid, "accepted {directory:?}");
