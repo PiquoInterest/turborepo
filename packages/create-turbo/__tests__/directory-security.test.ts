@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "@jest/globals";
 import {
+  INVALID_PROJECT_DIRECTORY_MESSAGE,
   InvalidDirectoryError,
   MAX_DIRECTORY_INPUT_BYTES,
   directory
@@ -23,7 +24,8 @@ describe("directory prompt security", () => {
       fs.writeFileSync(path.join(root, "package.json"), "{}", "utf8");
       await expect(directory({ dir: root })).rejects.toMatchObject({
         name: "InvalidDirectoryError",
-        reason: "validation"
+        reason: "validation",
+        message: INVALID_PROJECT_DIRECTORY_MESSAGE
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
