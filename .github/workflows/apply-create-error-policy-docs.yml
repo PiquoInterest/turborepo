@@ -19,7 +19,7 @@ jobs:
   validate-and-document:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       FORCE_COLOR: "0"
       TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
@@ -55,10 +55,15 @@ jobs:
           pnpm --filter @turbo/workspaces exec tsdown
           pnpm --filter create-turbo exec jest --runInBand __tests__/create-error-security.test.ts
 
+      - name: Install pinned Turbo for the repository pre-push hook
+        uses: ./.github/actions/install-global-turbo
+        with:
+          turbo-version: "2.8.3"
+
       - name: Record parity, security, and divergence evidence
         run: python tools/migration/apply_create_error_policy_docs.py
 
-      - name: Commit the reviewed documentation
+      - name: Commit and push the reviewed documentation through repository hooks
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
