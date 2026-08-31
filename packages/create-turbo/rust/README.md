@@ -6,8 +6,9 @@ Current Rust tranches cover:
 
 1. `update-commands-in-readme` package-manager command rewriting.
 2. `git-ignore` creation using the exact TypeScript default content.
+3. the dependency-injected core of `tryGitInit`, including Git/Mercurial detection, initialization ordering, post-init cleanup, and root validation.
 
-The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, Git, packaging, and downstream cutover work is complete.
+The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
 
 ## Implemented behavior
 
@@ -32,29 +33,49 @@ The TypeScript package remains the production entry point and differential-test 
 - rejection of symlinked project roots and existing or broken `.gitignore` symlinks;
 - bounded temporary-name retries and ordinary failure cleanup.
 
+### Git initialization core
+
+- returns `false` when the target is already inside a Git or Mercurial repository;
+- preserves the TypeScript command order: `git init`, `git checkout -b main`, `git add -A`, then `git commit -m "Initial commit from create-turbo"`;
+- uses argument vectors and a separate working directory rather than constructing a shell command;
+- preserves the Mercurial `--cwd . root` arguments while carrying the project root as the invocation working directory;
+- removes an initialized `.git` directory after checkout, add, or commit failure and swallows cleanup failure like the TypeScript implementation;
+- does not remove `.git` when `git init` itself fails, because ownership of a concurrently created or partially existing path is ambiguous;
+- requires an absolute non-root path, rejects parent/current-directory components, controls, and filename characters invalid on Windows;
+- permits harmless shell metacharacters such as `$`, `#`, `;`, and `!` because the contract never invokes a shell;
+- carries roots as `Path`/`PathBuf`, preserving non-UTF-8 Unix paths without lossy conversion.
+
+The current Git tranche is an orchestration core. A production `VcsRunner` and `GitDirectoryCleaner` are deliberately not supplied yet. Their executable resolution, environment/config isolation, timeouts, process cleanup, symlink-safe deletion, and Windows behavior remain cutover blockers.
+
 ## Not yet implemented in Rust
 
 - CLI argument parsing, help/version output, and prompts;
 - example discovery and secure network/archive acquisition;
 - package-manager installation orchestration;
-- Git and Mercurial repository detection, Git initialization, staging, and commit behavior;
+- production Git/Hg process execution and `.git` cleanup providers;
 - the remaining source transforms;
-- telemetry binding;
+- telemetry binding into the production command path;
 - native/JavaScript host boundary and npm packaging;
 - production entry-point and downstream-caller cutover.
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
+
+The Git initialization core never resolves an executable, inherits no process environment by itself, and performs no filesystem deletion directly. Those side effects remain behind explicit provider boundaries so they can be reviewed and tested independently.
 
 ## TDD history
 
 ```text
-README RED:       a0930bc5bd0eee5bc7c6edf09daf8caf38875781
-README GREEN:     0af47426b5ef00bbff6dfc7d60aaca23daa71720
-.gitignore RED:   f8edbb984cd7255f1d7630689384324009de5ac4
+README RED:          a0930bc5bd0eee5bc7c6edf09daf8caf38875781
+README GREEN:        0af47426b5ef00bbff6dfc7d60aaca23daa71720
+.gitignore RED:      f8edbb984cd7255f1d7630689384324009de5ac4
+.gitignore GREEN:    c74d664d718691660be969d779d25a76af31fb3e
+Git init RED import: e57cc31afd1d83a015ae49136d71c7daa3217fb7
+Git oracle/security: 221586118db79fca2f94cebb15785de4111bde8e
+Git init GREEN:      1d7b485d597b70f40bb4aa492f45d1c0638f844e
 ```
 
 Focused validation:
@@ -67,7 +88,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 17 translated parity tests and 14 security regression tests, for 31 focused Rust tests.
+The crate contains 26 translated parity tests and 21 security regression tests, for 47 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
 
 ## Production status
 

@@ -6,17 +6,37 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 
 ## Current progress
 
-The migration program currently contains these workspace-registered Rust migration cores:
+The migration program currently contains these Rust migration cores on the single `rust/typescript-deprecation` integration branch:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 17 translated parity tests and 14 security regression tests across README command rewriting and `.gitignore` creation.
+- `packages/create-turbo/rust`: 26 translated parity tests and 21 security regression tests across README rewriting, `.gitignore` creation, and the injected Git-initialization core.
+- `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is 175 authored Rust migration tests on this stacked branch. The package telemetry Rust tranche is developed separately in PR #4 and is not included in that total until it lands on `rust/typescript-deprecation`.
+That is **207 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest Git-initialization tranche remains unvalidated until its merge-head workflow compiles, tests, formats, and lints it successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
 The mandatory workflow is in `AGENTS.md`. Every tranche must use RED-first translated tests, retain TypeScript as an oracle until cutover, perform current advisory review, and update `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, this ledger, and the repository security index in the same change.
+
+## Weighted progress estimate
+
+The repository-wide rewrite is currently estimated at **about 8% complete**, with a conservative credible range of **8% to 10%**. The estimate is deliberately not based on line count or raw test count.
+
+The denominator is 12 tracked migration surfaces multiplied by eight equally weighted production stages:
+
+1. complete inventory and TypeScript oracle;
+2. Rust core implementation;
+3. translated parity and security tests;
+4. Linux/macOS/Windows differential execution;
+5. native/WASM or minimal host binding;
+6. packaging, signing, provenance, release, install, and rollback;
+7. downstream caller cutover;
+8. artifact/removal proof and executable TypeScript deletion.
+
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **68%**. Across the complete repository production program it is about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+
+This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
 ## Completion rules
 
@@ -40,16 +60,18 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
 | `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
-| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README and `.gitignore` transform cores are ported. CLI, prompts, acquisition, Git behavior, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
+| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, and Git orchestration cores are ported. CLI, prompts, acquisition, production VCS providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
 | `packages/turbo-workspaces` | Rust CLI/library | Queued | Package-manager adapters and lock/workspace mutation semantics. |
-| `packages/turbo-telemetry` | existing telemetry Rust crate plus package contract | In progress in PR #4 | Consent/config persistence, transport, retry/redaction parity, JS binding, caller cutover, removal proof. |
+| `packages/turbo-telemetry` | existing telemetry Rust crate plus package contract | In progress | Package event core is consolidated. Consent/config persistence, production binding, transport integration, caller cutover, and removal proof remain. |
 | ESLint plugin/config | Rust/WASM rule core with minimal JS adapter | Host-bound | Preserve ESLint node/range/fix semantics and package compatibility. |
 | VS Code and language-tool adapters | Rust LSP plus minimal extension bootstrap | Host-bound | Move business logic to Rust while retaining host-required JavaScript only. |
 | Factory/web `.tsx` surfaces | Rust/WASM where justified | Host-bound | Define browser architecture and DOM boundary before deprecation. |
 | Test-only TypeScript fixtures | Rust tests or retained oracle | Later | Remove only after migrated components have equivalent coverage. |
 | npm/native wrappers | generated loaders and signed Rust binaries | Queued | Preserve package names, platform selection, provenance, install behavior, and rollback. |
+
+The weighted denominator groups test-only fixtures and npm/native wrappers as program stages rather than double-counting them as independent production applications; the ledger retains them as explicit work rows because they have distinct owners and removal gates.
 
 ## Current `create-turbo` tranches
 
@@ -81,11 +103,28 @@ Security closure in the Rust core:
 
 Handle-relative publication is still required to close every malicious concurrent root-replacement race.
 
+### Git initialization orchestration
+
+The Rust core preserves the exact safe command sequence and boolean failure contract behind injected runner and cleaner traits. It corrects the first RED draft against the actual TypeScript source before implementation:
+
+- exact message `Initial commit from create-turbo`;
+- exact Mercurial `--cwd . root` arguments with the project root as process cwd;
+- no invented `git --version` call;
+- no cleanup after ambiguous `git init` failure;
+- structural path validation rather than a shell-metacharacter blacklist on a shell-free call;
+- lossless non-UTF-8 Unix roots.
+
+Production Git/Hg execution and `.git` cleanup remain blocked until executable resolution, environment/config/template/hook isolation, deadlines, bounded output, process cleanup, no-follow deletion, and Windows behavior are proven.
+
 TDD history:
 
 - README RED: `a0930bc5bd0eee5bc7c6edf09daf8caf38875781`.
 - README implementation: `0af47426b5ef00bbff6dfc7d60aaca23daa71720`.
 - `.gitignore` RED: `f8edbb984cd7255f1d7630689384324009de5ac4`.
+- `.gitignore` implementation: `c74d664d718691660be969d779d25a76af31fb3e`.
+- Git RED import: `e57cc31afd1d83a015ae49136d71c7daa3217fb7`.
+- corrected Git oracle/security RED: `221586118db79fca2f94cebb15785de4111bde8e`.
+- Git implementation: `1d7b485d597b70f40bb4aa492f45d1c0638f844e`.
 
 ## Current `turbo-utils` tranche
 
@@ -109,12 +148,24 @@ TDD history includes:
 - archive policy RED `5ab1da42327a85e4c026e8531953fb108b56434d`, implementation `bdeb6760d41d5f9d72d2b9fb8042339b55011923`;
 - GitHub policy RED `903d7836a01e6ec47e4df339adc71456b4ecbd0d`, implementation `2e90ea8daa8542aa13cd94ceb981b653756789cb`.
 
+## Current package telemetry tranche
+
+The consolidated Rust package event core covers the `create-turbo` and `turbo-ignore` event envelope, batching, close-time flush, disabled behavior, salted hashing, package/runtime metadata, coarse option classifications, endpoint restrictions, bounded inputs, and no-follow configuration handling.
+
+The core is not yet the production package entry point. Binding, full consent/config differential behavior, production transport integration, caller cutover, packaging, and removal proof remain.
+
+TDD history:
+
+- package telemetry RED: `67475ffb7616bc78bc4c6759ab63558d751e588e`;
+- package telemetry implementation: `86a879c6987a2160bed820cbfff9b54a6ad8284f`;
+- integration merge: `7482a57576fb2fb85efe976620ce910295a4feda`.
+
 ## Security review method
 
 Each tranche maintains a colocated `SECURITY.md` with attacker inputs, trust boundaries, filesystem/process/network behavior, resource limits, logging/redaction, advisory lookup, findings, fixes, regression names, and residual risks. Memory safety alone is not completion.
 
-The repository security index records the affected `webbrowser` dependency under `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`. The observed current call uses a constant HTTP URL, but the dependency remains in an affected range and must be upgraded or removed. Migration CI temporarily ignores only that documented advisory so any additional advisory still fails.
+The repository security index records unresolved `webbrowser`, `h2`, and `quick-xml` advisories. No tranche may suppress those findings to claim green. Exact reverse dependencies and remediation blockers are recorded in `docs/rust-migration-security-findings.md`.
 
 ## Branch and pull-request policy
 
-The integration branch is `rust/typescript-deprecation`. Work lands in reviewable conventional-commit tranches or stacked focused PRs. Shared history is never force-pushed. Repository-wide parity is declared only when this ledger contains no executable TypeScript runtime entries and production packaging points to Rust for every supported target.
+The integration branch is `rust/typescript-deprecation`, represented by pull request #1. Focused PR histories #2 through #5 are merged into it. PR #6 is closed with its exact integration merge recorded because GitHub refused to retarget a head already fully contained by the integration branch. Shared history is never force-pushed. Repository-wide parity is declared only when this ledger contains no executable TypeScript runtime entries and production packaging points to Rust for every supported target.

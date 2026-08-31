@@ -14,11 +14,11 @@ This index is evidence-based but not exhaustive. A component is not considered a
 
 ### RF-001: Affected `webbrowser` dependency remains in the workspace
 
-**Status:** Open, upgrade required before merge.
+**Status:** Open, upgrade or removal required before integration merge.
 
-The workspace declares `webbrowser = "0.8.7"`. RustSec advisory `RUSTSEC-2026-0257`, also published as `GHSA-2ph8-5cr8-hr33`, affects relevant browser-opening APIs through version `1.2.1`; version `1.2.2` or later is patched.
+The workspace declares `webbrowser = "0.8.7"` and currently resolves an affected `0.8.x` release. RustSec advisory `RUSTSEC-2026-0257`, also published as `GHSA-2ph8-5cr8-hr33`, affects relevant browser-opening APIs through version `1.2.1`; version `1.2.2` or later is patched.
 
-The observed repository call currently uses a constant HTTP URL, which limits current reachability, but the dependency remains in an affected range. Required closure is to upgrade or remove it, run the affected query tests/lints, retain an HTTP(S)-only input policy, and remove the temporary migration-CI advisory exception.
+The observed repository call uses a constant HTTP URL, which limits current reachability, but the dependency remains in an affected range. Required closure is to upgrade or remove it, run the affected query tests/lints, retain an HTTP(S)-only input policy, and remove the existing temporary migration-CI exception. No additional advisory exception may be added to make the integration branch appear green.
 
 References:
 
@@ -76,11 +76,75 @@ Regression tests prove that external symlink targets are not created or modified
 
 Residual risk: path-based standard-library APIs cannot close every malicious root-component exchange. Descriptor-relative Unix operations and reviewed Windows handle-based publication remain required before production cutover in attacker-writable roots.
 
+### RF-008: TypeScript Git root validation models shell injection instead of path safety
+
+**Status:** Fixed in the injected Rust orchestration core; production provider remains blocked.
+
+The TypeScript `tryGitInit` path rejects `$`, `#`, `;`, and `!` even though it passes an argument vector to `spawnSync` rather than a shell string. It does not reject relative roots, filesystem roots, parent components, controls, or all filename characters invalid on Windows.
+
+The Rust core requires an absolute non-root path, rejects current/parent components, controls, and Windows-invalid filename characters, and permits harmless shell metacharacters because no shell is used. It also carries the root as `PathBuf`, preserving non-UTF-8 Unix paths.
+
+Regression coverage is in `packages/create-turbo/rust/tests/git_init_security.rs`.
+
+### RF-009: Git initialization can inherit executable, template, configuration, and hook execution
+
+**Status:** Production cutover blocked; no production runner is implemented.
+
+The TypeScript code resolves `git` and `hg` by command name and inherits the caller environment and VCS configuration. Git documents that `git init` may copy templates selected by environment or configuration and that `git commit` may execute commit-related hooks. A production Rust provider must therefore prove canonical executable resolution, an explicit environment/configuration policy, no shell, deadlines, bounded output, descendant cleanup, and deliberate hook/template behavior.
+
+The Rust tranche keeps these effects behind `VcsRunner`. The integration branch must not treat the injected orchestration tests as evidence that process execution is production-safe.
+
+References:
+
+- <https://git-scm.com/docs/git-init>
+- <https://git-scm.com/docs/git-commit>
+- <https://git-scm.com/docs/githooks>
+
+### RF-010: Recursive `.git` cleanup lacks a proven no-follow ownership contract
+
+**Status:** Production cutover blocked; no production cleaner is implemented.
+
+A naive recursive delete can cross links or Windows reparse points, race with path replacement, or remove a repository the current operation did not create. The Rust orchestration core requests cleanup only after `git init` returned success and a later command failed. It does not request cleanup after an ambiguous init failure.
+
+A production `GitDirectoryCleaner` must prove root identity, `.git` ownership, no-follow traversal, bounded work, cleanup failure behavior, and supported Windows semantics.
+
+### RF-011: `h2 0.4.5` is affected by unbounded empty DATA frame handling
+
+**Status:** Open, patched lockfile version required.
+
+The current audited lockfile contains `h2 0.4.5`. `RUSTSEC-2026-0258` / `GHSA-q83h-524g-xf6h` describes unbounded queuing of empty HTTP/2 DATA frames and is patched in `h2 0.4.16`.
+
+A temporary dependency-refresh workflow proved that Cargo can select `h2 0.4.16`, but the workflow did not commit any lockfile because a later `quick-xml` constraint failed and validation was intentionally fail-closed. The permanent remediation must update the lockfile in a reviewed branch and pass all affected workspace checks before integration.
+
+References:
+
+- <https://rustsec.org/advisories/RUSTSEC-2026-0258.html>
+- <https://github.com/advisories/GHSA-q83h-524g-xf6h>
+
+### RF-012: `quick-xml 0.38.4` has two denial-of-service advisories
+
+**Status:** Open, direct dependency-chain change required.
+
+The current audited lockfile contains `quick-xml 0.38.4`, affected by:
+
+- `RUSTSEC-2026-0194`: quadratic duplicate-attribute checking;
+- `RUSTSEC-2026-0195`: unbounded namespace-declaration allocation.
+
+Both are patched in `quick-xml 0.41.0` or later. A precise lockfile update was rejected because `opendal 0.55.0` requires `quick-xml ^0.38`. The observed reverse chain is `quick-xml -> opendal -> sccache -> turbo` and the `turborepo-sccache-proxy` development path.
+
+Required closure is to update or remove the constraining `opendal`/`sccache` dependency path, then regenerate the lockfile and run the affected workspace build, test, lint, and audit gates. An advisory ignore is not an acceptable substitute.
+
+References:
+
+- <https://rustsec.org/advisories/RUSTSEC-2026-0194.html>
+- <https://rustsec.org/advisories/RUSTSEC-2026-0195.html>
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
 
 - keep lockfile-wide RustSec auditing enabled and remove every temporary exception after remediation;
+- resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;

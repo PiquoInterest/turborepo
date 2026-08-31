@@ -5,6 +5,7 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/update-commands-in-readme.ts`
 - `packages/create-turbo/src/transforms/git-ignore.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
+- the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 
 It is a tranche review, not a claim that the full `create-turbo` package has been audited or migrated.
 
@@ -12,7 +13,9 @@ It is a tranche review, not a claim that the full `create-turbo` package has bee
 
 Repository-controlled or attacker-influenced inputs include the selected package manager, project-root path, `README.md`, `.gitignore`, Markdown bytes, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
 
-These tranches perform no network access, package acquisition, subprocess execution, credentials, telemetry, archives, or privileged operations. Those boundaries remain outside the current implementation.
+The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
+
+The current Git core performs no subprocess execution or filesystem deletion itself. Those effects remain behind `VcsRunner` and `GitDirectoryCleaner`, so the production providers cannot be mistaken for reviewed merely because the command sequence is implemented.
 
 ## Findings and fixes
 
@@ -68,7 +71,7 @@ Regression test: `successful_write_leaves_no_temporary_files`.
 
 A faulty port could rewrite prose, `npx`, or embedded identifiers. The Rust scanner preserves the TypeScript region precedence, ordered replacements, JavaScript ASCII word-boundary behavior, and whitespace-plus-`run` exclusion.
 
-Evidence: all 12 README parity tests.
+Evidence: all README parity tests.
 
 ### CT-RS-007: `.gitignore` check/write race can overwrite a concurrent path
 
@@ -110,15 +113,70 @@ Current mitigation: reject root symlinks, compare root identity on Unix, use no-
 
 Required closure: descriptor-relative directory handles on Unix and reviewed Windows handle-based operations before the Rust transform becomes the production path in attacker-writable directories.
 
+### CT-RS-011: The TypeScript Git path blacklist rejects harmless values but misses structural hazards
+
+**Severity:** Medium
+
+The TypeScript implementation rejects characters such as `$`, `#`, `;`, and `!` even though `spawnSync` receives an argument vector and does not construct a shell command. That is a compatibility failure rather than an injection defense. At the same time, the check does not reject relative roots, filesystem roots, parent components, controls, or characters such as `?` that are invalid in Windows filenames.
+
+The Rust core validates path structure instead of shell syntax. It requires an absolute non-root path, rejects current/parent components, controls, and Windows-invalid filename characters, and permits harmless shell metacharacters because no shell is involved.
+
+Regression tests: `rejects_relative_roots_before_any_subprocess`, `rejects_filesystem_roots_before_any_subprocess_or_cleanup`, `rejects_parent_components_before_any_subprocess`, `rejects_control_and_windows_invalid_filename_characters`, and `shell_metacharacters_are_not_treated_as_injection_without_a_shell`.
+
+### CT-RS-012: Stringifying the project root can corrupt or reject valid Unix paths
+
+**Severity:** Low
+
+The first RED draft placed the project-root string directly in Mercurial arguments. That was not the TypeScript contract, which uses `--cwd .` and sets the process working directory to the root. It would also require lossy or fallible conversion for non-UTF-8 Unix paths.
+
+The corrected Rust contract carries the root as `PathBuf` in `VcsInvocation.cwd` and retains literal `--cwd . root` arguments.
+
+Regression tests: `returns_false_when_inside_mercurial_repository` and Unix-only `non_utf8_roots_do_not_require_lossy_argument_conversion`.
+
+### CT-RS-013: Production VCS execution can inherit executable, environment, template, and hook behavior
+
+**Severity:** High until the provider contract is closed
+
+The TypeScript implementation launches `git` and `hg` by command name and inherits process environment and user/system VCS configuration. Git documents that `git init` may take templates from `GIT_TEMPLATE_DIR` or `init.templateDir`, and `git commit` may execute commit-related hooks. A hostile executable selected through `PATH`, a configured template, or a configured hook can therefore execute code during project creation.
+
+The current Rust tranche intentionally provides no production runner. Required closure includes canonical executable resolution, an explicit environment/config policy, no shell, bounded duration and output, descendant cleanup, and tests proving the accepted template/hook behavior. Simply adding `--no-verify` would not be sufficient because Git documents a `prepare-commit-msg` hook that is not suppressed by that option.
+
+Authoritative references:
+
+- <https://git-scm.com/docs/git-init>
+- <https://git-scm.com/docs/git-commit>
+- <https://git-scm.com/docs/githooks>
+
+### CT-RS-014: Recursive `.git` cleanup needs an ownership and no-follow contract
+
+**Severity:** High until the provider contract is closed
+
+After a successful `git init`, later failure requires cleanup. A naive recursive path deletion can cross a symlink/reparse point, delete a replaced path, or remove a repository the operation did not create. Conversely, deleting after a failed `git init` is unsafe because ownership is ambiguous.
+
+The orchestration core requests cleanup only after `git init` returned success and a later command failed. It never requests cleanup after init failure. The production cleaner remains blocked until it proves root identity, `.git` ownership, no-follow traversal, bounded work, ordinary failure handling, and Windows reparse-point behavior.
+
+Regression tests: the checkout/add/commit cleanup tests, `cleanup_failure_is_swallowed_like_the_typescript_implementation`, and `init_failure_does_not_delete_an_unowned_or_ambiguous_git_directory`.
+
+### CT-RS-015: Git initialization oracle drift could silently change generated history
+
+**Severity:** Low
+
+The first RED draft used a different commit message and added an unobserved `git --version` call. It also changed the Mercurial argument/cwd split. These differences were corrected while the implementation still returned `false`, preserving a genuine RED-first history against the source contract.
+
+Regression tests: `initial_commit_message_matches_the_typescript_source`, `returns_false_when_inside_mercurial_repository`, `returns_false_when_git_init_is_unavailable_or_fails`, and `runs_the_exact_typescript_command_sequence_on_success`.
+
 ## Security invariants
 
-- No `unsafe`, shell invocation, subprocess, network, archive, package acquisition, credential, or telemetry code is introduced by these tranches.
-- No new third-party Rust dependency is introduced.
+- No `unsafe` or shell command construction is introduced by these tranches.
+- README and `.gitignore` operations add no network, package acquisition, credential, or telemetry behavior.
+- The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
 - Untrusted README size is bounded before allocation and writing.
 - Rejected README inputs remain unchanged.
 - Existing `.gitignore` content is never overwritten.
 - Broken or existing destination symlinks are errors.
 - Temporary files use `create_new`, bounded retries, and ordinary failure cleanup.
+- VCS roots are structurally validated before any provider invocation.
+- Cleanup is requested only after successful init and later command failure.
 - Every intentional incompatibility is recorded here and in `PARITY_MATRIX.md` with regression coverage.
 
 ## Advisory lookup
@@ -131,21 +189,24 @@ Authoritative sources checked:
 - RustSec advisory repository: <https://github.com/RustSec/advisory-db>
 - GitHub Advisory Database, Rust ecosystem: <https://github.com/advisories?query=ecosystem%3Arust>
 - Rust Project security policy and advisories: <https://www.rust-lang.org/policies/security> and <https://github.com/rust-lang/rust/security>
+- Git command, initialization, and hook documentation: <https://git-scm.com/docs/git-init>, <https://git-scm.com/docs/git-commit>, and <https://git-scm.com/docs/githooks>
 
 Disposition:
 
-- These tranches add no external crate or externally executed tool, so there is no new package-specific advisory exposure.
-- They rely on standard-library string and filesystem APIs and do not invoke Windows batch files, Cygwin path classification, or process execution.
+- The Git core adds no external Rust crate and does not yet execute an external tool.
+- A production Git/Hg provider cannot be approved until its exact executable versions, resolution path, environment/config policy, and supported platforms are reviewed.
 - The repository-wide lockfile audit remains authoritative for transitive workspace dependencies.
-- The existing `webbrowser` finding (`RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`) is unrelated to these transforms but remains an open repository blocker.
+- The existing `webbrowser`, `h2`, and `quick-xml` advisories remain repository-level blockers and are not suppressed by this tranche.
 
-Repeat the lookup before merge when dependencies, subprocesses, network access, archives, or platform-specific filesystem APIs change.
+Repeat the lookup before merge when dependencies, subprocess providers, network access, archives, or platform-specific filesystem APIs change.
 
 ## Production cutover blockers
 
-- map typed failures to the existing JavaScript `TransformError` contract and fatality metadata;
+- map typed failures to the existing JavaScript public contracts;
 - run TypeScript-versus-Rust differential host fixtures on Linux, macOS, and Windows;
 - implement handle-relative publication and atomic Windows replacement with an explicit metadata/ACL policy;
-- integrate both transforms into Rust orchestration;
+- implement and review production Git/Hg runner and `.git` cleanup providers;
+- isolate or deliberately preserve Git templates, global/system configuration, hooks, signing, and credential-helper behavior;
+- integrate the transforms and Git core into Rust orchestration;
 - migrate package entry points and downstream callers;
-- prove through artifact/removal tests that the TypeScript transforms are neither loaded nor shipped before deletion.
+- prove through artifact/removal tests that the TypeScript implementation is neither loaded nor shipped before deletion.

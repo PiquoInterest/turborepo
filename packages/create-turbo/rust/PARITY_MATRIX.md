@@ -36,6 +36,23 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | temporary publication cleanup | `create_new`, bounded retries, `hard_link`, cleanup | implemented | Success leaves only `.gitignore`; collisions cannot be overwritten. |
 | malicious concurrent root replacement | path revalidation and Unix identity check | partial | Descriptor-relative publication is still required to close every malicious race. |
 
+## Git initialization tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| `git rev-parse --is-inside-work-tree` in project root | first injected `VcsInvocation` | implemented | A successful probe returns `false` without further calls or cleanup. |
+| `hg --cwd . root` with process cwd set to project root | second injected `VcsInvocation` | implemented | Preserves the source argument/cwd split and does not stringify the root. |
+| `git init` followed by checkout, add, and commit | `try_git_init_with` | implemented core | Exact six-call successful sequence and argument order are translated. |
+| initial commit message | `INITIAL_COMMIT_MESSAGE` | implemented | Exact source value is `Initial commit from create-turbo`; the initial RED draft's different text was corrected before GREEN. |
+| Git/Hg probe failures are treated as “not inside a repository” | boolean runner results | implemented | Initialization continues after either failed probe. |
+| checkout/add/commit failure after successful init | injected cleanup then `false` | implemented | All three failure positions are covered. Cleanup failure remains non-fatal. |
+| failed `git init` | return `false` without cleanup | implemented | Preserves the TypeScript ownership boundary and avoids deleting an ambiguous or concurrently created `.git` path. |
+| TypeScript shell-metacharacter blacklist on a shell-free argv call | structural path validation | intentional-deviation | Rust permits harmless `$`, `#`, `;`, and `!`, but rejects relative/root/parent paths, controls, and Windows-invalid filename characters. See CT-RS-011. |
+| JavaScript string-only root | `Path`/`PathBuf` root and cwd | intentional-deviation | Unix non-UTF-8 paths remain lossless. See CT-RS-012. |
+| actual `spawnSync("git"/"hg")` execution | `VcsRunner` trait only | blocked | Production provider must prove executable resolution, environment/config isolation, no shell, deadlines, bounded output, and descendant cleanup. See CT-RS-013. |
+| recursive `rmSync(root/.git)` | `GitDirectoryCleaner` trait only | blocked | Production provider must prove no-follow, root identity, repository ownership, bounded traversal, and Windows reparse-point behavior. See CT-RS-014. |
+| inherited Git templates/config/hooks | no provider yet | blocked | Git init can copy configured templates and Git commit can execute configured hooks; production execution must isolate or explicitly approve this behavior. |
+
 ## Existing TypeScript test mapping
 
 | TypeScript test group | Rust test coverage | Status |
@@ -45,7 +62,9 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | README missing inputs and read-transform-write | README parity tests | implemented |
 | `DEFAULT_IGNORE` contains `.turbo` | `default_ignore_matches_the_typescript_constant` | implemented and strengthened to exact bytes |
 | `.gitignore` transform source branches | five translated source-contract tests | implemented |
-| symlink/race/resource regressions absent from TypeScript suite | five security tests | intentional-deviation evidence |
+| Git/Mercurial detection and exact initialization order | nine Git initialization parity tests | implemented core |
+| Git initialization root/cleanup regressions absent from the TypeScript suite | seven Git initialization security tests | intentional-deviation evidence |
+| symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
 
@@ -55,10 +74,10 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | interactive prompts | not-implemented | Preserve defaults, cancellation, validation, non-TTY behavior, and ordering. |
 | example resolution and download | not-implemented | Reuse the reviewed `turbo-utils-rs` provider after redirect, proxy, extraction, and atomic-promotion contracts are closed. |
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
-| Git initialization and commit | not-implemented | Port existing nine Jest cases, canonical executable resolution, configuration isolation, deadlines, cleanup, and platform behavior. |
+| Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |
 | `official-starter` transform | not-implemented | Translate package/workspace mutations with deterministic JSON ordering. |
 | package-manager transform | not-implemented | Preserve lockfile and package-manager metadata behavior. |
-| telemetry integration | blocked | Land the reviewed package telemetry Rust core and bind it without retaining business logic in TypeScript. |
+| telemetry integration | partial | The package telemetry Rust core is consolidated; bind it without retaining business logic in TypeScript. |
 | npm/native packaging | blocked | Build, sign, publish, select, and roll back Rust binaries on every supported platform. |
 | TypeScript removal | blocked | Migrate every downstream caller and prove the old runtime is neither loaded nor shipped. |
