@@ -57,9 +57,7 @@ fn parse_absolute_url(value: &str) -> Option<ParsedUrl<'_>> {
     if !is_valid_scheme(scheme) {
         return None;
     }
-    let authority_end = remainder
-        .find(['/', '?', '#'])
-        .unwrap_or(remainder.len());
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
     let authority = remainder.get(..authority_end)?;
     if authority.is_empty() {
         return None;
@@ -91,10 +89,7 @@ fn is_github_api_endpoint(url: ParsedUrl<'_>) -> bool {
 /// Returns a bearer header only for credential-free HTTPS requests to the two
 /// exact GitHub hosts used by the migration provider.
 #[must_use]
-pub fn github_authorization_header(
-    url: &str,
-    environment: &NetworkEnvironment,
-) -> Option<String> {
+pub fn github_authorization_header(url: &str, environment: &NetworkEnvironment) -> Option<String> {
     let parsed = parse_absolute_url(url)?;
     if !is_github_api_endpoint(parsed) {
         return None;

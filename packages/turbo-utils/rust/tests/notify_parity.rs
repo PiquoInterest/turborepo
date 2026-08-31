@@ -104,11 +104,7 @@ fn available_update_without_command_logs_announcement() {
     assert_exit(&outcome, ExitCode::Failure);
     assert_eq!(
         outcome.stdout,
-        [
-            "",
-            "A new version of `create-turbo` is available!",
-            "",
-        ]
+        ["", "A new version of `create-turbo` is available!", "",]
     );
     assert!(outcome.stderr.is_empty());
 }
@@ -174,11 +170,7 @@ fn dynamic_none_suppresses_the_command_line() {
     assert_eq!(command.calls(), 1);
     assert_eq!(
         outcome.stdout,
-        [
-            "",
-            "A new version of `create-turbo` is available!",
-            "",
-        ]
+        ["", "A new version of `create-turbo` is available!", "",]
     );
 }
 
@@ -238,10 +230,7 @@ fn dynamic_command_failure_preserves_exit_code_and_debug_behavior() {
         false,
     );
     assert_exit(&quiet, ExitCode::Failure);
-    assert_eq!(
-        quiet.stdout,
-        ["", "A new version of `create-turbo` is available!"]
-    );
+    assert_eq!(quiet.stdout, ["", "A new version of `create-turbo` is available!"]);
     assert!(quiet.stderr.is_empty());
 
     let debug = notification.notify(
@@ -250,9 +239,6 @@ fn dynamic_command_failure_preserves_exit_code_and_debug_behavior() {
         true,
     );
     assert_exit(&debug, ExitCode::Success);
-    assert_eq!(
-        debug.stderr,
-        ["Update check failed: command failed"]
-    );
+    assert_eq!(debug.stderr, ["Update check failed: command failed"]);
     assert_eq!(command.calls(), 2);
 }

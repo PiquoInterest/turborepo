@@ -1,5 +1,5 @@
 use turbo_utils_rs::{
-    GITHUB_REPOSITORY_URL_MAX_CHARS, GIT_REFERENCE_MAX_CHARS, GitHubRepositoryLocation,
+    GIT_REFERENCE_MAX_CHARS, GITHUB_REPOSITORY_URL_MAX_CHARS, GitHubRepositoryLocation,
     RepoInfo, parse_github_repository_location,
 };
 

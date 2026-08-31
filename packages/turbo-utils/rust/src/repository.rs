@@ -122,14 +122,12 @@ fn valid_repository_name(name: &str) -> bool {
     let length = name.chars().count();
     (1..=GITHUB_REPOSITORY_NAME_MAX_CHARS).contains(&length)
         && !matches!(name, "." | "..")
-        && name.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_')
-        })
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
 }
 
-fn normalize_repository_path(
-    path: &str,
-) -> Result<String, GitHubRepositoryLocationError> {
+fn normalize_repository_path(path: &str) -> Result<String, GitHubRepositoryLocationError> {
     let normalized = path.strip_prefix('/').unwrap_or(path);
     if normalized.is_empty() {
         return Ok(String::new());
@@ -175,9 +173,7 @@ fn valid_git_reference(reference: &str) -> bool {
     }
 
     reference.split('/').all(|component| {
-        !component.is_empty()
-            && !component.starts_with('.')
-            && !component.ends_with(".lock")
+        !component.is_empty() && !component.starts_with('.') && !component.ends_with(".lock")
     })
 }
 

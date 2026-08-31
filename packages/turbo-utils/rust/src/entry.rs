@@ -43,7 +43,7 @@ pub use project::{
     is_valid_github_repo_url,
 };
 pub use repository::{
-    GITHUB_REPOSITORY_URL_MAX_CHARS, GIT_REFERENCE_MAX_CHARS, GitHubRepositoryLocation,
+    GIT_REFERENCE_MAX_CHARS, GITHUB_REPOSITORY_URL_MAX_CHARS, GitHubRepositoryLocation,
     GitHubRepositoryLocationError, parse_github_repository_location,
 };
 pub use root::{TurboRootOptions, clear_turbo_root_cache, get_turbo_root};

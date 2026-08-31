@@ -66,7 +66,9 @@ fn tokens_are_ascii_graphic_and_size_bounded() {
 
     let mut at_limit = NetworkEnvironment::default();
     at_limit.github_token = Some("a".repeat(GITHUB_TOKEN_MAX_CHARS));
-    assert!(github_authorization_header("https://api.github.com/repos/user/repo", &at_limit).is_some());
+    assert!(
+        github_authorization_header("https://api.github.com/repos/user/repo", &at_limit).is_some()
+    );
 
     let mut oversized = NetworkEnvironment::default();
     oversized.github_token = Some("a".repeat(GITHUB_TOKEN_MAX_CHARS + 1));

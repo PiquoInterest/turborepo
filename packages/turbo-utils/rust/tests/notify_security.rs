@@ -44,9 +44,9 @@ fn is_directional_format_control(character: char) -> bool {
 fn assert_no_terminal_controls(values: &[String]) {
     for value in values {
         assert!(
-            !value
-                .chars()
-                .any(|character| character.is_control() || is_directional_format_control(character)),
+            !value.chars().any(|character| {
+                character.is_control() || is_directional_format_control(character)
+            }),
             "terminal control leaked in {value:?}"
         );
     }
@@ -123,10 +123,7 @@ fn dynamic_error_controls_are_escaped_before_debug_logging() {
     );
 
     assert_no_terminal_controls(&outcome.stderr);
-    assert_eq!(
-        outcome.stderr,
-        ["Update check failed: failure\\n\\x1b[2Jspoof"]
-    );
+    assert_eq!(outcome.stderr, ["Update check failed: failure\\n\\x1b[2Jspoof"]);
 }
 
 #[test]

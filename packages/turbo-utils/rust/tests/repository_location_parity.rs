@@ -1,6 +1,4 @@
-use turbo_utils_rs::{
-    GitHubRepositoryLocation, RepoInfo, parse_github_repository_location,
-};
+use turbo_utils_rs::{GitHubRepositoryLocation, RepoInfo, parse_github_repository_location};
 
 fn resolved(username: &str, name: &str, branch: &str, file_path: &str) -> GitHubRepositoryLocation {
     GitHubRepositoryLocation::Resolved(RepoInfo {
