@@ -177,7 +177,7 @@ fn valid_git_reference(reference: &str) -> bool {
     })
 }
 
-fn literal_suffix_start<'a>(tail: &[&'a str], suffix: &[&str]) -> Option<usize> {
+fn literal_suffix_start(tail: &[&str], suffix: &[&str]) -> Option<usize> {
     if suffix.is_empty() || tail.len() <= suffix.len() {
         return None;
     }
