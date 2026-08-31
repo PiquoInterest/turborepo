@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/validate-create-turbo-terminal-security.yml
       - tools/migration/apply_create_turbo_terminal_security_docs.py
+      - tools/migration/finalize_create_turbo_terminal_security_docs.py
       - packages/create-turbo/**
 
 concurrency:
@@ -115,13 +116,14 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Apply reviewed parity and security documentation
-        run: python tools/migration/apply_create_turbo_terminal_security_docs.py
+        run: python tools/migration/finalize_create_turbo_terminal_security_docs.py
 
       - name: Commit the reviewed evidence
         run: |
           set -euo pipefail
           test ! -e .github/workflows/validate-create-turbo-terminal-security.yml
           test ! -e tools/migration/apply_create_turbo_terminal_security_docs.py
+          test ! -e tools/migration/finalize_create_turbo_terminal_security_docs.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
