@@ -7,6 +7,8 @@ on:
     paths:
       - .github/workflows/validate-create-turbo-official-starter.yml
       - packages/create-turbo/rust/**
+      - docs/typescript-deprecation.md
+      - docs/rust-migration-security-findings.md
       - Cargo.toml
       - Cargo.lock
 
