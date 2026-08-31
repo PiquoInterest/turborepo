@@ -185,7 +185,7 @@ fn parse_repository_url(input: &str) -> Result<Option<GitHubRepositoryUrl>, Crea
         .and_then(|value| value.strip_prefix("//"))
         .ok_or_else(|| invalid_github_url(input))?;
     let authority_end = after_scheme
-        .find(|character| matches!(character, '/' | '?' | '#'))
+        .find(['/', '?', '#'])
         .unwrap_or(after_scheme.len());
     let authority = after_scheme
         .get(..authority_end)
@@ -197,9 +197,7 @@ fn parse_repository_url(input: &str) -> Result<Option<GitHubRepositoryUrl>, Crea
     let suffix = after_scheme
         .get(authority_end..)
         .ok_or_else(|| invalid_github_url(input))?;
-    let path_end = suffix
-        .find(|character| matches!(character, '?' | '#'))
-        .unwrap_or(suffix.len());
+    let path_end = suffix.find(['?', '#']).unwrap_or(suffix.len());
     let path = suffix.get(..path_end).unwrap_or_default();
     let path = if path.is_empty() { "/" } else { path };
     if !path.starts_with('/') {
