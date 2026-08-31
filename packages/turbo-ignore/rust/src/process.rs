@@ -124,15 +124,15 @@ fn receive_stream(
     receiver: &Receiver<StreamMessage>,
     stdout: &mut Option<Result<Vec<u8>, StreamReadError>>,
     stderr: &mut Option<Result<Vec<u8>, StreamReadError>>,
-) -> Result<bool, TryRecvError> {
+) -> Result<(), TryRecvError> {
     match receiver.try_recv() {
         Ok((StreamKind::Stdout, result)) => {
             *stdout = Some(result);
-            Ok(true)
+            Ok(())
         }
         Ok((StreamKind::Stderr, result)) => {
             *stderr = Some(result);
-            Ok(true)
+            Ok(())
         }
         Err(error) => Err(error),
     }
@@ -253,9 +253,8 @@ impl CommandRunner for SystemCommandRunner {
         let status = loop {
             loop {
                 match receive_stream(&receiver, &mut stdout_result, &mut stderr_result) {
-                    Ok(true) => {}
-                    Ok(false) | Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => break,
+                    Ok(()) => {}
+                    Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
                 }
             }
 
