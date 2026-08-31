@@ -1,20 +1,21 @@
 pub fn get_workspace_configs(cwd: Option<&Path>, options: ConfigOptions) -> Vec<WorkspaceConfig> {
     let key = cache_key(cwd);
-    if options.cache {
-        if let Some(key) = key.as_ref() {
-            if let Ok(cache) = workspace_configs_cache().read() {
-                if let Some(configs) = cache.get(key) {
+    if options.cache
+        && let Some(key) = key.as_ref()
+            && let Ok(cache) = workspace_configs_cache().read()
+                && let Some(configs) = cache.get(key) {
                     return configs.clone();
                 }
-            }
-        }
-    }
 
     let Some(root) = get_turbo_root(cwd, TurboRootOptions { cache: options.cache }) else {
         return Vec::new();
     };
     let workspace_globs = get_workspace_globs(&root);
-    let paths = collect_matching_files(&root, &workspace_globs, "package.json");
+    let mut paths = collect_matching_files(&root, &workspace_globs, "package.json");
+    if let Some(root_package) = canonical_inside_root(&root, &root.join("package.json")) {
+        paths.retain(|path| path != &root_package);
+        paths.insert(0, root_package);
+    }
     let mut configs = Vec::new();
     for package_path in paths {
         let Some(raw_package) = read_regular_utf8_limited(&package_path, MAX_PACKAGE_JSON_BYTES)
@@ -74,13 +75,11 @@ pub fn get_workspace_configs(cwd: Option<&Path>, options: ConfigOptions) -> Vec<
         });
     }
 
-    if options.cache {
-        if let Some(key) = key {
-            if let Ok(mut cache) = workspace_configs_cache().write() {
+    if options.cache
+        && let Some(key) = key
+            && let Ok(mut cache) = workspace_configs_cache().write() {
                 cache.insert(key, configs.clone());
             }
-        }
-    }
     configs
 }
 

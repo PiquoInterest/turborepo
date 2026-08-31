@@ -1,11 +1,13 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::{fs, path::Path};
 
 use serde_json::json;
 use tempfile::TempDir;
 use turbo_utils_rs::{
-    clear_config_caches, for_each_task_def, get_turbo_configs, get_turbo_root,
-    get_workspace_configs, parse_json5, resolve_turbo_config_path, ConfigOptions,
-    TurboConfigError, TurboRootOptions,
+    ConfigOptions, TurboConfigError, TurboRootOptions, clear_config_caches, for_each_task_def,
+    get_turbo_configs, get_turbo_root, get_workspace_configs, parse_json5,
+    resolve_turbo_config_path,
 };
 
 fn write(path: impl AsRef<Path>, content: &str) {
@@ -178,10 +180,11 @@ fn resolves_json_jsonc_both_and_missing_config_paths() {
     let both = resolve_turbo_config_path(temp.path());
     assert!(!both.config_exists);
     assert!(both.config_path.is_none());
-    assert!(both
-        .error
-        .as_deref()
-        .is_some_and(|message| message.contains("Found both turbo.json and turbo.jsonc")));
+    assert!(
+        both.error
+            .as_deref()
+            .is_some_and(|message| message.contains("Found both turbo.json and turbo.jsonc"))
+    );
 }
 
 #[test]
@@ -210,11 +213,8 @@ fn parses_json5_comments_trailing_commas_single_quotes_and_identifier_keys() {
 fn discovers_root_and_workspace_turbo_configs_in_stable_order() {
     clear_config_caches();
     let temp = workspace_fixture();
-    let configs = get_turbo_configs(
-        Some(temp.path()),
-        ConfigOptions { cache: false },
-    )
-    .expect("configs");
+    let configs =
+        get_turbo_configs(Some(temp.path()), ConfigOptions { cache: false }).expect("configs");
 
     assert_eq!(configs.len(), 3);
     assert!(configs[0].is_root_config);
@@ -250,11 +250,8 @@ fn old_workspace_format_without_workspace_configs_returns_only_root() {
         r#"{"name":"ui"}"#,
     );
 
-    let configs = get_turbo_configs(
-        Some(temp.path()),
-        ConfigOptions { cache: false },
-    )
-    .expect("configs");
+    let configs =
+        get_turbo_configs(Some(temp.path()), ConfigOptions { cache: false }).expect("configs");
     assert_eq!(configs.len(), 1);
     assert!(configs[0].is_root_config);
 }
@@ -283,12 +280,13 @@ fn unsafe_workspace_globs_cannot_escape_root() {
         r#"{"extends":["//"],"tasks":{"build":{"env":["OUTSIDE"]}}}"#,
     );
 
-    let configs = get_turbo_configs(Some(&root), ConfigOptions { cache: false })
-        .expect("configs");
+    let configs = get_turbo_configs(Some(&root), ConfigOptions { cache: false }).expect("configs");
     assert_eq!(configs.len(), 2);
-    assert!(configs
-        .iter()
-        .all(|config| config.turbo_config_path.starts_with(&root)));
+    assert!(
+        configs
+            .iter()
+            .all(|config| config.turbo_config_path.starts_with(&root))
+    );
 }
 
 #[cfg(unix)]
@@ -316,8 +314,7 @@ fn symlinked_workspace_config_outside_root_is_rejected() {
     )
     .expect("symlink");
 
-    let configs = get_turbo_configs(Some(&root), ConfigOptions { cache: false })
-        .expect("configs");
+    let configs = get_turbo_configs(Some(&root), ConfigOptions { cache: false }).expect("configs");
     assert_eq!(configs.len(), 1);
     assert!(configs[0].is_root_config);
 }
@@ -330,10 +327,7 @@ fn duplicate_json_and_jsonc_in_one_directory_is_an_error() {
     write(temp.path().join("turbo.json"), "{}");
     write(temp.path().join("turbo.jsonc"), "{}");
 
-    let result = get_turbo_configs(
-        Some(temp.path()),
-        ConfigOptions { cache: false },
-    );
+    let result = get_turbo_configs(Some(temp.path()), ConfigOptions { cache: false });
     assert!(matches!(
         result,
         Err(TurboConfigError::DuplicateConfig { .. })
@@ -357,11 +351,8 @@ fn invalid_root_and_workspace_config_shapes_are_skipped() {
         r#"{"tasks":{"build":{}}}"#,
     );
 
-    let configs = get_turbo_configs(
-        Some(temp.path()),
-        ConfigOptions { cache: false },
-    )
-    .expect("configs");
+    let configs =
+        get_turbo_configs(Some(temp.path()), ConfigOptions { cache: false }).expect("configs");
     assert!(configs.is_empty());
 }
 
@@ -369,10 +360,7 @@ fn invalid_root_and_workspace_config_shapes_are_skipped() {
 fn workspace_configs_include_packages_without_turbo_config() {
     clear_config_caches();
     let temp = workspace_fixture();
-    let configs = get_workspace_configs(
-        Some(temp.path()),
-        ConfigOptions { cache: false },
-    );
+    let configs = get_workspace_configs(Some(temp.path()), ConfigOptions { cache: false });
 
     assert_eq!(configs.len(), 4);
     assert!(configs[0].is_workspace_root);
@@ -392,11 +380,15 @@ fn task_iteration_prefers_pipeline_when_present() {
         "tasks": { "ignored": {} }
     });
     let mut legacy_names = Vec::new();
-    for_each_task_def(&legacy, |name, _definition| legacy_names.push(name.to_owned()));
+    for_each_task_def(&legacy, |name, _definition| {
+        legacy_names.push(name.to_owned())
+    });
     assert_eq!(legacy_names, ["build", "test"]);
 
     let modern = json!({ "tasks": { "lint": {}, "build": {} } });
     let mut modern_names = Vec::new();
-    for_each_task_def(&modern, |name, _definition| modern_names.push(name.to_owned()));
+    for_each_task_def(&modern, |name, _definition| {
+        modern_names.push(name.to_owned())
+    });
     assert_eq!(modern_names, ["lint", "build"]);
 }

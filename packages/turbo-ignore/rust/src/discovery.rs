@@ -107,12 +107,7 @@ pub fn get_workspace(
     let package_json_path = directory.join("package.json");
     let result = read_regular_utf8_limited(&package_json_path, MAX_PACKAGE_JSON_BYTES)
         .and_then(|content| serde_json::from_str::<Value>(&content).ok())
-        .and_then(|value| {
-            value
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        });
+        .and_then(|value| value.get("name").and_then(Value::as_str).map(str::to_owned));
 
     match result {
         Some(workspace) => {
@@ -124,7 +119,8 @@ pub fn get_workspace(
         }
         None => {
             reporter.error(&format!(
-                "\"{}\" could not be read or has no string name. turbo-ignore workspace inference failed",
+                "\"{}\" could not be read or has no string name. turbo-ignore workspace inference \
+                 failed",
                 sanitize_for_log(&package_json_path.display().to_string())
             ));
             None
@@ -181,7 +177,8 @@ pub fn infer_turbo_version(
             return Some(version.to_owned());
         }
         reporter.warn(
-            "Cannot infer turbo version due to use of `catalog` protocol. Remove `turbo` from your PNPM catalog to ensure correct turbo version is used",
+            "Cannot infer turbo version due to use of `catalog` protocol. Remove `turbo` from \
+             your PNPM catalog to ensure correct turbo version is used",
         );
     }
 

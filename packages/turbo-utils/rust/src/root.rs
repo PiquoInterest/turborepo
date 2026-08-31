@@ -157,21 +157,19 @@ pub fn get_turbo_root(cwd: Option<&Path>, options: TurboRootOptions) -> Option<P
     };
     let start = lexical_absolute(&requested)?;
 
-    if options.cache {
-        if let Ok(cache) = root_cache().read() {
-            if let Some(root) = cache.get(&start) {
-                return Some(root.clone());
-            }
-        }
+    if options.cache
+        && let Ok(cache) = root_cache().read()
+        && let Some(root) = cache.get(&start)
+    {
+        return Some(root.clone());
     }
 
     let root = find_uncached(&start);
-    if options.cache {
-        if let Some(root) = root.as_ref() {
-            if let Ok(mut cache) = root_cache().write() {
-                cache.insert(start, root.clone());
-            }
-        }
+    if options.cache
+        && let Some(root) = root.as_ref()
+        && let Ok(mut cache) = root_cache().write()
+    {
+        cache.insert(start, root.clone());
     }
     root
 }

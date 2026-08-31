@@ -1,14 +1,11 @@
+#[cfg(unix)]
+use std::ffi::CString;
 use std::{
-    fmt,
-    fs,
-    io,
+    fmt, fs, io,
     path::{Component, Path, PathBuf},
 };
 
 use thiserror::Error;
-
-#[cfg(unix)]
-use std::ffi::CString;
 
 const MAX_SEARCH_CONTENT_BYTES: u64 = 4 * 1_024 * 1_024;
 
@@ -243,7 +240,11 @@ pub fn validate_directory(directory: &str, current_directory: &Path) -> Director
             String::new(),
             format!(
                 "{} is not a valid directory name - please try a different location",
-                if directory.is_empty() { "<empty>" } else { directory }
+                if directory.is_empty() {
+                    "<empty>"
+                } else {
+                    directory
+                }
             ),
         );
     }
@@ -282,9 +283,7 @@ pub fn validate_directory(directory: &str, current_directory: &Path) -> Director
             return invalid_directory(
                 root,
                 project_name.clone(),
-                format!(
-                    "{project_name} is not a directory - please try a different location"
-                ),
+                format!("{project_name} is not a directory - please try a different location"),
             );
         }
         Ok(_) => match is_folder_empty(&root) {
@@ -295,7 +294,8 @@ pub fn validate_directory(directory: &str, current_directory: &Path) -> Director
                     root.clone(),
                     project_name.clone(),
                     format!(
-                        "{project_name} ({}) has {count} conflicting {noun} - please try a different location",
+                        "{project_name} ({}) has {count} conflicting {noun} - please try a \
+                         different location",
                         root.display()
                     ),
                 );

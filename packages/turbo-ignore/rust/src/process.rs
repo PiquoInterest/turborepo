@@ -41,10 +41,7 @@ pub enum ProcessError {
         source: io::Error,
     },
     #[error("subprocess {program} exceeded its {timeout:?} timeout")]
-    Timeout {
-        program: PathBuf,
-        timeout: Duration,
-    },
+    Timeout { program: PathBuf, timeout: Duration },
     #[error("subprocess {program} exceeded the {maximum}-byte {stream} limit")]
     OutputTooLarge {
         program: PathBuf,
@@ -68,10 +65,7 @@ pub enum ProcessError {
     #[error("subprocess output channel closed unexpectedly for {program}")]
     ReaderChannelClosed { program: PathBuf },
     #[error("subprocess timeout is too large to represent for {program}: {timeout:?}")]
-    InvalidTimeout {
-        program: PathBuf,
-        timeout: Duration,
-    },
+    InvalidTimeout { program: PathBuf, timeout: Duration },
 }
 
 pub trait CommandRunner: Send + Sync {
@@ -251,38 +245,25 @@ impl CommandRunner for SystemCommandRunner {
         let mut stdout_result = None;
         let mut stderr_result = None;
         let status = loop {
-            loop {
-                match receive_stream(&receiver, &mut stdout_result, &mut stderr_result) {
-                    Ok(()) => {}
-                    Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
-                }
-            }
+            while let Ok(()) = receive_stream(&receiver, &mut stdout_result, &mut stderr_result) {}
 
-            if let Some(result) = stdout_result.as_ref() {
-                if let Some(error) = stream_error(
-                    &spec.program,
-                    StreamKind::Stdout,
-                    result,
-                    maximum,
-                ) {
-                    stop_child(&mut child);
-                    let _stdout_join_result = join_reader(stdout_handle, &spec.program);
-                    let _stderr_join_result = join_reader(stderr_handle, &spec.program);
-                    return Err(error);
-                }
+            if let Some(result) = stdout_result.as_ref()
+                && let Some(error) =
+                    stream_error(&spec.program, StreamKind::Stdout, result, maximum)
+            {
+                stop_child(&mut child);
+                let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                return Err(error);
             }
-            if let Some(result) = stderr_result.as_ref() {
-                if let Some(error) = stream_error(
-                    &spec.program,
-                    StreamKind::Stderr,
-                    result,
-                    maximum,
-                ) {
-                    stop_child(&mut child);
-                    let _stdout_join_result = join_reader(stdout_handle, &spec.program);
-                    let _stderr_join_result = join_reader(stderr_handle, &spec.program);
-                    return Err(error);
-                }
+            if let Some(result) = stderr_result.as_ref()
+                && let Some(error) =
+                    stream_error(&spec.program, StreamKind::Stderr, result, maximum)
+            {
+                stop_child(&mut child);
+                let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                return Err(error);
             }
 
             let wait_result = match child.try_wait() {
@@ -337,20 +318,14 @@ impl CommandRunner for SystemCommandRunner {
             program: spec.program.clone(),
         })?;
 
-        if let Some(error) = stream_error(
-            &spec.program,
-            StreamKind::Stdout,
-            &stdout_result,
-            maximum,
-        ) {
+        if let Some(error) =
+            stream_error(&spec.program, StreamKind::Stdout, &stdout_result, maximum)
+        {
             return Err(error);
         }
-        if let Some(error) = stream_error(
-            &spec.program,
-            StreamKind::Stderr,
-            &stderr_result,
-            maximum,
-        ) {
+        if let Some(error) =
+            stream_error(&spec.program, StreamKind::Stderr, &stderr_result, maximum)
+        {
             return Err(error);
         }
 

@@ -8,25 +8,13 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum ToolError {
     #[error("configured {tool} path must be absolute: {path}")]
-    NotAbsolute {
-        tool: &'static str,
-        path: PathBuf,
-    },
+    NotAbsolute { tool: &'static str, path: PathBuf },
     #[error("configured {tool} path does not exist: {path}")]
-    Missing {
-        tool: &'static str,
-        path: PathBuf,
-    },
+    Missing { tool: &'static str, path: PathBuf },
     #[error("configured {tool} path is not a regular file: {path}")]
-    NotAFile {
-        tool: &'static str,
-        path: PathBuf,
-    },
+    NotAFile { tool: &'static str, path: PathBuf },
     #[error("configured {tool} path is not executable: {path}")]
-    NotExecutable {
-        tool: &'static str,
-        path: PathBuf,
-    },
+    NotExecutable { tool: &'static str, path: PathBuf },
     #[error("could not canonicalize {tool} path {path}: {source}")]
     Canonicalize {
         tool: &'static str,
@@ -77,7 +65,10 @@ fn validate_tool(tool: &'static str, path: &Path) -> Result<PathBuf, ToolError> 
     Ok(canonical)
 }
 
-fn first_valid(tool: &'static str, candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+fn first_valid(
+    tool: &'static str,
+    candidates: impl IntoIterator<Item = PathBuf>,
+) -> Option<PathBuf> {
     for candidate in candidates {
         if let Ok(path) = validate_tool(tool, &candidate) {
             return Some(path);
@@ -98,7 +89,10 @@ pub fn resolve_git(explicit: Option<&Path>) -> Result<PathBuf, ToolError> {
     }
 
     #[cfg(unix)]
-    let candidates = [PathBuf::from("/usr/bin/git"), PathBuf::from("/usr/local/bin/git")];
+    let candidates = [
+        PathBuf::from("/usr/bin/git"),
+        PathBuf::from("/usr/local/bin/git"),
+    ];
 
     #[cfg(windows)]
     let candidates = [
@@ -160,16 +154,12 @@ pub fn resolve_turbo(root: &Path, explicit: Option<&Path>) -> Result<PathBuf, To
     }
 
     let mut candidates = vec![
-        root.join("target").join("debug").join(if cfg!(windows) {
-            "turbo.exe"
-        } else {
-            "turbo"
-        }),
-        root.join("target").join("release").join(if cfg!(windows) {
-            "turbo.exe"
-        } else {
-            "turbo"
-        }),
+        root.join("target")
+            .join("debug")
+            .join(if cfg!(windows) { "turbo.exe" } else { "turbo" }),
+        root.join("target")
+            .join("release")
+            .join(if cfg!(windows) { "turbo.exe" } else { "turbo" }),
     ];
 
     if let Some((package, binary)) = platform_turbo_package() {
@@ -186,14 +176,10 @@ pub fn resolve_turbo(root: &Path, explicit: Option<&Path>) -> Result<PathBuf, To
         candidates.push(root.join("node_modules").join(".bin").join("turbo"));
     }
 
-    if let Ok(current_executable) = env::current_exe() {
-        if let Some(parent) = current_executable.parent() {
-            candidates.push(parent.join(if cfg!(windows) {
-                "turbo.exe"
-            } else {
-                "turbo"
-            }));
-        }
+    if let Ok(current_executable) = env::current_exe()
+        && let Some(parent) = current_executable.parent()
+    {
+        candidates.push(parent.join(if cfg!(windows) { "turbo.exe" } else { "turbo" }));
     }
 
     first_valid("turbo", candidates).ok_or(ToolError::NotFound { tool: "turbo" })

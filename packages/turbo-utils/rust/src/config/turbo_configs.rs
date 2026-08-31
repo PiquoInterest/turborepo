@@ -3,15 +3,12 @@ pub fn get_turbo_configs(
     options: ConfigOptions,
 ) -> Result<Vec<TurboConfig>, TurboConfigError> {
     let key = cache_key(cwd);
-    if options.cache {
-        if let Some(key) = key.as_ref() {
-            if let Ok(cache) = turbo_configs_cache().read() {
-                if let Some(configs) = cache.get(key) {
+    if options.cache
+        && let Some(key) = key.as_ref()
+            && let Ok(cache) = turbo_configs_cache().read()
+                && let Some(configs) = cache.get(key) {
                     return Ok(configs.clone());
                 }
-            }
-        }
-    }
 
     let Some(root) = get_turbo_root(cwd, TurboRootOptions { cache: options.cache }) else {
         return Ok(Vec::new());
@@ -44,12 +41,10 @@ pub fn get_turbo_configs(
         });
     }
 
-    if options.cache {
-        if let Some(key) = key {
-            if let Ok(mut cache) = turbo_configs_cache().write() {
+    if options.cache
+        && let Some(key) = key
+            && let Ok(mut cache) = turbo_configs_cache().write() {
                 cache.insert(key, configs.clone());
             }
-        }
-    }
     Ok(configs)
 }

@@ -34,8 +34,8 @@ fn strings_from_sequence(value: &Value) -> Vec<String> {
 fn get_workspace_globs(root: &Path) -> Vec<String> {
     let pnpm_workspace = root.join("pnpm-workspace.yaml");
     if let Some(content) = read_regular_utf8_limited(&pnpm_workspace, MAX_WORKSPACE_YAML_BYTES) {
-        if let Ok(value) = serde_yaml_ng::from_str::<serde_yaml_ng::Value>(&content) {
-            if let Some(packages) = value
+        if let Ok(value) = serde_yaml_ng::from_str::<serde_yaml_ng::Value>(&content)
+            && let Some(packages) = value
                 .as_mapping()
                 .and_then(|mapping| {
                     let key = serde_yaml_ng::Value::String("packages".to_owned());
@@ -49,7 +49,6 @@ fn get_workspace_globs(root: &Path) -> Vec<String> {
                     .map(str::to_owned)
                     .collect();
             }
-        }
         return Vec::new();
     }
 

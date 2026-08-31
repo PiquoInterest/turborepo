@@ -50,7 +50,9 @@ pub fn classify_error(error: &str) -> ErrorClassification {
         return ErrorClassification {
             level: ErrorLevel::Warn,
             code: ErrorCode::MissingLockfile,
-            message: "turbo-ignore could not complete - no lockfile found, please commit one to your repository".to_owned(),
+            message: "turbo-ignore could not complete - no lockfile found, please commit one to \
+                      your repository"
+                .to_owned(),
         };
     }
 
@@ -64,7 +66,10 @@ pub fn classify_error(error: &str) -> ErrorClassification {
         return ErrorClassification {
             level: ErrorLevel::Warn,
             code: ErrorCode::NoPackageManager,
-            message: "turbo-ignore could not complete - no package manager detected, please commit a lockfile, or set \"devEngines.packageManager\" in your root \"package.json\"".to_owned(),
+            message: "turbo-ignore could not complete - no package manager detected, please \
+                      commit a lockfile, or set \"devEngines.packageManager\" in your root \
+                      \"package.json\""
+                .to_owned(),
         };
     }
 
@@ -75,7 +80,9 @@ pub fn classify_error(error: &str) -> ErrorClassification {
         return ErrorClassification {
             level: ErrorLevel::Warn,
             code: ErrorCode::UnreachableParent,
-            message: "turbo-ignore could not complete - parent commit does not exist or is unreachable".to_owned(),
+            message: "turbo-ignore could not complete - parent commit does not exist or is \
+                      unreachable"
+                .to_owned(),
         };
     }
 
@@ -86,7 +93,10 @@ pub fn classify_error(error: &str) -> ErrorClassification {
         return ErrorClassification {
             level: ErrorLevel::Warn,
             code: ErrorCode::InvalidComparison,
-            message: "turbo-ignore could not complete - a ref or SHA is invalid. It could have been removed from the branch history via a force push, or this could be a shallow clone with insufficient history".to_owned(),
+            message: "turbo-ignore could not complete - a ref or SHA is invalid. It could have \
+                      been removed from the branch history via a force push, or this could be a \
+                      shallow clone with insufficient history"
+                .to_owned(),
         };
     }
 
