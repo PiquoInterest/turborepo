@@ -178,7 +178,7 @@ pub fn is_writeable(directory: &Path) -> bool {
         };
         // SAFETY: `path` is a NUL-terminated CString that remains alive for the
         // duration of the call. `access` does not retain the pointer.
-        unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0
+        (unsafe { libc::access(path.as_ptr(), libc::W_OK) }) == 0
     }
 
     #[cfg(not(unix))]
