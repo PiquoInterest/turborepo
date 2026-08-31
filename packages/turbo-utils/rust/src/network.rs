@@ -404,9 +404,7 @@ fn is_http_request_scheme(scheme: &str) -> bool {
 
 fn request_hosts_equal(left: RequestHost<'_>, right: RequestHost<'_>) -> bool {
     match (left, right) {
-        (RequestHost::Domain(left), RequestHost::Domain(right)) => {
-            left.eq_ignore_ascii_case(right)
-        }
+        (RequestHost::Domain(left), RequestHost::Domain(right)) => left.eq_ignore_ascii_case(right),
         (RequestHost::Ipv4(left), RequestHost::Ipv4(right)) => left == right,
         (RequestHost::Ipv6(left), RequestHost::Ipv6(right)) => left == right,
         _ => false,
@@ -447,9 +445,7 @@ pub fn redirect_request_policy(
     let target_endpoint =
         parse_request_endpoint(target).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
 
-    if source.scheme.eq_ignore_ascii_case("https")
-        && target.scheme.eq_ignore_ascii_case("http")
-    {
+    if source.scheme.eq_ignore_ascii_case("https") && target.scheme.eq_ignore_ascii_case("http") {
         return Err(NetworkPolicyError::InsecureRedirect);
     }
 
