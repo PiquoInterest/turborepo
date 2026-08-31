@@ -123,7 +123,10 @@ fn non_utf8_iml_name_is_not_silently_allowlisted() -> Result<(), Box<dyn Error>>
     let directory = tempfile::tempdir()?;
     let mut bytes = vec![0xff];
     bytes.extend_from_slice(b".iml");
-    write(&directory.path().join(OsString::from_vec(bytes)), "conflict")?;
+    write(
+        &directory.path().join(OsString::from_vec(bytes)),
+        "conflict",
+    )?;
 
     assert!(
         is_folder_empty(directory.path()).is_err(),

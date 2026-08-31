@@ -169,9 +169,7 @@ pub fn is_folder_empty(root: &Path) -> io::Result<FolderEmptyResult> {
             ));
         };
         let is_symlink = entry.file_type()?.is_symlink();
-        if is_symlink
-            || (!VALID_EMPTY_FOLDER_ENTRIES.contains(&name) && !name.ends_with(".iml"))
-        {
+        if is_symlink || (!VALID_EMPTY_FOLDER_ENTRIES.contains(&name) && !name.ends_with(".iml")) {
             conflicts.push(name.to_owned());
         }
     }
