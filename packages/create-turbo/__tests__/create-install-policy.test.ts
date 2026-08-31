@@ -191,7 +191,7 @@ describe("create install policy", () => {
     }
   });
 
-  it.failing(
+  it(
     "does not pass raw terminal-control text from the example name to warning output",
     async () => {
       const { root } = useFixture({ fixture: "hostile-warning-name" });
@@ -223,6 +223,9 @@ describe("create install policy", () => {
 
         const rendered = errorSpy.mock.calls.flat().map(String).join(" ");
         expect(rendered).not.toContain(hostileExample);
+        expect(rendered).toContain(
+          "community\\u{1b}]8;;https://attacker.invalid\\u{7}name\\nspoof"
+        );
       } finally {
         arranged.restore();
       }
