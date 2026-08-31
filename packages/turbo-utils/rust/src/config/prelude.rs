@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::{OnceLock, RwLock},
 };
 
@@ -112,4 +112,3 @@ pub fn resolve_turbo_config_path(directory: &Path) -> TurboConfigPathResolution 
         error: None,
     }
 }
-
