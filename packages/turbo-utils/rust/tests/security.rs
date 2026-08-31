@@ -46,8 +46,7 @@ fn option_like_project_name_is_rejected() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn folder_scan_is_bounded_before_untrusted_entry_count_grows_without_limit(
-) -> Result<(), Box<dyn Error>> {
+fn folder_scan_is_bounded_before_collecting_untrusted_entries() -> Result<(), Box<dyn Error>> {
     let directory = tempfile::tempdir()?;
     for index in 0..257 {
         write(
@@ -89,7 +88,10 @@ fn symlinked_ancestor_is_rejected_before_directory_enumeration() -> Result<(), B
     symlink(outside.path(), directory.path().join("redirect"))?;
 
     let result = validate_directory("redirect/project", directory.path());
-    assert!(!result.valid, "accepted a directory through a symlinked ancestor");
+    assert!(
+        !result.valid,
+        "accepted a directory through a symlinked ancestor"
+    );
     Ok(())
 }
 
@@ -106,7 +108,10 @@ fn allowlisted_symlink_is_never_treated_as_an_empty_directory() -> Result<(), Bo
         directory.path().to_string_lossy().as_ref(),
         directory.path(),
     );
-    assert!(!result.valid, "accepted an allowlisted name backed by a symlink");
+    assert!(
+        !result.valid,
+        "accepted an allowlisted name backed by a symlink"
+    );
     Ok(())
 }
 

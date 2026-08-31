@@ -8,6 +8,7 @@ use std::{
 use thiserror::Error;
 
 const MAX_SEARCH_CONTENT_BYTES: u64 = 4 * 1_024 * 1_024;
+const MAX_FOLDER_ENTRIES: usize = 256;
 
 const VALID_EMPTY_FOLDER_ENTRIES: [&str; 20] = [
     ".DS_Store",
@@ -151,11 +152,27 @@ pub struct FolderEmptyResult {
 
 pub fn is_folder_empty(root: &Path) -> io::Result<FolderEmptyResult> {
     let mut conflicts = Vec::new();
-    for entry in fs::read_dir(root)? {
+    for (index, entry) in fs::read_dir(root)?.enumerate() {
+        if index >= MAX_FOLDER_ENTRIES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "directory contains too many entries to inspect safely",
+            ));
+        }
+
         let entry = entry?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !VALID_EMPTY_FOLDER_ENTRIES.contains(&name.as_str()) && !name.ends_with(".iml") {
-            conflicts.push(name);
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "directory contains a filename that is not valid UTF-8",
+            ));
+        };
+        let is_symlink = entry.file_type()?.is_symlink();
+        if is_symlink
+            || (!VALID_EMPTY_FOLDER_ENTRIES.contains(&name) && !name.ends_with(".iml"))
+        {
+            conflicts.push(name.to_owned());
         }
     }
     Ok(FolderEmptyResult {
@@ -229,6 +246,24 @@ fn invalid_directory(
     }
 }
 
+fn existing_path_has_symlink(path: &Path) -> io::Result<bool> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        if matches!(component, Component::Prefix(_) | Component::RootDir) {
+            continue;
+        }
+
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => return Ok(true),
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(false)
+}
+
 /// Validates a project directory using the current TypeScript contract for
 /// normal inputs, while treating metadata/read failures as invalid rather than
 /// allowing an uncertain filesystem state to continue.
@@ -262,6 +297,7 @@ pub fn validate_directory(directory: &str, current_directory: &Path) -> Director
     if root_text.is_empty()
         || root_text.starts_with('-')
         || root_text.contains('\0')
+        || project_name.starts_with('-')
         || !project_name_is_valid
     {
         return invalid_directory(
@@ -276,6 +312,27 @@ pub fn validate_directory(directory: &str, current_directory: &Path) -> Director
                 }
             ),
         );
+    }
+
+    match existing_path_has_symlink(&root) {
+        Ok(true) => {
+            return invalid_directory(
+                root,
+                project_name.clone(),
+                format!(
+                    "{project_name} contains a symbolic-link path component - please try a \
+                     different location"
+                ),
+            );
+        }
+        Ok(false) => {}
+        Err(error) => {
+            return invalid_directory(
+                root,
+                project_name,
+                format!("directory path could not be inspected safely: {error}"),
+            );
+        }
     }
 
     match fs::symlink_metadata(&root) {
