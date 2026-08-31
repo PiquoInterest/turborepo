@@ -61,6 +61,8 @@ The project-creation coordinator is separated from network and archive execution
 
 The actual HTTP, proxy, GitHub authentication, sparse Git fallback, tar streaming, archive extraction, staging, and atomic promotion implementation remains deliberately outside the coordinator until it has one shared, differential-tested security contract.
 
+The TDD history is preserved in the branch: commit `0468eda3829e5b1bb98f96b86a7f0817ac542f51` adds the red parity and security contract, and commit `b2992a27dbf44c5ab8bc7405dc088236eb53c70e` adds the implementation. The subsequent formatter commit changes layout only.
+
 ## Security review method
 
 Each tranche gets a colocated `SECURITY.md` containing:
