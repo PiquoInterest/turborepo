@@ -71,8 +71,7 @@ describe("legacy create output security evidence", () => {
       .mockResolvedValue({
         cdPath: "",
         hasPackageJson: true,
-        availableScripts: [],
-        repoInfo: undefined
+        availableScripts: []
       });
     const workspace = jest
       .spyOn(turboWorkspaces, "getWorkspaceDetails")
