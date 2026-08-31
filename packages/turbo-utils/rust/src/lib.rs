@@ -178,7 +178,7 @@ pub fn is_writeable(directory: &Path) -> bool {
         };
         // SAFETY: `path` is a NUL-terminated CString that remains alive for the
         // duration of the call. `access` does not retain the pointer.
-        return unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0;
+        unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0
     }
 
     #[cfg(not(unix))]
@@ -209,7 +209,9 @@ fn lexical_resolve(directory: &str, current_directory: &Path) -> PathBuf {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                let _removed = resolved.pop();
+                if resolved.file_name().is_some() {
+                    let _removed = resolved.pop();
+                }
             }
             other => resolved.push(other.as_os_str()),
         }
