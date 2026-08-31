@@ -153,11 +153,14 @@ fn is_unsafe_control(character: char) -> bool {
         || matches!(
             character,
             '\u{00ad}'
+                | '\u{034f}'
                 | '\u{061c}'
+                | '\u{180e}'
                 | '\u{200b}'..='\u{200f}'
-                | '\u{202a}'..='\u{202e}'
+                | '\u{2028}'..='\u{202e}'
                 | '\u{2060}'..='\u{206f}'
                 | '\u{feff}'
+                | '\u{fff9}'..='\u{fffb}'
         )
 }
 

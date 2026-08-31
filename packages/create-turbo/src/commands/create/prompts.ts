@@ -12,7 +12,7 @@ export const INVALID_PROJECT_DIRECTORY_MESSAGE =
   "The project directory is invalid or contains conflicting files.";
 
 const UNSAFE_DIRECTORY_CONTROL_PATTERN =
-  /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/u;
 
 export type InvalidDirectoryReason = "unsafe-input" | "validation";
 
@@ -27,7 +27,26 @@ export class InvalidDirectoryError extends Error {
   }
 }
 
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const nextCodeUnit = value.charCodeAt(index + 1);
+      if (!(nextCodeUnit >= 0xdc00 && nextCodeUnit <= 0xdfff)) {
+        return true;
+      }
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function unsafeDirectoryInputError(directory: string): string | undefined {
+  if (hasUnpairedSurrogate(directory)) {
+    return "Project directory input contains invalid Unicode text.";
+  }
   if (Buffer.byteLength(directory, "utf8") > MAX_DIRECTORY_INPUT_BYTES) {
     return `Project directory input exceeds the ${MAX_DIRECTORY_INPUT_BYTES}-byte limit.`;
   }
