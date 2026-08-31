@@ -34,14 +34,25 @@ fn owner_and_repository_identifiers_are_validated() {
         "https://github.com/-owner/repo",
         "https://github.com/owner-/repo",
         "https://github.com/owner_/repo",
-        "https://github.com/owner/.repo",
-        "https://github.com/owner/repo..name",
-        "https://github.com/owner/repo.lock",
+        "https://github.com/owner/repo~name",
+        "https://github.com/owner/repo:name",
+        "https://github.com/owner/repo@name",
         "https://github.com/owner/repo/extra",
     ] {
         assert!(
             parse_github_repository_location(url, None).is_err(),
             "{url}"
+        );
+    }
+}
+
+#[test]
+fn dot_prefixed_and_lock_suffixed_repository_names_remain_valid() {
+    for name in [".github", "repo..name", "repo.lock"] {
+        let url = format!("https://github.com/owner/{name}");
+        assert!(
+            parse_github_repository_location(&url, None).is_ok(),
+            "{name}"
         );
     }
 }
