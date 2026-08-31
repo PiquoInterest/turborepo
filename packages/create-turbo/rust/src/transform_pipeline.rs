@@ -2,12 +2,19 @@ use std::fmt;
 
 use crate::TransformStatus;
 
+pub const MAX_TERMINAL_DIAGNOSTIC_SCALARS: usize = 512;
+
 pub const TRANSFORM_PIPELINE: [TransformKind; 4] = [
     TransformKind::OfficialStarter,
     TransformKind::GitIgnore,
     TransformKind::PackageManager,
     TransformKind::UpdateCommandsInReadme,
 ];
+
+#[must_use]
+pub fn sanitize_terminal_text(input: &str) -> String {
+    input.to_owned()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TransformKind {
@@ -61,11 +68,16 @@ impl TransformFailure {
             fatal: fatal.unwrap_or(true),
         }
     }
+
+    #[must_use]
+    pub fn terminal_transform(&self) -> String {
+        sanitize_terminal_text(&self.transform)
+    }
 }
 
 impl fmt::Display for TransformFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
+        formatter.write_str(&sanitize_terminal_text(&self.message))
     }
 }
 
