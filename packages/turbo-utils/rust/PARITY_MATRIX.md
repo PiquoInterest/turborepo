@@ -30,5 +30,13 @@
 | Named example/repository subpath validation | Intentional deviation | Rust rejects traversal, separators in named examples, backslashes, empty path segments, and `.`/`..` repository components before provider calls. |
 | Project target symlinks | Intentional deviation | Rust rejects symlink targets and immediate-parent symlinks before download. Descriptor-relative TOCTOU closure remains open. |
 | Network/archive acquisition | Blocked | `ProjectSource` is currently an injected boundary. The GitHub API, proxy/auth, Git fallback, tar streaming, extraction, timeout, and cleanup implementation must be ported and differentially tested before cutover. |
+| `createNotifyUpdate` eager update check | Parity core | `PreparedUpdateNotification::prepare` invokes the injected checker exactly once and stores the result before later notification calls. Host/module initialization remains a binding concern. |
+| No update or failed update check | Parity | Produces no notification output and preserves the requested exit code. Checker errors are swallowed, matching the TypeScript promise catch. |
+| Available update announcement | Safe-input parity | Emits the same blank-line, announcement, optional command, blank-line sequence as the unstyled TypeScript message values. Terminal styling belongs to the host adapter. |
+| Static upgrade command | Parity | Renders the supplied command only when it is non-empty and an update exists. |
+| Dynamic upgrade command | Parity core | Resolves the provider only after update detection. `None` omits the command line. Provider failure preserves the exit code and is reported only when debug is enabled. |
+| Notification exit behavior | Parity core | The Rust result retains exact success/failure exit intent. The production host adapter must call the platform exit API after flushing output and telemetry. |
+| Notification terminal rendering | Intentional deviation | TypeScript logs package names, commands, and debug errors verbatim. Rust escapes terminal controls and Unicode directionality controls and truncates each untrusted field after 1,024 scalar values. |
+| Production registry update checker | Blocked | `UpdateChecker` is injected. The real registry/network implementation needs timeout, response-size, redirect, proxy, TLS, cache, rate-limit, and differential tests before cutover. |
 
 The TypeScript package remains the production API. This crate is a tested migration core and does not remove JavaScript host bindings yet.

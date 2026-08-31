@@ -30,7 +30,9 @@ Required closure:
 1. update the workspace requirement and lockfile to `webbrowser >= 1.2.2`;
 2. run the `turborepo-query` test and lint targets on Unix;
 3. keep browser-launch inputs restricted to explicit HTTP(S) URLs;
-4. add an automated RustSec/OSV lockfile scan.
+4. remove the temporary `RUSTSEC-2026-0257` exception from migration CI.
+
+Migration CI now audits the complete resolved Rust dependency graph. It temporarily ignores only this documented advisory so additional findings still fail the gate.
 
 References:
 
@@ -43,7 +45,7 @@ References:
 
 The TypeScript `streamingExtract` path explicitly performs destination containment checks and rejects symbolic and hard links. The `downloadAndExtractRepo` path uses a separate extraction flow and does not apply those same explicit checks in its own code. Library defaults may mitigate some archive classes, so this is recorded as an unclosed security contract rather than a confirmed exploit.
 
-The Rust `createProject` coordinator intentionally leaves network and archive acquisition behind `ProjectSource`. A production provider must use a single extractor with tested limits for entry count, individual file size, total expanded bytes, path depth, links, device nodes, permissions, time, redirects, and cleanup.
+The Rust `createProject` coordinator intentionally leaves network and archive acquisition behind `ProjectSource`. A production provider must use a single extractor with tested limits for entry count, individual file size, total expanded bytes, decompression ratio, path depth, links, device nodes, permissions, time, redirects, staging, and cleanup.
 
 ### RF-003: TypeScript project creation mutates process-wide working-directory state
 
@@ -61,11 +63,19 @@ Observed TypeScript helpers read decision-critical project metadata without cons
 
 The detailed instances and regression names are recorded in the package security reviews.
 
+### RF-005: CLI notification text can spoof terminal output
+
+**Status:** Fixed in the Rust notification core; TypeScript production path remains.
+
+The TypeScript update notification renders package names, upgrade commands, and debug error values without a uniform control-character or length policy. The Rust core escapes terminal controls and Unicode directionality controls and bounds each untrusted field. Safe printable values retain the same message ordering and exit behavior.
+
+Production risk remains until the Rust notification core is bound into the affected CLIs and the TypeScript path is removed.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
 
-- run a lockfile-wide RustSec/OSV audit in CI and record dispositions;
+- keep the lockfile-wide RustSec audit enabled and remove every temporary advisory exception after remediation;
 - run npm ecosystem advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;
