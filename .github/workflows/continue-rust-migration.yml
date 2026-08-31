@@ -35,6 +35,11 @@ jobs:
           sudo apt-get install --no-install-recommends --yes capnproto
           capnp --version
 
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
       - name: Persist the migration operating contract
         shell: python
         run: |
