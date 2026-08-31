@@ -6,6 +6,7 @@ on:
       - rust/typescript-deprecation
     paths:
       - .github/workflows/continue-rust-migration.yml
+      - packages/turbo-utils/rust/tests/security.rs
 
 concurrency:
   group: repair-consolidated-rust-migration-dependencies
