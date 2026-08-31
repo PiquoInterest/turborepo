@@ -9,8 +9,9 @@ Current Rust tranches cover:
 3. the dependency-injected core of `tryGitInit`, including Git/Mercurial detection, initialization ordering, post-init cleanup, and root validation.
 4. exact `isDefaultExample` routing for the exported `basic` and `default` examples.
 5. the dependency-injected `package-manager` transform decision and conversion-request contract.
+6. the pure decision and JSON-mutation planner for the `official-starter` transform.
 
-The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
+The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, filesystem/process providers, packaging, and downstream cutover work is complete.
 
 ## Implemented behavior
 
@@ -70,20 +71,36 @@ The current Git tranche is an orchestration core. A production `VcsRunner` and `
 
 A production `PackageManagerConverter` is deliberately absent. The existing TypeScript `@turbo/workspaces` converter performs broad package and lockfile mutation, so its Rust provider requires its own translated tests, rollback model, atomic-write policy, supported-manager matrix, and platform review before cutover.
 
+### Official-starter planner
+
+- preserves the exact transform name `official-starter`;
+- classifies a starter as official when repository metadata is absent or exactly names `vercel/turbo` or `vercel/turborepo`;
+- returns `not-applicable` without planning file mutations for every other owner/name pair;
+- renames the root package only for the exact `basic` and `default` examples;
+- rewrites a truthy `devDependencies.turbo` value to the requested version, or to `^<create-turbo invocation version>` when the request is absent or empty;
+- preserves missing and JavaScript-falsy package documents as no-write cases;
+- serializes untrusted names and versions as JSON data with two-space indentation and a final newline;
+- reproduces JavaScript object enumeration for canonical array-index keys before insertion-ordered string keys, recursively;
+- returns parsed metadata and a separate removal intent rather than coupling the read and delete result;
+- rejects truthy non-object package roots deterministically instead of relying on primitive-property mutation behavior;
+- performs no filesystem, network, process, shell, credential, or `unsafe` operation in the reviewed planner.
+
+A production filesystem adapter is deliberately absent. It must bound JSON size and nesting, reject symlinked paths, preserve identity, stage package writes, delete `meta.json` transactionally, map the established nonfatal transform errors, and prove Linux, macOS, and Windows behavior. The TypeScript source can read metadata successfully, fail to delete it, swallow the deletion error, and still report success with stale metadata. The Rust adapter must not copy that inconsistent success state.
+
 ## Not yet implemented in Rust
 
 - CLI argument parsing, help/version output, and prompts;
 - example discovery and secure network/archive acquisition;
 - production package-manager workspace conversion and installation orchestration;
 - production Git/Hg process execution and `.git` cleanup providers;
-- the remaining source transforms;
+- the `official-starter` bounded transactional filesystem adapter;
 - telemetry binding into the production command path;
 - native/JavaScript host boundary and npm packaging;
 - production entry-point and downstream-caller cutover.
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `official_starter` owns exact repository classification, package mutation planning, JavaScript-compatible property ordering, and deterministic JSON serialization while leaving filesystem effects to a future adapter.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -92,6 +109,8 @@ The Git initialization core never resolves an executable, inherits no process en
 The default-example predicate cannot broaden routing through trimming, normalization, regexes, prefixes, suffixes, or mutable collection state. It is intentionally a two-literal borrowed-string match.
 
 The package-manager transform does not receive free-form manager text at its mutation boundary. It also does not copy, log, or forward the prompt version. That preserves the source decision contract while keeping destructive conversion outside the reviewed core.
+
+The official-starter planner clones caller-owned JSON before mutation, keeps repository identity matching exact and case-sensitive, and serializes every untrusted field through `serde_json`. It returns an explicit plan rather than performing a metadata delete followed by an in-place package write, so the later adapter must define one coherent transaction and cannot silently report partial success.
 
 ## TDD history
 
@@ -107,6 +126,8 @@ Default example RED:     edc3b96b106e2c0bebaee299690c7769f9ba6bc2
 Default example GREEN:   57f19c56209312fb2d04423fdd86ad239150a753
 Package manager RED:     9f9b33f889d92e5b61a484ac445b4e297110f6f0
 Package manager GREEN:   c7a1776c5f6fa53db4e30d418a9897b56c6263cd
+Official starter RED:    7f6cd240172e4fda87825445865f15800e950456
+Official starter GREEN:  eb04368368a6bd7fdf49fdd9dc18ea0c29a867fe
 ```
 
 Focused validation:
@@ -119,7 +140,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 39 translated parity tests and 30 security regression tests, for 69 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
+The crate contains 51 translated parity tests and 37 security regression tests, for 88 authored focused Rust tests. The official-starter tranche remains pending until its exact-SHA workflow passes the focused commands, the TypeScript oracle and differential fixtures run, and its documentation commit is integrated into the repository-wide pull request.
 
 ## Production status
 
