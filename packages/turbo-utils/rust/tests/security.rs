@@ -29,7 +29,10 @@ fn relative_search_start_is_rejected() {
 fn invalid_or_control_character_project_names_are_rejected() -> Result<(), Box<dyn Error>> {
     let directory = tempfile::tempdir()?;
     for name in ["", "   ", "bad name", "bad\nname", "bad/name/../?"] {
-        assert!(!validate_directory(name, directory.path()).valid, "accepted {name:?}");
+        assert!(
+            !validate_directory(name, directory.path()).valid,
+            "accepted {name:?}"
+        );
     }
     Ok(())
 }

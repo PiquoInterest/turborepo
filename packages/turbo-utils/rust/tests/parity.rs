@@ -67,7 +67,10 @@ fn search_up_content_check_skips_nonmatching_candidates() -> Result<(), Box<dyn 
     let nested = directory.path().join("project/apps/web");
     fs::create_dir_all(&nested)?;
     write(&nested.join("turbo.json"), r#"{"extends":["//"]}"#)?;
-    write(&directory.path().join("project/turbo.json"), r#"{"tasks":{}}"#)?;
+    write(
+        &directory.path().join("project/turbo.json"),
+        r#"{"tasks":{}}"#,
+    )?;
     let is_root = |content: &str| !content.contains("extends");
     assert_eq!(
         search_up(Path::new("turbo.json"), &nested, Some(&is_root))?,
@@ -129,7 +132,11 @@ fn validate_directory_rejects_file_and_conflicts() -> Result<(), Box<dyn Error>>
     write(&file, "file")?;
     let result = validate_directory(file.to_string_lossy().as_ref(), directory.path());
     assert!(!result.valid);
-    assert!(result.error.is_some_and(|error| error.contains("is not a directory")));
+    assert!(
+        result
+            .error
+            .is_some_and(|error| error.contains("is not a directory"))
+    );
 
     let project = directory.path().join("existing");
     fs::create_dir_all(&project)?;
@@ -137,7 +144,11 @@ fn validate_directory_rejects_file_and_conflicts() -> Result<(), Box<dyn Error>>
     write(&project.join("src"), "conflict")?;
     let result = validate_directory(project.to_string_lossy().as_ref(), directory.path());
     assert!(!result.valid);
-    assert!(result.error.is_some_and(|error| error.contains("has 2 conflicting files")));
+    assert!(
+        result
+            .error
+            .is_some_and(|error| error.contains("has 2 conflicting files"))
+    );
     Ok(())
 }
 
@@ -149,6 +160,10 @@ fn validate_directory_uses_singular_conflict_word() -> Result<(), Box<dyn Error>
     write(&project.join("package.json"), "{}")?;
     let result = validate_directory(project.to_string_lossy().as_ref(), directory.path());
     assert!(!result.valid);
-    assert!(result.error.is_some_and(|error| error.contains("has 1 conflicting file")));
+    assert!(
+        result
+            .error
+            .is_some_and(|error| error.contains("has 1 conflicting file"))
+    );
     Ok(())
 }

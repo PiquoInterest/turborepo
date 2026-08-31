@@ -6,10 +6,7 @@ pub enum InputError {
     #[error("{field} must not be empty")]
     Empty { field: &'static str },
     #[error("{field} exceeds the maximum length of {maximum} characters")]
-    TooLong {
-        field: &'static str,
-        maximum: usize,
-    },
+    TooLong { field: &'static str, maximum: usize },
     #[error("{field} contains a control character")]
     ControlCharacter { field: &'static str },
     #[error("{field} must not begin with '-' because it is passed to a subprocess")]
@@ -30,9 +27,9 @@ fn valid_workspace_segment(segment: &str) -> bool {
     !segment.is_empty()
         && segment != "."
         && segment != ".."
-        && segment
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+        && segment.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
+        })
 }
 
 pub fn validate_workspace(value: &str) -> Result<(), InputError> {
@@ -114,8 +111,17 @@ pub fn validate_version_selector(value: &str) -> Result<VersionReq, InputError> 
 
     let lower = value.to_ascii_lowercase();
     let unsafe_prefixes = [
-        "file:", "link:", "git:", "git+", "http:", "https:", "ssh:", "github:",
-        "npm:", "workspace:", "catalog:",
+        "file:",
+        "link:",
+        "git:",
+        "git+",
+        "http:",
+        "https:",
+        "ssh:",
+        "github:",
+        "npm:",
+        "workspace:",
+        "catalog:",
     ];
     let contains_path_or_package_syntax = value.contains('/')
         || value.contains('\\')
@@ -142,6 +148,5 @@ pub fn validate_version_selector(value: &str) -> Result<VersionReq, InputError> 
         return Err(InputError::UnsafeVersionSelector(value.to_owned()));
     }
 
-    VersionReq::parse(value)
-        .map_err(|_| InputError::InvalidVersionSelector(value.to_owned()))
+    VersionReq::parse(value).map_err(|_| InputError::InvalidVersionSelector(value.to_owned()))
 }

@@ -1,8 +1,6 @@
 use std::{ffi::OsString, path::Path, time::Duration};
 
-use crate::{
-    CommandRunner, CommandSpec, Environment, Reporter, sanitize_for_log, validate_ref,
-};
+use crate::{CommandRunner, CommandSpec, Environment, Reporter, sanitize_for_log, validate_ref};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComparisonKind {
@@ -61,7 +59,9 @@ fn validate_object(
         max_output_bytes,
     };
 
-    runner.run(&spec).is_ok_and(|output| output.status.success())
+    runner
+        .run(&spec)
+        .is_ok_and(|output| output.status.success())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -86,14 +86,7 @@ pub fn get_comparison(
 
     if environment.vercel {
         if let Some(previous) = environment.previous_sha.as_deref() {
-            if validate_object(
-                previous,
-                git,
-                root,
-                runner,
-                timeout,
-                max_output_bytes,
-            ) {
+            if validate_object(previous, git, root, runner, timeout, max_output_bytes) {
                 reporter.info(&format!(
                     "Found previous deployment (\"{}\") for \"{workspace}\"{branch_suffix}",
                     sanitize_for_log(previous)

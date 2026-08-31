@@ -6,14 +6,14 @@ use std::{
     time::Duration,
 };
 
-use serde::Deserialize;
 use semver::Version;
+use serde::Deserialize;
 
 use crate::{
-    BuildDecision, CommandRunner, CommandSpec, CommitResult, ErrorLevel, Reporter,
-    classify_error, check_commit, find_turbo_root, get_comparison, get_workspace,
-    infer_turbo_version, resolve_git, resolve_turbo, sanitize_for_log, validate_ref,
-    validate_task, validate_version_selector, validate_workspace,
+    BuildDecision, CommandRunner, CommandSpec, CommitResult, ErrorLevel, Reporter, check_commit,
+    classify_error, find_turbo_root, get_comparison, get_workspace, infer_turbo_version,
+    resolve_git, resolve_turbo, sanitize_for_log, validate_ref, validate_task,
+    validate_version_selector, validate_workspace,
 };
 
 const DEFAULT_MAX_OUTPUT_BYTES: usize = 1_024 * 1_024;
@@ -150,14 +150,14 @@ fn get_commit_message(
     options: &Options,
     reporter: &dyn Reporter,
 ) -> Option<String> {
-    if environment.vercel {
-        if let Some(message) = environment.commit_message.as_ref() {
-            if message.len() > MAX_COMMIT_MESSAGE_BYTES {
-                reporter.error("Vercel commit message exceeds the 1 MiB safety limit");
-                return None;
-            }
-            return Some(message.clone());
+    if environment.vercel
+        && let Some(message) = environment.commit_message.as_ref()
+    {
+        if message.len() > MAX_COMMIT_MESSAGE_BYTES {
+            reporter.error("Vercel commit message exceeds the 1 MiB safety limit");
+            return None;
         }
+        return Some(message.clone());
     }
 
     let Some(git) = git else {
@@ -221,11 +221,7 @@ fn selected_task<'a>(options: &'a Options, reporter: &dyn Reporter) -> &'a str {
     }
 }
 
-fn validate_base_inputs(
-    workspace: &str,
-    task: &str,
-    reporter: &dyn Reporter,
-) -> bool {
+fn validate_base_inputs(workspace: &str, task: &str, reporter: &dyn Reporter) -> bool {
     if let Err(error) = validate_workspace(workspace) {
         reporter.error(&error.to_string());
         return false;
@@ -255,21 +251,21 @@ fn validate_analysis_inputs(
         reporter.error("timeout must be between 1 second and 30 minutes");
         return false;
     }
-    if let Some(reference) = fallback {
-        if let Err(error) = validate_ref(reference) {
-            reporter.error(&format!("Invalid fallback ref: {error}"));
-            return false;
-        }
+    if let Some(reference) = fallback
+        && let Err(error) = validate_ref(reference)
+    {
+        reporter.error(&format!("Invalid fallback ref: {error}"));
+        return false;
     }
 
-    if let Some(version) = turbo_version {
-        if let Err(error) = validate_version_selector(version) {
-            reporter.error(&format!(
-                "Refusing unsafe or unsupported turbo version selector \"{}\": {error}",
-                sanitize_for_log(version)
-            ));
-            return false;
-        }
+    if let Some(version) = turbo_version
+        && let Err(error) = validate_version_selector(version)
+    {
+        reporter.error(&format!(
+            "Refusing unsafe or unsupported turbo version selector \"{}\": {error}",
+            sanitize_for_log(version)
+        ));
+        return false;
     }
 
     true
@@ -325,7 +321,9 @@ fn verify_turbo_version(
     let output = match runner.run(&spec) {
         Ok(output) => output,
         Err(error) => {
-            reporter.error(&format!("Could not verify the trusted Turbo binary: {error}"));
+            reporter.error(&format!(
+                "Could not verify the trusted Turbo binary: {error}"
+            ));
             return false;
         }
     };
@@ -342,8 +340,8 @@ fn verify_turbo_version(
         return false;
     }
 
-    let version = reported_turbo_version(&output.stdout)
-        .or_else(|| reported_turbo_version(&output.stderr));
+    let version =
+        reported_turbo_version(&output.stdout).or_else(|| reported_turbo_version(&output.stderr));
     let Some(version) = version else {
         reporter.error("Trusted Turbo binary returned an unrecognized version string");
         return false;
@@ -424,7 +422,8 @@ fn parse_dry_run(
 /// Evaluates whether deployment may be skipped.
 ///
 /// Every infrastructure, parsing, validation, or subprocess error returns
-/// [`BuildDecision::Deploy`]. This is the security-critical fail-open invariant.
+/// [`BuildDecision::Deploy`]. This is the security-critical fail-open
+/// invariant.
 #[must_use]
 pub fn evaluate(
     options: &Options,
@@ -436,9 +435,7 @@ pub fn evaluate(
         reporter.warn(
             "\"turbo-ignore\" is deprecated. Use Vercel's built-in project skipping instead.",
         );
-        reporter.warn(
-            "Learn more: https://vercel.com/docs/monorepos#skipping-unaffected-projects",
-        );
+        reporter.warn("Learn more: https://vercel.com/docs/monorepos#skipping-unaffected-projects");
     } else {
         reporter.warn("\"turbo-ignore\" is deprecated. Use \"turbo query affected\" instead.");
         reporter.warn(

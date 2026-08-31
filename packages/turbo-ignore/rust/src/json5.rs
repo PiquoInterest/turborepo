@@ -242,9 +242,11 @@ impl<'a> Scanner<'a> {
             return Err(Json5ScanError::ExpectedKey(start));
         }
         self.index += 1;
-        while self.bytes.get(self.index).is_some_and(|value| {
-            value.is_ascii_alphanumeric() || matches!(*value, b'_' | b'$')
-        }) {
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|value| value.is_ascii_alphanumeric() || matches!(*value, b'_' | b'$'))
+        {
             self.index += 1;
         }
         Ok(self.input[start..self.index].to_owned())
@@ -284,7 +286,18 @@ impl<'a> Scanner<'a> {
             .input
             .get(start..self.index)
             .ok_or(Json5ScanError::UnexpectedValue(start))?;
-        let valid_literal = matches!(token, "true" | "false" | "null" | "Infinity" | "+Infinity" | "-Infinity" | "NaN" | "+NaN" | "-NaN");
+        let valid_literal = matches!(
+            token,
+            "true"
+                | "false"
+                | "null"
+                | "Infinity"
+                | "+Infinity"
+                | "-Infinity"
+                | "NaN"
+                | "+NaN"
+                | "-NaN"
+        );
         if valid_literal || valid_json5_number(token) {
             Ok(())
         } else {
@@ -410,7 +423,7 @@ fn valid_json5_number(token: &str) -> bool {
         return !hex.is_empty() && hex.bytes().all(|byte| byte.is_ascii_hexdigit());
     }
 
-    let mut exponent_parts = unsigned.split(|character| matches!(character, 'e' | 'E'));
+    let mut exponent_parts = unsigned.split(['e', 'E']);
     let Some(mantissa) = exponent_parts.next() else {
         return false;
     };

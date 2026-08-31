@@ -8,9 +8,9 @@ use std::{
 
 use pretty_assertions::assert_eq;
 use turbo_ignore::{
-    BuildDecision, CommandRunner, CommandSpec, Environment, Options, Reporter,
-    SystemCommandRunner, check_commit, evaluate, sanitize_for_log, validate_ref,
-    validate_task, validate_version_selector, validate_workspace,
+    BuildDecision, CommandRunner, CommandSpec, Environment, Options, Reporter, SystemCommandRunner,
+    check_commit, evaluate, sanitize_for_log, validate_ref, validate_task,
+    validate_version_selector, validate_workspace,
 };
 
 #[derive(Debug, Default)]
@@ -239,7 +239,8 @@ fn global_skip_directive_does_not_use_invalid_filter_inputs() -> Result<(), Box<
 }
 
 #[test]
-fn unsafe_dependency_selector_causes_deployment_without_running_turbo() -> Result<(), Box<dyn Error>> {
+fn unsafe_dependency_selector_causes_deployment_without_running_turbo() -> Result<(), Box<dyn Error>>
+{
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     write(
@@ -318,12 +319,7 @@ fn configured_directory_must_be_a_directory() -> Result<(), Box<dyn Error>> {
         ..Options::default()
     };
     assert_eq!(
-        evaluate(
-            &options,
-            &Environment::default(),
-            &NoCalls,
-            &SilentReporter,
-        ),
+        evaluate(&options, &Environment::default(), &NoCalls, &SilentReporter,),
         BuildDecision::Deploy
     );
     Ok(())
@@ -343,9 +339,7 @@ fn discovery_rejects_symlinked_configuration_files() -> Result<(), Box<dyn Error
     )?;
     fs::create_dir_all(directory.path().join("apps/web"))?;
 
-    assert!(
-        turbo_ignore::find_turbo_root(&directory.path().join("apps/web")).is_none()
-    );
+    assert!(turbo_ignore::find_turbo_root(&directory.path().join("apps/web")).is_none());
     Ok(())
 }
 

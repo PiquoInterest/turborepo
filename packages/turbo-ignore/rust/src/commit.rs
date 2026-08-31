@@ -53,9 +53,10 @@ fn conflict(scope: CommitScope, first: &str, second: &str) -> CommitDecision {
 /// Parses Vercel deployment directives.
 ///
 /// For a single directive this matches the TypeScript implementation. Multiple
-/// `[vercel only ...]` directives are treated as a conflict instead of using the
-/// TypeScript implementation's greedy regular expression. The engine resolves
-/// every conflict to deployment, so ambiguity cannot suppress a required build.
+/// `[vercel only ...]` directives are treated as a conflict instead of using
+/// the TypeScript implementation's greedy regular expression. The engine
+/// resolves every conflict to deployment, so ambiguity cannot suppress a
+/// required build.
 #[must_use]
 pub fn check_commit(workspace: &str, commit_message: &str) -> CommitDecision {
     let directives = bracketed_directives(commit_message);

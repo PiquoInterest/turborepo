@@ -8150,6 +8150,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "turbo-ignore-rs"
+version = "2.10.13-canary.1"
+dependencies = [
+ "clap",
+ "libc",
+ "pretty_assertions",
+ "regex",
+ "semver 1.0.23",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "turbo-trace"
 version = "0.1.0"
 dependencies = [
@@ -8187,6 +8202,19 @@ dependencies = [
  "thiserror 2.0.18",
  "turborepo-repository",
  "update-informer",
+]
+
+[[package]]
+name = "turbo-utils-rs"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "pretty_assertions",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+ "thiserror 2.0.18",
+ "wax",
 ]
 
 [[package]]

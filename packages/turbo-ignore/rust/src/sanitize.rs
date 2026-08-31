@@ -1,6 +1,7 @@
 const MAX_LOG_VALUE_CHARS: usize = 2_048;
 
-/// Escapes control characters before user-controlled values reach terminal logs.
+/// Escapes control characters before user-controlled values reach terminal
+/// logs.
 #[must_use]
 pub fn sanitize_for_log(value: &str) -> String {
     let mut output = String::with_capacity(value.len().min(MAX_LOG_VALUE_CHARS));

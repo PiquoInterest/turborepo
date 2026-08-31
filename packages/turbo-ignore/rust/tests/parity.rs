@@ -1,12 +1,6 @@
 use std::{
-    collections::VecDeque,
-    error::Error,
-    ffi::OsString,
-    fs,
-    path::Path,
-    process::ExitStatus,
-    sync::Mutex,
-    time::Duration,
+    collections::VecDeque, error::Error, ffi::OsString, fs, path::Path, process::ExitStatus,
+    sync::Mutex, time::Duration,
 };
 
 use pretty_assertions::assert_eq;
@@ -66,12 +60,12 @@ impl CommandRunner for MockRunner {
         if let Ok(mut calls) = self.calls.lock() {
             calls.push(spec.clone());
         }
-        let mut responses = self
-            .responses
-            .lock()
-            .map_err(|_| ProcessError::ReaderChannelClosed {
-                program: spec.program.clone(),
-            })?;
+        let mut responses =
+            self.responses
+                .lock()
+                .map_err(|_| ProcessError::ReaderChannelClosed {
+                    program: spec.program.clone(),
+                })?;
         responses
             .pop_front()
             .ok_or_else(|| ProcessError::ReaderChannelClosed {
@@ -190,7 +184,10 @@ fn global_skip_directives_match_typescript_contract() {
         let decision = check_commit("web", &format!("subject\n\n{directive}"));
         assert_eq!(decision.result, CommitResult::Skip);
         assert_eq!(decision.scope, CommitScope::Global);
-        assert_eq!(decision.reason, format!("Found commit message: {directive}"));
+        assert_eq!(
+            decision.reason,
+            format!("Found commit message: {directive}")
+        );
     }
 }
 
@@ -200,7 +197,10 @@ fn global_force_directives_match_typescript_contract() {
         let decision = check_commit("web", &format!("subject\n\n{directive}"));
         assert_eq!(decision.result, CommitResult::Deploy);
         assert_eq!(decision.scope, CommitScope::Global);
-        assert_eq!(decision.reason, format!("Found commit message: {directive}"));
+        assert_eq!(
+            decision.reason,
+            format!("Found commit message: {directive}")
+        );
     }
 }
 
@@ -228,10 +228,7 @@ fn only_directive_matches_typescript_for_single_directive() {
 
 #[test]
 fn conflicting_directives_match_typescript_contract() {
-    let workspace = check_commit(
-        "web",
-        "[vercel deploy web] and [vercel skip web]",
-    );
+    let workspace = check_commit("web", "[vercel deploy web] and [vercel skip web]");
     assert_eq!(workspace.result, CommitResult::Conflict);
     assert_eq!(workspace.scope, CommitScope::Workspace);
 
@@ -299,7 +296,10 @@ fn json5_scanner_accepts_supported_number_forms_and_rejects_ambiguous_ones() {
         "{value:0xCAFE}",
         "{value:+Infinity}",
     ] {
-        assert!(top_level_keys(valid).is_ok(), "valid JSON5 rejected: {valid}");
+        assert!(
+            top_level_keys(valid).is_ok(),
+            "valid JSON5 rejected: {valid}"
+        );
     }
 
     for invalid in [
@@ -324,10 +324,7 @@ fn root_discovery_prefers_nearest_non_extending_turbo_config() -> Result<(), Box
         &directory.path().join("apps/web/turbo.json"),
         r#"{"extends":["//"]}"#,
     )?;
-    write(
-        &directory.path().join("apps/web/src/file.txt"),
-        "fixture",
-    )?;
+    write(&directory.path().join("apps/web/src/file.txt"), "fixture")?;
 
     let root = find_turbo_root(&directory.path().join("apps/web/src"));
     assert_eq!(root.as_deref(), Some(directory.path()));
@@ -393,8 +390,8 @@ fn comparison_selection_matches_typescript_contract() -> Result<(), Box<dyn Erro
 }
 
 #[test]
-fn previous_deployment_comparison_validates_git_object_without_option_confusion(
-) -> Result<(), Box<dyn Error>> {
+fn previous_deployment_comparison_validates_git_object_without_option_confusion()
+-> Result<(), Box<dyn Error>> {
     let directory = tempfile::tempdir()?;
     let runner = MockRunner::new([successful_output("")]);
     let reporter = RecordingReporter::default();
@@ -481,7 +478,8 @@ fn workspace_is_inferred_from_directory_package_json() -> Result<(), Box<dyn Err
 }
 
 #[test]
-fn turbo_version_prefers_argument_then_dependency_then_config_shape() -> Result<(), Box<dyn Error>> {
+fn turbo_version_prefers_argument_then_dependency_then_config_shape() -> Result<(), Box<dyn Error>>
+{
     let directory = tempfile::tempdir()?;
     let reporter = RecordingReporter::default();
     write(
@@ -519,14 +517,11 @@ fn known_error_messages_match_typescript_categories() {
     assert_eq!(missing.level, ErrorLevel::Warn);
     assert_eq!(missing.code, ErrorCode::MissingLockfile);
 
-    let package_manager = classify_error(
-        "run failed: We did not detect an in-use package manager for your project",
-    );
+    let package_manager =
+        classify_error("run failed: We did not detect an in-use package manager for your project");
     assert_eq!(package_manager.code, ErrorCode::NoPackageManager);
 
-    let parent = classify_error(
-        "failed to resolve packages to run: commit HEAD^ does not exist",
-    );
+    let parent = classify_error("failed to resolve packages to run: commit HEAD^ does not exist");
     assert_eq!(parent.code, ErrorCode::UnreachableParent);
 
     let invalid = classify_error("fatal: unknown revision 'removed-branch'");
