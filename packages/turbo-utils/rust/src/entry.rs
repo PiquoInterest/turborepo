@@ -1,6 +1,7 @@
 #[path = "lib.rs"]
 mod legacy;
 
+mod archive;
 mod config;
 mod json5;
 mod managers;
@@ -8,6 +9,10 @@ mod notify;
 mod project;
 mod root;
 
+pub use archive::{
+    ARCHIVE_MAX_PATH_CHARS, ARCHIVE_MAX_PATH_COMPONENTS, is_archive_link_entry,
+    is_archive_path_safe,
+};
 pub use config::{
     ConfigOptions, TurboConfig, TurboConfigError, TurboConfigPathResolution, WorkspaceConfig,
     clear_config_caches, for_each_task_def, get_turbo_configs, get_workspace_configs,
