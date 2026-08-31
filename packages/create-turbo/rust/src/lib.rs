@@ -1,6 +1,7 @@
 mod default_example;
 mod git_ignore;
 mod git_init;
+mod official_starter;
 mod package_manager_transform;
 mod readme_transform;
 
@@ -11,6 +12,11 @@ pub use git_ignore::{
 pub use git_init::{
     GitCleanupError, GitDirectoryCleaner, INITIAL_COMMIT_MESSAGE, VcsInvocation, VcsProgram,
     VcsRunner, try_git_init_with,
+};
+pub use official_starter::{
+    ExampleRepository, OFFICIAL_REPOSITORY_NAMES, OFFICIAL_REPOSITORY_OWNER,
+    OFFICIAL_STARTER_TRANSFORM_NAME, OfficialStarterError, OfficialStarterInput,
+    OfficialStarterPlan, is_official_starter, plan_official_starter,
 };
 pub use package_manager_transform::{
     PACKAGE_MANAGER_TRANSFORM_NAME, PackageManagerConversion, PackageManagerConverter,
