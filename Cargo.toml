@@ -5,6 +5,7 @@ members = [
   "crates/libghostty-vt-sys",
   "crates/turbo-trace",
   "crates/turborepo*",
+  "packages/turbo-ignore/rust",
   "packages/turbo-repository/rust",
 ]
 
