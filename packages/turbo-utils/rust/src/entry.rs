@@ -4,6 +4,7 @@ mod legacy;
 mod config;
 mod json5;
 mod managers;
+mod notify;
 mod project;
 mod root;
 
@@ -19,6 +20,11 @@ pub use managers::{
     PackageManagerCommandRunner, PackageManagerValues, SystemPackageManagerCommandRunner,
     get_available_package_managers, get_available_package_managers_with,
     get_package_managers_bin_paths, get_package_managers_bin_paths_with,
+};
+pub use notify::{
+    ExitCode, NOTIFY_MAX_UNTRUSTED_CHARS, NotifyUpdateOutcome, PackageInfo,
+    PreparedUpdateNotification, UpdateCheckError, UpdateChecker, UpdateInfo, UpgradeCommand,
+    UpgradeCommandError, UpgradeCommandProvider,
 };
 pub use project::{
     CreateProjectError, CreateProjectOptions, CreateProjectResult, GitHubRepositoryUrl,
