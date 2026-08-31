@@ -8,10 +8,16 @@
 | `searchUp` content predicate | Hardened parity | Read errors remain non-matches; traversal and files over 4 MiB are rejected/non-matches. |
 | `getTurboRoot` | Safe-input parity | Preserves root-config precedence, package-root fallback, and cache controls. |
 | Turbo/workspace config discovery | Safe-input parity | Preserves translated ordering, task walking, and explicit config-path behavior. |
-| `isFolderEmpty` | Safe-input parity | Preserves allow-list and `.iml` handling. |
+| `isFolderEmpty` ordinary allow-list and `.iml` handling | Safe-input parity | Regular UTF-8 entries preserve the TypeScript allow-list and IntelliJ suffix behavior. |
+| `isFolderEmpty` entry type | Intentional hardening | TypeScript classifies by filename only. Rust treats every symlink entry as a conflict, including `.git`, `LICENSE`, and `*.iml`. |
+| `isFolderEmpty` filename encoding | Intentional hardening | Rust rejects non-UTF-8 entry names instead of applying a lossy string conversion that could alias an allow-listed name. |
+| `isFolderEmpty` entry count | Intentional hardening | Rust fails closed after 256 entries instead of collecting an unbounded attacker-controlled directory listing. |
 | `isWriteable` | Unix parity | Uses `access(W_OK)` on Unix. Windows ACL parity remains open. |
-| `validateDirectory` | Safe-input parity | Preserves valid/file/conflict/missing outcomes and wording. ANSI styling is host-only. |
-| Metadata errors | Intentional deviation | Rust returns invalid instead of throwing or continuing under uncertainty. |
+| `validateDirectory` ordinary valid/file/conflict/missing outcomes | Safe-input parity | Preserves safe-input outcomes and wording. ANSI styling is host-only. |
+| Option-like project basename | Intentional hardening | The TypeScript check runs after `path.resolve`, so a relative `-danger` input becomes an absolute path and bypasses `root.startsWith("-")`. Rust validates the basename itself. |
+| Existing symlinked path components | Intentional hardening | Rust rejects an existing symlink in the requested path before enumeration; TypeScript checks only the final component with `lstatSync`. |
+| Metadata and enumeration errors | Intentional deviation | Rust returns invalid instead of throwing or continuing under uncertainty. |
+| Directory validation versus later creation | Partial | Portable component checks do not close malicious concurrent replacement. Production mutation requires stable directory handles or private staging and atomic promotion. |
 | `getAvailablePackageManagers` | Safe-input parity | Preserves manager set, semver extraction, missing-command behavior, Yarn precedence, timeout, and Corepack environment. |
 | `getPackageManagersBinPaths` | Hardened parity | Preserves safe Yarn/npm/pnpm/Bun/Nub/Aube results. Nub/Aube are resolved directly. |
 | Custom Yarn paths | Security-preserving parity | A custom or malformed `yarnPath` disables Yarn probing and is never executed. |
@@ -52,5 +58,15 @@
 | Notification exit behavior | Parity core | Rust retains exact success/failure intent for the host adapter. |
 | Notification terminal rendering | Intentional deviation | Rust escapes terminal/directionality controls and bounds untrusted fields. |
 | Production registry update checker | Blocked | Needs TLS, proxy, redirect, timeout, size, cache, rate-limit, and differential tests. |
+
+## Directory-provider regression mapping
+
+| TypeScript or provider boundary | Rust regression | Status |
+| --- | --- | --- |
+| resolved absolute path makes `root.startsWith("-")` ineffective for `-danger` | `option_like_project_name_is_rejected` | fixed in Rust |
+| final-component-only `lstatSync` can miss a symlinked ancestor | `symlinked_ancestor_is_rejected_before_directory_enumeration` | fixed for stable existing paths; concurrent replacement remains blocked |
+| allow-list checks names without entry type | `allowlisted_symlink_is_never_treated_as_an_empty_directory` | fixed in Rust |
+| lossy conversion can make a non-UTF-8 name appear allow-listed | `non_utf8_iml_name_is_not_silently_allowlisted` | fixed in Rust |
+| `readdirSync` and conflict collection have no entry-count bound | `folder_scan_is_bounded_before_collecting_untrusted_entries` | fixed in Rust with a 256-entry fail-closed limit |
 
 The TypeScript package remains the production API. This crate is a tested migration core and does not remove JavaScript host bindings yet.
