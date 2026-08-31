@@ -239,6 +239,12 @@ jobs:
           cargo fmt --all
           cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
 
+      - name: Apply machine-applicable Clippy repairs
+        run: |
+          cargo clippy --fix --allow-dirty --allow-staged -p turbo-ignore -p turbo-utils-rs --all-targets
+          cargo fmt --all
+          cargo check --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+
       - name: Run migration parity and security tests
         run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
 
