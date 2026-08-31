@@ -83,6 +83,27 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | `@turbo/workspaces.convert` cleanup/create/package metadata/lockfile mutation | production `PackageManagerConverter` | blocked | Requires translated manager-specific tests, atomicity or rollback, no-follow filesystem handling, bounded process execution, and platform closure. See CT-RS-017. |
 | TypeScript transform's untyped broad side effects | explicit mutation provider boundary | intentional-hardening | The reviewed core cannot execute a process or mutate a file directly. |
 
+## Official-starter transform tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| transform metadata name `official-starter` | `OFFICIAL_STARTER_TRANSFORM_NAME` | implemented core | Exact success and not-applicable response metadata are translated. |
+| missing repository metadata is official | `is_official_starter(None)` | implemented | Preserves source trust classification exactly. |
+| exact `vercel/turbo` and `vercel/turborepo` repositories are official | closed owner/name comparison | implemented | Case, Unicode confusables, prefixes, suffixes, and path-like values do not broaden the route. |
+| every other repository is not applicable | pure classification before mutation planning | implemented | No metadata removal or package write is planned for a nonofficial source. |
+| `basic` and `default` package rename | shared `is_default_example` predicate | implemented | Only exact default-example names receive `prompts.projectName`. |
+| nondefault package name preservation | cloned JSON mutation | implemented | Existing package name remains unchanged. |
+| truthy `devDependencies.turbo` plus requested version | typed JSON mutation | implemented | Requested text is serialized as a JSON value, not concatenated into JSON syntax. |
+| absent or empty requested version | `^<invocation_version>` fallback | implemented | Matches the source's falsy version fallback. |
+| missing or JavaScript-falsy package document | no package write in the plan | implemented | `null`, `false`, `0`, and empty string remain no-write cases. |
+| truthy non-object package document | deterministic typed error | intentional-hardening | Rejects primitive/array roots rather than relying on strict-mode primitive mutation or array side-property behavior. See CT-RS-021. |
+| `writeJsonSync(..., { spaces: 2 })` | `serde_json` pretty serialization plus final newline | implemented core | Two-space indentation, escaping, and the `jsonfile` final newline are tested. |
+| JavaScript object property enumeration | recursive canonical array-index sorting followed by insertion-ordered string keys | implemented core | Covers numeric boundaries, leading zeroes, nested objects, and the `2^32 - 1` exclusion. See CT-RS-022. |
+| `meta.json` parsed and removed | separate metadata payload and removal intent | partial | Pure planning is implemented. A filesystem adapter must prove actual removal before success. |
+| metadata read and removal share one swallowed `try/catch` | no partial-success side effect in the pure planner | intentional-hardening | The TypeScript path can return metadata while a stale file remains after deletion failure. Rust cutover must reject or roll back that state. See CT-RS-019. |
+| path-based unbounded `readJsonSync` and in-place `writeJsonSync` | no filesystem adapter yet | blocked | Requires bounded parser depth/bytes, no-follow and identity checks, staged writes, transaction ordering, exact errors, and platform tests. See CT-RS-020. |
+| public nonfatal `TransformError` mapping | typed planner errors only | partial | Production binding must preserve `Unable to read package.json` and `Unable to write package.json` contracts where safe. |
+
 ## Existing TypeScript test mapping
 
 | TypeScript test or source contract | Rust test coverage | Status |
@@ -98,6 +119,8 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | default-route confusable/prefix/control/large-input regressions | five robustness/security tests | intentional-hardening evidence |
 | package-manager transform source contract without focused direct Jest coverage | seven translated parity tests | implemented core |
 | package-manager version/path/provider-boundary regressions | four security tests | intentional-hardening evidence |
+| `official-starter` source contract without focused direct Jest coverage | twelve translated planner parity tests | implemented core, exact-SHA validation pending |
+| official-starter repository, JSON-shape, escaping, ordering, and mutation-isolation regressions | seven security tests | intentional-hardening evidence, exact-SHA validation pending |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -110,7 +133,7 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |
-| `official-starter` transform | not-implemented | Translate package/workspace mutations with deterministic JSON ordering. |
+| `official-starter` transform | implemented planner, adapter blocked | Add bounded transactional filesystem adapter, exact error mapping, TypeScript differential fixtures, platform tests, production routing, and removal proof. |
 | package-manager transform | implemented orchestration core, provider blocked | Port and prove manager-specific conversion, package/lockfile mutation, rollback, process, and platform behavior. |
 | README target behavior for `nub`/`aube` | partial | Preserve the source's four-spelling scan while proving the wider target type through differential fixtures. |
 | telemetry integration | partial | The package telemetry Rust core is consolidated; bind it without retaining business logic in TypeScript. |
