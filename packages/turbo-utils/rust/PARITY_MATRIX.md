@@ -19,5 +19,16 @@
 | Package-manager metadata reads | Intentional deviation | Rust reads only non-symlink regular `package.json`/`.yarnrc.yml` files up to 1 MiB. TypeScript follows symlinks and has no explicit read bound. |
 | Package-manager subprocesses | Intentional deviation | Rust bounds stdout/stderr and kills the Unix process group on timeout/overflow. Windows descendant cleanup remains a cutover blocker. |
 | Windows `.cmd`/`.bat` manager shims | Blocked | The hardened system runner currently resolves only direct executable files on Windows. Native Windows package-manager resolution and process-tree tests are required before cutover. |
+| `createProject` default example | Safe-input parity | Downloads the `basic` example without repository discovery and returns no repository metadata. |
+| `createProject` named example | Safe-input parity | Checks the upstream example catalog, downloads the selected example, and reports `vercel/turborepo` repository metadata. |
+| `createProject` GitHub repository | Safe-input parity | Resolves repository metadata, checks for a package, and delegates repository download through a testable provider boundary. |
+| Project download retry count | Parity | Preserves `async-retry({ retries: 3 })` as four total attempts. Timing/backoff belongs to the production provider and remains open. |
+| Generated `package.json` detection | Hardened parity | Presence is retained for malformed/unsafe metadata, but scripts are read only from regular non-symlink files no larger than 1 MiB. |
+| Generated script ordering | Parity | Reproduces JavaScript `Object.keys` ordering: array-index keys first in numeric order, followed by other keys in insertion order. |
+| Project current-directory mutation | Intentional deviation | Rust never calls process-wide `chdir`; the resolved root is passed explicitly to the provider. |
+| GitHub URL classification | Intentional deviation | TypeScript checks only `hostname === "github.com"`. Rust also requires HTTPS, exact authority, no credentials, no explicit port, and no control/whitespace characters. |
+| Named example/repository subpath validation | Intentional deviation | Rust rejects traversal, separators in named examples, backslashes, empty path segments, and `.`/`..` repository components before provider calls. |
+| Project target symlinks | Intentional deviation | Rust rejects symlink targets and immediate-parent symlinks before download. Descriptor-relative TOCTOU closure remains open. |
+| Network/archive acquisition | Blocked | `ProjectSource` is currently an injected boundary. The GitHub API, proxy/auth, Git fallback, tar streaming, extraction, timeout, and cleanup implementation must be ported and differentially tested before cutover. |
 
 The TypeScript package remains the production API. This crate is a tested migration core and does not remove JavaScript host bindings yet.

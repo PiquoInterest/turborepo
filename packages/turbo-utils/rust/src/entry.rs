@@ -4,6 +4,7 @@ mod legacy;
 mod config;
 mod json5;
 mod managers;
+mod project;
 mod root;
 
 pub use config::{
@@ -18,5 +19,10 @@ pub use managers::{
     PackageManagerCommandRunner, PackageManagerValues, SystemPackageManagerCommandRunner,
     get_available_package_managers, get_available_package_managers_with,
     get_package_managers_bin_paths, get_package_managers_bin_paths_with,
+};
+pub use project::{
+    CreateProjectError, CreateProjectOptions, CreateProjectResult, GitHubRepositoryUrl,
+    PROJECT_DOWNLOAD_ATTEMPTS, ProjectSource, ProjectSourceError, RepoInfo, create_project,
+    is_valid_github_repo_url,
 };
 pub use root::{TurboRootOptions, clear_turbo_root_cache, get_turbo_root};

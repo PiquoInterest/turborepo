@@ -9,11 +9,11 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 The integration branch currently contains two workspace-registered Rust migration cores:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
-- `packages/turbo-utils/rust`: 22 translated parity tests and 11 security regression tests. Covered surfaces now include case conversion, upward/root/config discovery, folder and directory validation, writability, and package-manager version/global-bin discovery.
+- `packages/turbo-utils/rust`: 32 translated parity tests and 18 security regression tests. Covered surfaces now include case conversion, upward/root/config discovery, folder and directory validation, writability, package-manager version/global-bin discovery, and `createProject` orchestration.
 
-That is 71 authored Rust tests. Neither TypeScript package is removed yet because compiled CI for the latest tranche, differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open.
+That is 88 authored Rust tests. Neither TypeScript package is removed yet because compiled CI for the latest tranche, differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open.
 
-The mandatory agent workflow is recorded in `AGENTS.md`: every tranche must use TDD and differential tests, perform a current authoritative advisory lookup, and update its `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, and this ledger in the same change.
+The mandatory agent workflow is recorded in `AGENTS.md`: every tranche must use TDD and differential tests, perform a current authoritative advisory lookup, and update its `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, and this ledger in the same change. Repository-level findings are indexed in [`rust-migration-security-findings.md`](./rust-migration-security-findings.md).
 
 ## Completion rules
 
@@ -34,8 +34,8 @@ Tests, type declarations, build metadata, and host-specific adapters are tracked
 | --- | --- | --- | --- | --- |
 | Core `turbo` engine and CLI | Predominantly Rust | Existing Rust crates | Existing | Continue removing legacy wrappers and keep compatibility tests. |
 | `packages/turbo-ignore` decision engine | TypeScript | `packages/turbo-ignore/rust` | In progress | Compile/lint, differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS. |
-| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Compile/lint the package-manager tranche; port network/example/template, update-notification, and project-creation behavior; close Windows ACL/process/shim gaps; add differential bindings and migrate callers. |
-| `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. |
+| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Compile/lint the project-creation tranche; implement and differentially test the `ProjectSource` GitHub/network/archive provider; port template/example, update-notification, and remaining project utilities; close Windows ACL/process/shim gaps; add bindings and migrate callers. |
+| `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. Reuse the reviewed `turbo-utils-rs` project/source provider rather than duplicating acquisition logic. |
 | `packages/turbo-gen` | TypeScript CLI | Rust CLI | Queued | Preserve generator discovery, prompts, template rendering, and workspace mutations. |
 | `packages/turbo-codemod` | TypeScript CLI | Rust CLI | Queued | Port transformations with golden fixtures and idempotence tests. |
 | `packages/turbo-workspaces` | TypeScript CLI/library | Rust CLI/library | Queued | Preserve package-manager adapters and lock/workspace mutation semantics. |
@@ -45,6 +45,21 @@ Tests, type declarations, build metadata, and host-specific adapters are tracked
 | Factory/web UI and `.tsx` surfaces | TypeScript/React | Rust/WASM only where technically justified | Host-bound | This is not a mechanical native rewrite. Define browser/WASM architecture and DOM bindings before deprecation. |
 | Test-only TypeScript fixtures | TypeScript | Rust tests or retained cross-language oracle | Later | Remove only after every migrated component has equivalent coverage. |
 | npm/native publishing wrappers | JavaScript/TypeScript | Generated platform loaders and signed Rust binaries | Queued | Preserve package names, install behavior, platform selection, provenance, and rollback. |
+
+## Current `turbo-utils` tranche
+
+The project-creation coordinator is separated from network and archive execution through `ProjectSource`. The translated contract now covers:
+
+- default example acquisition through the sparse-example path;
+- named examples through the repository tarball path used by the TypeScript implementation;
+- custom GitHub repository discovery and existence checks;
+- four total acquisition attempts, matching `async-retry({ retries: 3 })`;
+- generated `package.json` presence and script discovery;
+- JavaScript `Object.keys` ordering for integer-like script names;
+- missing examples, missing repository information, and missing repository contents;
+- strict URL, example-name, repository-subpath, destination, symlink, and metadata boundaries.
+
+The actual HTTP, proxy, GitHub authentication, sparse Git fallback, tar streaming, archive extraction, staging, and atomic promotion implementation remains deliberately outside the coordinator until it has one shared, differential-tested security contract.
 
 ## Security review method
 
@@ -60,6 +75,8 @@ Each tranche gets a colocated `SECURITY.md` containing:
 - intentional incompatibilities where exact parity would preserve an unsafe behavior.
 
 Security fixes must have regression tests. A migration is not complete merely because memory safety improves: semantic injection, package acquisition, path trust, authorization, denial of service, and fail-open/fail-closed behavior still require explicit review.
+
+The repository-level index currently records an affected `webbrowser` dependency under `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`. The observed call site uses a constant HTTP URL, limiting current reachability, but the dependency must be upgraded or removed before this migration can merge.
 
 ## Branch and pull-request policy
 

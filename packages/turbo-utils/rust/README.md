@@ -13,14 +13,18 @@ This crate is part of the repository-wide TypeScript deprecation program tracked
 - Unix writability checks, with the Windows ACL gap documented.
 - Package-manager version and global-bin discovery for Yarn, npm, pnpm, Bun, Nub, and Aube.
 - Yarn version inference from `package.json#packageManager` and conventional `.yarn/releases/yarn-<version>.cjs` paths.
+- `createProject` orchestration for default examples, named examples, and GitHub repositories.
+- Four-attempt download retry behavior and post-download `package.json` script discovery.
 
-The package-manager implementation preserves the existing safe-input results while hardening executable lookup, metadata reads, subprocess deadlines, output limits, and process cleanup. See [`PARITY_MATRIX.md`](./PARITY_MATRIX.md) and [`SECURITY.md`](./SECURITY.md).
+The package-manager and project-creation implementations preserve existing safe-input results while hardening executable lookup, metadata reads, subprocess deadlines, output limits, process cleanup, URL classification, repository subpaths, target symlinks, and process-wide working-directory state. See [`PARITY_MATRIX.md`](./PARITY_MATRIX.md) and [`SECURITY.md`](./SECURITY.md).
 
 ## Architecture
 
 `src/entry.rs` is the public crate surface. The original pure utility tranche remains in `src/lib.rs`; root/config and JSON5 behavior live in dedicated modules. `src/managers.rs` separates package-manager policy from command execution through `PackageManagerCommandRunner`, which lets translated tests verify exact argument vectors without executing repository-controlled commands.
 
-The system runner:
+`src/project.rs` separates project-creation policy from network and archive acquisition through `ProjectSource`. The coordinator resolves source type, validates the destination, performs the TypeScript-compatible four total download attempts, and inspects generated package metadata. The future production GitHub/example downloader can therefore be differential-tested independently without reintroducing global `chdir` state into the coordinator.
+
+The system package-manager runner:
 
 - resolves canonical executables from absolute `PATH` entries;
 - rejects executable paths inside the inspected project root;
@@ -28,6 +32,15 @@ The system runner:
 - runs from the temporary directory with `COREPACK_ENABLE_STRICT=0`;
 - enforces a five-second deadline and one-MiB output limit;
 - kills the process group on Unix when a command exceeds a bound.
+
+The project coordinator:
+
+- accepts only credential-free HTTPS URLs whose authority is exactly `github.com`;
+- rejects traversal in named examples and explicit repository subpaths;
+- rejects target and immediate-parent symlinks;
+- never changes the process-wide current directory;
+- reads only regular, non-symlink `package.json` files up to one MiB;
+- returns script names using JavaScript `Object.keys` array-index ordering.
 
 ## Validation
 
@@ -39,8 +52,8 @@ cargo clippy --locked -p turbo-utils-rs --all-targets -- -D warnings
 pnpm --filter @turbo/utils test
 ```
 
-The package-manager tranche adds 12 translated parity tests and 6 security regression tests. The TypeScript tests remain required until differential host bindings exercise both implementations through the same public API.
+The package-manager tranche adds 12 translated parity tests and 6 security regression tests. The project-creation tranche adds 10 parity tests and 7 security regression tests. Across the Rust `turbo-utils` migration core, 32 parity tests and 18 security regression tests are now authored. The TypeScript tests remain required until differential host bindings exercise both implementations through the same public API.
 
 ## Production cutover status
 
-Blocked. Remaining work includes the network/example/template/project-creation/update-notification surfaces, Windows-native process-tree and ACL parity, JS/WASM or native bindings, npm packaging, downstream caller migration, supported-platform differential tests, and proof that runtime TypeScript is no longer loaded or shipped.
+Blocked. Remaining work includes the network/example/template extraction implementation behind `ProjectSource`, update-notification behavior, Windows-native process-tree and ACL parity, JS/WASM or native bindings, npm packaging, downstream caller migration, supported-platform differential tests, and proof that runtime TypeScript is no longer loaded or shipped.
