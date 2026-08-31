@@ -82,29 +82,29 @@ pub trait ProjectSource: Sync {
 
     fn download_example(&self, root: &Path, example: &str) -> Result<(), ProjectSourceError>;
 
-    fn download_repo(
-        &self,
-        root: &Path,
-        repo_info: &RepoInfo,
-    ) -> Result<(), ProjectSourceError>;
+    fn download_repo(&self, root: &Path, repo_info: &RepoInfo) -> Result<(), ProjectSourceError>;
 }
 
 #[derive(Debug, Error)]
 pub enum CreateProjectError {
     #[error(
-        "Invalid URL: \"{input}\". Only GitHub repositories are supported. Please use a GitHub URL and try again."
+        "Invalid URL: \"{input}\". Only GitHub repositories are supported. Please use a GitHub \
+         URL and try again."
     )]
     InvalidGitHubUrl { input: String },
     #[error(
-        "Unable to fetch repository information from: \"{input}\". Please fix the URL and try again."
+        "Unable to fetch repository information from: \"{input}\". Please fix the URL and try \
+         again."
     )]
     RepositoryInfoUnavailable { input: String },
     #[error(
-        "Could not locate the repository for \"{input}\". Please check that the repository exists and try again."
+        "Could not locate the repository for \"{input}\". Please check that the repository exists \
+         and try again."
     )]
     RepositoryNotFound { input: String },
     #[error(
-        "Could not locate an example named \"{example}\". It may be misspelled, unavailable, or unreachable through the current network/proxy configuration."
+        "Could not locate an example named \"{example}\". It may be misspelled, unavailable, or \
+         unreachable through the current network/proxy configuration."
     )]
     ExampleNotFound { example: String },
     #[error("Invalid example name: {example}")]
@@ -334,12 +334,11 @@ fn unsafe_project_path(path: &Path, reason: impl Into<String>) -> CreateProjectE
 }
 
 fn verify_project_root(root: &Path) -> Result<(), CreateProjectError> {
-    let metadata = fs::symlink_metadata(root).map_err(|source| {
-        CreateProjectError::InspectDirectory {
+    let metadata =
+        fs::symlink_metadata(root).map_err(|source| CreateProjectError::InspectDirectory {
             path: root.to_path_buf(),
             source,
-        }
-    })?;
+        })?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(unsafe_project_path(
             root,
@@ -353,11 +352,10 @@ fn prepare_project_root(root: &Path) -> Result<(), CreateProjectError> {
     let parent = root
         .parent()
         .ok_or_else(|| unsafe_project_path(root, "the project path has no parent directory"))?;
-    let parent_metadata = fs::symlink_metadata(parent).map_err(|_| {
-        CreateProjectError::ParentNotWritable {
+    let parent_metadata =
+        fs::symlink_metadata(parent).map_err(|_| CreateProjectError::ParentNotWritable {
             path: parent.to_path_buf(),
-        }
-    })?;
+        })?;
     if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
         return Err(unsafe_project_path(
             parent,

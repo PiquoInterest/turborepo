@@ -144,11 +144,7 @@ impl ProjectSource for FakeSource {
         self.perform_download(root)
     }
 
-    fn download_repo(
-        &self,
-        root: &Path,
-        repo_info: &RepoInfo,
-    ) -> Result<(), ProjectSourceError> {
+    fn download_repo(&self, root: &Path, repo_info: &RepoInfo) -> Result<(), ProjectSourceError> {
         self.calls
             .lock()
             .expect("calls lock")
@@ -348,11 +344,7 @@ fn missing_named_example_returns_the_existing_failure_semantics() {
 fn unavailable_repository_information_is_reported_before_download() {
     let base = tempfile::tempdir().expect("base directory");
     let source = FakeSource::default();
-    let request = options(
-        base.path(),
-        "my-app",
-        "https://github.com/acme/missing",
-    );
+    let request = options(base.path(), "my-app", "https://github.com/acme/missing");
 
     let error = create_project(&request, &source).expect_err("repo info must be unavailable");
 
@@ -369,11 +361,7 @@ fn repository_existence_is_checked_before_download() {
     let expected_repo = repo_info();
     let mut source = FakeSource::default().with_repo_info(expected_repo.clone());
     source.repo_exists = false;
-    let request = options(
-        base.path(),
-        "my-app",
-        "https://github.com/acme/starter",
-    );
+    let request = options(base.path(), "my-app", "https://github.com/acme/starter");
 
     let error = create_project(&request, &source).expect_err("repository must be missing");
 

@@ -101,11 +101,7 @@ impl ProjectSource for SecuritySource {
         self.apply_action(root)
     }
 
-    fn download_repo(
-        &self,
-        root: &Path,
-        _repo_info: &RepoInfo,
-    ) -> Result<(), ProjectSourceError> {
+    fn download_repo(&self, root: &Path, _repo_info: &RepoInfo) -> Result<(), ProjectSourceError> {
         self.record();
         self.apply_action(root)
     }
@@ -123,9 +119,7 @@ fn options(base: &Path, app_path: PathBuf, example: &str) -> CreateProjectOption
 
 #[test]
 fn github_url_validation_rejects_scheme_host_credential_and_port_confusion() {
-    assert!(is_valid_github_repo_url(
-        "https://github.com/acme/starter"
-    ));
+    assert!(is_valid_github_repo_url("https://github.com/acme/starter"));
     assert!(is_valid_github_repo_url(
         "https://GITHUB.COM/acme/starter/tree/main"
     ));
@@ -215,10 +209,12 @@ fn symlinked_project_root_is_never_followed() {
         CreateProjectError::UnsafeProjectPath { .. }
     ));
     assert_eq!(source.call_count(), 0);
-    assert!(fs::read_dir(outside.path())
-        .expect("outside directory")
-        .next()
-        .is_none());
+    assert!(
+        fs::read_dir(outside.path())
+            .expect("outside directory")
+            .next()
+            .is_none()
+    );
 }
 
 #[cfg(unix)]
