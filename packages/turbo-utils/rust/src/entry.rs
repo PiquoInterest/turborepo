@@ -5,6 +5,7 @@ mod archive;
 mod config;
 mod json5;
 mod managers;
+mod network;
 mod notify;
 mod project;
 mod root;
@@ -25,6 +26,10 @@ pub use managers::{
     PackageManagerCommandRunner, PackageManagerValues, SystemPackageManagerCommandRunner,
     get_available_package_managers, get_available_package_managers_with,
     get_package_managers_bin_paths, get_package_managers_bin_paths_with,
+};
+pub use network::{
+    GITHUB_TOKEN_MAX_CHARS, NetworkEnvironment, NetworkPolicyError, PROXY_URL_MAX_CHARS,
+    github_authorization_header, proxy_for_url,
 };
 pub use notify::{
     ExitCode, NOTIFY_MAX_UNTRUSTED_CHARS, NotifyUpdateOutcome, PackageInfo,
