@@ -19,7 +19,7 @@ jobs:
   validate-and-document:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       FORCE_COLOR: "0"
       TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
@@ -55,10 +55,25 @@ jobs:
           pnpm --filter @turbo/workspaces exec tsdown
           pnpm --filter create-turbo exec jest --runInBand __tests__/create-error-security.test.ts
 
-      - name: Install pinned Turbo for the repository pre-push hook
-        uses: ./.github/actions/install-global-turbo
+      - name: Install repository Turbo build prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
         with:
-          turbo-version: "2.8.3"
+          version: "0.15.2"
+
+      - name: Build the exact repository Turbo for the pre-push hook
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
 
       - name: Record parity, security, and divergence evidence
         run: python tools/migration/apply_create_error_policy_docs.py
