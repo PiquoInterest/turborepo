@@ -20,6 +20,14 @@ describe("create install policy", () => {
   });
   const mockConsole = spyConsole();
 
+  function requireConsoleErrorSpy() {
+    const errorSpy = mockConsole.error;
+    if (!errorSpy) {
+      throw new Error("spyConsole did not provide an error spy");
+    }
+    return errorSpy;
+  }
+
   function arrange({
     root,
     sourcePackageManager,
@@ -85,7 +93,8 @@ describe("create install policy", () => {
         skipTransforms: true,
         skipInstall: false,
         example: "default",
-        git: false
+        git: false,
+        telemetry: undefined
       });
 
       expect(arranged.install).toHaveBeenCalledTimes(1);
@@ -118,23 +127,25 @@ describe("create install policy", () => {
         aube: undefined
       }
     });
-    mockConsole.error.mockClear();
+    const errorSpy = requireConsoleErrorSpy();
+    errorSpy.mockClear();
 
     try {
       await create(root as CreateCommandArgument, {
         skipTransforms: true,
         skipInstall: false,
         example: "community-example",
-        git: false
+        git: false,
+        telemetry: undefined
       });
 
       expect(arranged.install).not.toHaveBeenCalled();
-      expect(mockConsole.error).toHaveBeenNthCalledWith(
+      expect(errorSpy).toHaveBeenNthCalledWith(
         1,
         expect.any(String),
         'Unable to install dependencies - "community-example" uses "aube" which could not be found.'
       );
-      expect(mockConsole.error).toHaveBeenNthCalledWith(
+      expect(errorSpy).toHaveBeenNthCalledWith(
         2,
         expect.any(String),
         'Try running without "--skip-transforms" to convert "community-example" to a package manager that is available on your system.'
@@ -169,7 +180,8 @@ describe("create install policy", () => {
           skipTransforms: true,
           skipInstall,
           example: "default",
-          git: false
+          git: false,
+          telemetry: undefined
         });
 
         expect(arranged.install).not.toHaveBeenCalled();
@@ -197,20 +209,19 @@ describe("create install policy", () => {
           aube: undefined
         }
       });
-      mockConsole.error.mockClear();
+      const errorSpy = requireConsoleErrorSpy();
+      errorSpy.mockClear();
 
       try {
         await create(root as CreateCommandArgument, {
           skipTransforms: true,
           skipInstall: false,
           example: hostileExample,
-          git: false
+          git: false,
+          telemetry: undefined
         });
 
-        const rendered = mockConsole.error.mock.calls
-          .flat()
-          .map(String)
-          .join(" ");
+        const rendered = errorSpy.mock.calls.flat().map(String).join(" ");
         expect(rendered).not.toContain(hostileExample);
       } finally {
         arranged.restore();
