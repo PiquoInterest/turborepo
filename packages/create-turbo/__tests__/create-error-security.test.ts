@@ -20,10 +20,28 @@ describe("legacy create error security evidence", () => {
   const mockConsole = spyConsole();
   const mockExit = spyExit();
 
+  function requireConsoleErrorSpy() {
+    const errorSpy = mockConsole.error;
+    if (!errorSpy) {
+      throw new Error("spyConsole did not provide an error spy");
+    }
+    return errorSpy;
+  }
+
+  function requireExitSpy() {
+    const exitSpy = mockExit.exit;
+    if (!exitSpy) {
+      throw new Error("spyExit did not provide an exit spy");
+    }
+    return exitSpy;
+  }
+
   async function captureDownloadFailure(message: string): Promise<string> {
     const { root } = useFixture({ fixture: "create-error-security" });
-    mockConsole.error.mockClear();
-    mockExit.exit.mockClear();
+    const errorSpy = requireConsoleErrorSpy();
+    const exitSpy = requireExitSpy();
+    errorSpy.mockClear();
+    exitSpy.mockClear();
 
     const mockAvailablePackageManagers = jest
       .spyOn(turboUtils, "getAvailablePackageManagers")
@@ -53,10 +71,11 @@ describe("legacy create error security evidence", () => {
         skipInstall: true,
         skipTransforms: true,
         example: "default",
-        git: false
+        git: false,
+        telemetry: undefined
       });
 
-      const calls = mockConsole.error.mock.calls;
+      const calls = errorSpy.mock.calls;
       const lastCall = calls[calls.length - 1];
       return String(lastCall?.[1] ?? "");
     } finally {
