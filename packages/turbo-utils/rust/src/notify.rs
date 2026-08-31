@@ -147,6 +147,18 @@ impl PreparedUpdateNotification {
     }
 }
 
+fn is_directional_format_control(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}'
+    )
+}
+
 fn escape_untrusted(value: &str) -> String {
     let mut escaped = String::new();
     let mut consumed = 0_usize;
@@ -162,7 +174,7 @@ fn escape_untrusted(value: &str) -> String {
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
             '\u{001b}' => escaped.push_str("\\x1b"),
-            character if character.is_control() => {
+            character if character.is_control() || is_directional_format_control(character) => {
                 escaped.push_str(&format!("\\u{{{:x}}}", u32::from(character)));
             }
             character => escaped.push(character),
