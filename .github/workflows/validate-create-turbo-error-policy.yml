@@ -1,0 +1,68 @@
+name: Validate create-turbo error policy tranche
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-error-policy
+    paths:
+      - .github/workflows/validate-create-turbo-error-policy.yml
+      - packages/create-turbo/rust/**
+      - packages/create-turbo/__tests__/create-error-security.test.ts
+      - Cargo.toml
+      - Cargo.lock
+
+concurrency:
+  group: validate-create-turbo-error-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact tranche head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Validate focused Rust crate
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+
+  legacy-typescript-security-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout exact tranche head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 22
+
+      - name: Build the TypeScript workspace dependency
+        run: pnpm --filter @turbo/workspaces exec tsdown
+
+      - name: Run expected-failure legacy security evidence
+        run: pnpm --filter create-turbo exec jest --runInBand __tests__/create-error-security.test.ts
