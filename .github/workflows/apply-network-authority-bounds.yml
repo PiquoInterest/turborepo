@@ -1,0 +1,188 @@
+name: Apply secure network authority and URL bounds
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/apply-network-authority-bounds.yml
+      - tools/migration/apply_network_authority_bounds.py
+
+concurrency:
+  group: apply-network-authority-bounds
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole integration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the committed RED contract fails behaviorally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/network-authority-red \
+            4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c
+          set +e
+          (
+            cd /tmp/network-authority-red
+            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/network-authority-red" \
+              cargo test --locked -p turbo-utils-rs \
+                --test network_authority_bounds
+          ) > /tmp/network-authority-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/network-authority-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "RED contract unexpectedly passed before implementation" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/network-authority-red.log; then
+            echo "RED contract failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/network-authority-red.log
+          grep -Fq 'explicit_default_https_port_receives_github_authorization' \
+            /tmp/network-authority-red.log
+          grep -Fq 'oversized_request_urls_fail_closed_across_policy_entrypoints' \
+            /tmp/network-authority-red.log
+          git worktree remove --force /tmp/network-authority-red
+
+      - name: Apply the GREEN network policy implementation
+        run: python3 tools/migration/apply_network_authority_bounds.py code
+
+      - name: Format and validate the Rust tranche
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff --check
+          cargo check --locked -p turbo-utils-rs --all-targets
+          cargo test --locked -p turbo-utils-rs --all-targets
+          cargo clippy --locked -p turbo-utils-rs --all-targets -- -D warnings
+          cargo fmt --all --check
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-utils/rust/src/network.rs \
+            packages/turbo-utils/rust/tests/network_authority_bounds.rs; then
+            echo "network authority tranche introduced unsafe code" >&2
+            exit 1
+          fi
+          git diff --exit-code -- Cargo.toml Cargo.lock
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Run the TypeScript oracle suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/utils test
+
+      - name: Commit the GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/turbo-utils/rust/src/network.rs \
+            packages/turbo-utils/rust/src/entry.rs \
+            packages/turbo-utils/rust/tests/network_authority_bounds.rs \
+            packages/turbo-utils/rust/tests/network_security.rs
+          git diff --cached --check
+          git commit -m "fix(turbo-utils): Bound request authority policy"
+          echo "GREEN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Record parity, security, and program evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/apply_network_authority_bounds.py docs "$GREEN_SHA"
+          pnpm exec oxfmt \
+            packages/turbo-utils/rust/README.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-utils/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --check
+          grep -Fq '76 parity tests and 49 security regression tests' \
+            packages/turbo-utils/rust/README.md
+          grep -Fq '**387 authored Rust migration tests**' \
+            docs/typescript-deprecation.md
+          grep -Fq '## TU-031:' packages/turbo-utils/rust/SECURITY.md
+          grep -Fq '### RF-026:' docs/rust-migration-security-findings.md
+          test ! -e .github/workflows/apply-network-authority-bounds.yml
+          test ! -e tools/migration/apply_network_authority_bounds.py
+
+      - name: Commit the reviewed evidence and remove one-shot automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A \
+            .github/workflows/apply-network-authority-bounds.yml \
+            tools/migration/apply_network_authority_bounds.py \
+            packages/turbo-utils/rust/README.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-utils/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs(turbo-utils): Record bounded network authority policy"
+
+      - name: Install repository Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build the exact Turbo binary used by the pre-push hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Push both reviewed commits through repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during the tranche: $remote_head" >&2
+            exit 1
+          fi
+          git status --short
+          git push origin HEAD:rust/typescript-deprecation
