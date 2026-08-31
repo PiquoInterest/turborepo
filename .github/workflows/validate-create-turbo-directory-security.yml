@@ -1,0 +1,161 @@
+name: Validate create-turbo project-directory security tranche
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-directory-security
+    paths:
+      - .github/workflows/validate-create-turbo-directory-security.yml
+      - tools/migration/apply_directory_security_docs.py
+      - packages/create-turbo/src/commands/create/prompts.ts
+      - packages/create-turbo/__tests__/directory-security.test.ts
+      - packages/create-turbo/rust/**
+      - docs/typescript-deprecation.md
+      - docs/rust-migration-security-findings.md
+
+concurrency:
+  group: create-turbo-directory-security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+jobs:
+  validate-and-document:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout focused branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/create-turbo-directory-security
+          fetch-depth: 0
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the retained RED contract
+        env:
+          RED_SHA: a53767309e2ad8fd68a1bdb6501b05961abbe7bd
+        run: |
+          set -euo pipefail
+          red_root="${RUNNER_TEMP}/create-turbo-directory-red"
+          git worktree add --detach "$red_root" "$RED_SHA"
+
+          set +e
+          cargo test --locked \
+            --manifest-path "$red_root/packages/create-turbo/rust/Cargo.toml" \
+            --test directory_prompt_security \
+            >"${RUNNER_TEMP}/directory-red.log" 2>&1
+          red_status=$?
+          set -e
+
+          cat "${RUNNER_TEMP}/directory-red.log"
+          if [[ $red_status -eq 0 ]]; then
+            echo "::error::RED security contract unexpectedly passed before implementation"
+            exit 1
+          fi
+          if grep -Eqi 'failed to fetch|network failure|could not resolve host|no space left|toolchain.*not installed' "${RUNNER_TEMP}/directory-red.log"; then
+            echo "::error::RED failure came from the environment rather than missing behavior"
+            exit 1
+          fi
+          grep -Fq 'DirectoryInputRejection' "${RUNNER_TEMP}/directory-red.log"
+          git show "$RED_SHA:packages/create-turbo/__tests__/directory-security.test.ts" \
+            | grep -Fq 'InvalidDirectoryError'
+          if git show "$RED_SHA:packages/create-turbo/src/commands/create/prompts.ts" \
+            | grep -Fq 'export class InvalidDirectoryError'; then
+            echo "::error::RED TypeScript oracle already contained the repair"
+            exit 1
+          fi
+          git worktree remove --force "$red_root"
+
+      - name: Verify the tranche adds no privileged capability or dependency
+        env:
+          BASE_SHA: b3948eaa2ff37381fecfa759e2050fe7d5f14219
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$BASE_SHA" -- \
+            Cargo.toml Cargo.lock pnpm-lock.yaml package.json \
+            packages/create-turbo/package.json \
+            packages/create-turbo/rust/Cargo.toml
+          python <<'PY'
+          import subprocess
+
+          diff = subprocess.run(
+              ["git", "diff", "b3948eaa2ff37381fecfa759e2050fe7d5f14219", "--", "*.rs", "*.ts", "*.yml", "*.yaml"],
+              check=True,
+              text=True,
+              capture_output=True,
+          ).stdout
+          forbidden = (
+              "continue-on-error: true",
+              "|| true",
+              "#[allow(clippy::unwrap_used)]",
+              "#[allow(clippy::expect_used)]",
+          )
+          for token in forbidden:
+              if any(line.startswith("+") and token in line for line in diff.splitlines()):
+                  raise SystemExit(f"new failure suppression is forbidden: {token}")
+          if any(
+              line.startswith("+") and "unsafe {" in line
+              for line in diff.splitlines()
+          ):
+              raise SystemExit("the project-directory tranche must not add unsafe code")
+          PY
+
+      - name: Format and validate Rust implementation
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install JavaScript dependencies without lockfile drift
+        run: pnpm install --frozen-lockfile
+
+      - name: Format, type-check, and run the TypeScript security regressions
+        run: |
+          set -euo pipefail
+          pnpm exec prettier -w \
+            packages/create-turbo/src/commands/create/prompts.ts \
+            packages/create-turbo/__tests__/directory-security.test.ts
+          pnpm exec prettier -c \
+            packages/create-turbo/src/commands/create/prompts.ts \
+            packages/create-turbo/__tests__/directory-security.test.ts
+          pnpm exec tsc --noEmit -p packages/create-turbo/tsconfig.json
+          pnpm exec jest \
+            --config packages/create-turbo/jest.config.js \
+            packages/create-turbo/__tests__/directory-security.test.ts \
+            --runInBand \
+            --coverage=false
+
+      - name: Record parity, security, and divergence evidence
+        run: python tools/migration/apply_directory_security_docs.py
+
+      - name: Commit reviewed formatting and documentation
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "docs: Record project-directory security divergence"
+          git push origin HEAD:rust/create-turbo-directory-security
