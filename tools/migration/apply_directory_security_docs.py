@@ -4,7 +4,8 @@
 from pathlib import Path
 
 RED_SHA = "a53767309e2ad8fd68a1bdb6501b05961abbe7bd"
-GREEN_SHA = "7d890550fffc826781d09b6babcaa0f9738632de"
+INITIAL_GREEN_SHA = "7d890550fffc826781d09b6babcaa0f9738632de"
+GREEN_SHA = "3c83fd5e29350102865bc33b0c5177ce25e31093"
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/validate-create-turbo-directory-security.yml"
 SELF = Path(__file__).resolve()
@@ -43,13 +44,13 @@ TypeScript oracles:
 
 Rust target: `packages/create-turbo/rust/src/directory_prompt.rs`.
 
-The reviewed Rust tranche owns only input selection, exact prompt metadata, JavaScript-compatible truthiness and trimming, early input hardening, and fail-closed validator propagation. Filesystem resolution and interactive terminal I/O remain typed providers and are not production-approved by this core.
+The reviewed Rust tranche owns input selection, exact prompt metadata, JavaScript-compatible argument truthiness, display-only transformer metadata, raw-answer preservation, early input hardening, and fail-closed validator propagation. Filesystem resolution and interactive terminal I/O remain typed providers and are not production-approved by this core.
 
 ## Confirmed TypeScript defect and repair
 
 For a truthy CLI directory argument, the original `directory` function returned `validateDirectory(dir)` even when `valid` was false. The create command immediately destructured `root` and `projectName` without checking `valid`, so a conflicting or malformed direct path could continue into project acquisition instead of terminating.
 
-The RED TypeScript tests require invalid direct paths to reject. The GREEN TypeScript repair throws `InvalidDirectoryError` before the caller can continue. The Rust core models validation as `Result`, so an invalid provider result cannot be represented as success.
+The RED TypeScript tests require invalid direct paths to reject. The repaired TypeScript path throws `InvalidDirectoryError` before the caller can continue. The Rust core models validation as `Result`, so an invalid provider result cannot be represented as success.
 
 ## Preserved behavior
 
@@ -57,30 +58,31 @@ The RED TypeScript tests require invalid direct paths to reject. The GREEN TypeS
 - An absent or empty direct argument invokes the prompt.
 - The prompt message remains `Where would you like to create your Turborepo?`.
 - The default remains `./my-turborepo`.
-- Prompted text is trimmed before final validation.
+- Inquirer's `transformer` trims ECMAScript whitespace for display only; the accepted answer remains raw and is validated unchanged.
 - Prompt and validation errors are propagated once without retries or fallback values.
 - The validator's successful typed output is returned without reinterpretation.
 
-## Intentional security divergences
+## Intentional security and representation differences
 
-| Boundary | TypeScript before repair | Rust and repaired TypeScript | Reason |
+| Boundary | TypeScript before repair | Rust and repaired TypeScript | Classification and reason |
 | --- | --- | --- | --- |
-| Invalid direct argument | Returned a false validation object that the caller ignored | Typed rejection before project creation | Prevents writes or acquisition from continuing with a known-invalid root. |
-| Input size | No explicit bound before `path.resolve`, regex work, or filesystem calls | 4,096 UTF-8 byte limit | Bounds CPU, allocation, path conversion, and diagnostic work. |
-| C0/C1 and format controls | Rejected only indirectly in some basename branches and could be reflected in terminal-facing diagnostics | Rejected before validator/UI effects with a generic non-reflecting error | Prevents terminal escape and bidirectional/invisible-text spoofing. |
+| Invalid direct argument | Returned a false validation object that the caller ignored | Typed rejection before project creation | Security fix: prevents writes or acquisition from continuing with a known-invalid root. |
+| Input size | No explicit bound before `path.resolve`, regex work, or filesystem calls | 4,096 UTF-8 byte limit | Security divergence: bounds CPU, allocation, path conversion, and diagnostic work. |
+| C0/C1 and format controls | Rejected only indirectly in some basename branches and could be reflected in terminal-facing diagnostics | Rejected before validator/UI effects with a generic non-reflecting error | Security divergence: prevents terminal escape and bidirectional/invisible-text spoofing. |
 | Optional CLI argument | JavaScript truthiness | `Option<&str>` plus an exact non-empty check | Representation-only conversion preserving empty-string falsehood. |
-| Prompt trim | `String.prototype.trim()` | Explicit ECMAScript whitespace table | Avoids accidental drift from Rust Unicode `trim` behavior, including BOM handling. |
-| Prompt and validation effects | Direct module calls | `DirectoryPrompter` and `DirectoryValidator` traits | Keeps terminal and filesystem authority outside the reviewed decision core. |
-| Public diagnostics | Error strings can contain path text | Core error display never includes the rejected input; raw provider causes remain structured | Prevents accidental control-text reflection at the Rust boundary. |
+| Prompt transformer | `transformer: d => d.trim()` changes rendering, while `done(answer)` returns the raw answer | `DirectoryDisplayTransform::TrimEcmascriptWhitespace` is provider metadata; the core validates the raw answer | Representation-only conversion preserving display-only behavior. |
+| Prompt and validation effects | Direct module calls | `DirectoryPrompter` and `DirectoryValidator` traits | Security boundary: terminal and filesystem authority stay outside the reviewed decision core. |
+| Public diagnostics | Error strings can contain path text | Core input-error display never includes the rejected input; raw provider causes remain structured | Security divergence: prevents control-text reflection at the Rust boundary. |
 
 ## Remaining production requirements
 
-A production directory validator must still prove lexical and platform path semantics, root confinement policy, no-follow handling for every path component, regular-directory requirements, directory-handle identity, bounded enumeration, concurrent replacement behavior, Windows reparse-point handling, permission diagnostics, and Linux/macOS/Windows differential parity. A production prompt provider must enforce the advertised byte limit while reading, sanitize terminal rendering, and preserve cancellation, EOF, signal, and non-TTY behavior.
+A production directory validator must still prove lexical and platform path semantics, root confinement policy, no-follow handling for every path component, regular-directory requirements, directory-handle identity, bounded enumeration, concurrent replacement behavior, Windows reparse-point handling, permission diagnostics, and Linux/macOS/Windows differential parity. A production prompt provider must enforce the advertised byte limit while reading, apply the display transformer without mutating the returned answer, sanitize terminal rendering, and preserve cancellation, EOF, signal, and non-TTY behavior. The JavaScript host must also classify `InvalidDirectoryError` as a user-input failure rather than an internal bug before cutover.
 
 ## TDD evidence
 
 - RED TypeScript and Rust security contract: `{RED_SHA}`.
-- GREEN TypeScript repair and Rust implementation: `{GREEN_SHA}`.
+- Initial fail-closed implementation: `{INITIAL_GREEN_SHA}`.
+- Final GREEN implementation after verifying Inquirer's display-only transformer contract: `{GREEN_SHA}`.
 - TypeScript regressions: `packages/create-turbo/__tests__/directory-security.test.ts`.
 - Rust parity regressions: `packages/create-turbo/rust/tests/directory_prompt_parity.rs`.
 - Rust security regressions: `packages/create-turbo/rust/tests/directory_prompt_security.rs`.
@@ -102,26 +104,27 @@ def update_readme() -> None:
     section = """### Project-directory prompt core
 
 - preserves JavaScript truthiness by using a non-empty direct argument without trimming and prompting for an absent or empty argument;
-- sends the exact source prompt message and `./my-turborepo` default through `DirectoryPrompter`;
-- trims prompted values with an explicit ECMAScript whitespace table rather than relying on Rust's different Unicode whitespace definition;
+- sends the exact source prompt message, `./my-turborepo` default, input bound, and display-transform policy through `DirectoryPrompter`;
+- models Inquirer's ECMAScript trim transformer as display-only metadata and validates the exact raw accepted answer;
 - requires `DirectoryValidator` to return `Result`, so a known-invalid direct path cannot escape as a successful value;
 - limits directory input to 4,096 UTF-8 bytes before validation or downstream effects;
 - rejects C0/C1 controls, terminal escapes, bidirectional controls, soft hyphen, zero-width format controls, and BOM text before providers run;
 - returns generic public input errors that never reflect attacker-controlled directory text;
 - invokes the prompt and validator at most once and never invents a fallback after provider failure.
 
-The TypeScript oracle is repaired in the same tranche: direct invalid or conflicting paths now throw `InvalidDirectoryError` instead of returning `{ valid: false }` to a caller that ignored the flag. Filesystem validation and terminal interaction remain provider work. Exact behavior and deliberate security differences are in [`DIRECTORY_PROMPT_DIVERGENCES.md`](./DIRECTORY_PROMPT_DIVERGENCES.md)."""
+The TypeScript oracle is repaired in the same tranche: direct invalid or conflicting paths now throw `InvalidDirectoryError` instead of returning `{ valid: false }` to a caller that ignored the flag. Filesystem validation, terminal interaction, and user-facing host error classification remain provider/binding work. Exact behavior and deliberate security differences are in [`DIRECTORY_PROMPT_DIVERGENCES.md`](./DIRECTORY_PROMPT_DIVERGENCES.md)."""
     insert_before(path, "## Not yet implemented in Rust", section)
     replace_once(
         path,
         "- production package-manager discovery and interactive prompt providers, including cancellation and non-TTY behavior;",
-        "- production project-directory validation and prompt providers, including handle-based path identity, bounded enumeration, cancellation, signals, and non-TTY behavior;\n"
+        "- production project-directory validation and prompt providers, including handle-based path identity, bounded enumeration, display-only transformation, cancellation, signals, and non-TTY behavior;\n"
+        "- JavaScript host mapping for typed project-directory failures;\n"
         "- production package-manager discovery and interactive prompt providers, including cancellation and non-TTY behavior;",
     )
     replace_once(
         path,
         "`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation.",
-        "`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `directory_prompt` owns direct-versus-prompted input selection, ECMAScript trimming, resource bounds, control rejection, and fail-closed validator propagation. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation.",
+        "`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `directory_prompt` owns direct-versus-prompted input selection, display-transform metadata, raw-answer preservation, resource bounds, control rejection, and fail-closed validator propagation. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation.",
     )
     replace_once(
         path,
@@ -145,14 +148,14 @@ def update_parity_matrix() -> None:
 | --- | --- | --- | --- |
 | truthy direct `dir` bypasses prompt | non-empty `Option<&str>` branch | implemented core | The direct value is borrowed and not trimmed. |
 | absent or empty direct `dir` | `DirectoryPrompter` request | implemented core | Empty string preserves JavaScript falsehood. |
-| exact prompt message and `./my-turborepo` default | `DirectoryPromptRequest` constants | implemented core | Exact source text and ordering are tested. |
-| prompted `String.prototype.trim()` | explicit ECMAScript whitespace table | implemented core | Covers BOM and avoids Rust/JavaScript Unicode whitespace drift. |
+| exact prompt message and `./my-turborepo` default | `DirectoryPromptRequest` constants | implemented core | Exact source text, ordering, byte bound, and display policy are tested. |
+| Inquirer display transformer trims while `done(answer)` returns raw text | `DirectoryDisplayTransform` plus raw validator input | implemented core | Rendering may trim ECMAScript whitespace; the requested directory is never silently rewritten. |
 | direct invalid validation object was returned and caller ignored `valid` | typed validator error plus repaired TypeScript throw | intentional security fix | The RED TypeScript test proves the old false-success route; neither implementation now continues. |
 | unbounded path input | 4,096 UTF-8 byte cap | intentional-hardening | Rejects before path resolution, validation, logging, or other providers. |
 | control and directionality text could reach diagnostics | early C0/C1/format-control rejection | intentional-hardening | Public core error text never reflects the rejected value. |
 | prompt/validator side effects | `DirectoryPrompter` and `DirectoryValidator` | implemented core | Each provider runs at most once; errors propagate without retry. |
 | filesystem path resolution and emptiness checks | production validator provider | blocked | Requires no-follow component handling, directory-handle identity, bounded enumeration, reparse-point policy, races, permissions, and supported-platform differentials. |
-| Inquirer terminal behavior | production prompt provider | blocked | Requires bounded input while reading, cancellation/EOF/signal/non-TTY parity, and terminal-safe rendering. |
+| Inquirer terminal behavior and CLI error mapping | production prompt provider and host binding | blocked | Requires bounded reads, display-only transformation, cancellation/EOF/signal/non-TTY parity, terminal-safe rendering, and user-input error classification. |
 
 Detailed differences are in `DIRECTORY_PROMPT_DIVERGENCES.md`. The RED contract also adds four TypeScript security regressions so the legacy oracle remains protected until cutover."""
     insert_before(path, "## Existing TypeScript test mapping", section)
@@ -170,7 +173,7 @@ def update_security() -> None:
         path,
         "Package-manager prompting receives free-form CLI text, discovered executable versions, terminal input, cancellation, and non-TTY state. The reviewed Rust core accepts only a closed enum after exact parsing and revalidates every selected manager against a non-empty discovered version. Discovery and UI effects remain provider-owned.",
         "Package-manager prompting receives free-form CLI text, discovered executable versions, terminal input, cancellation, and non-TTY state. The reviewed Rust core accepts only a closed enum after exact parsing and revalidates every selected manager against a non-empty discovered version. Discovery and UI effects remain provider-owned.\n\n"
-        "Project-directory selection receives a CLI argument or terminal input that later controls repository acquisition and filesystem writes. The reviewed core bounds and filters that text before typed providers, preserves direct-versus-prompted semantics, and cannot turn a validator failure into success. Filesystem identity and terminal behavior remain provider-owned.",
+        "Project-directory selection receives a CLI argument or terminal input that later controls repository acquisition and filesystem writes. The reviewed core bounds and filters that text before typed providers, preserves direct-versus-prompted and display-versus-returned semantics, and cannot turn a validator failure into success. Filesystem identity, terminal behavior, and JavaScript host error classification remain provider-owned.",
     )
     findings = """### CT-RS-028: Invalid direct directory could continue after known validation failure
 
@@ -188,7 +191,7 @@ Regression tests: TypeScript `directory-security.test.ts` and Rust `invalid_dire
 
 The legacy path performed resolution, regex checks, filesystem queries, and terminal-facing validation without an explicit input bound. Invalid text could also be included in diagnostics after containing escape, bidirectional, or invisible formatting controls.
 
-Both repaired paths now cap input at 4,096 UTF-8 bytes and reject C0/C1 and selected Unicode format controls before validator or terminal effects. The Rust core's public input error contains only trusted text and numeric lengths, never the rejected directory value.
+Both repaired paths now cap input at 4,096 UTF-8 bytes and reject C0/C1 and selected Unicode format controls before validator or terminal effects. The Rust core's public input error contains only trusted text and numeric lengths, never the rejected directory value. Inquirer's transformer remains display-only, so neither implementation silently rewrites an accepted directory while applying this hardening.
 
 Regression tests: the TypeScript oversized/control cases and Rust `c0_and_c1_controls_are_rejected_before_any_provider`, `invisible_and_bidirectional_format_controls_are_rejected`, `oversized_argument_is_rejected_before_prompt_or_validation`, `unsafe_prompt_response_is_rejected_before_validation`, and `public_input_error_does_not_reflect_attacker_control_text`.
 
@@ -204,20 +207,20 @@ A production `DirectoryValidator` must use reviewed no-follow or handle-relative
         path,
         "- No new `unsafe` or shell command construction is introduced by these tranches.",
         "- No new `unsafe` or shell command construction is introduced by these tranches.\n"
-        "- Project-directory input is bounded and screened before prompt/validator side effects, and validator failure cannot become success.",
+        "- Project-directory input is bounded and screened before prompt/validator side effects, validator failure cannot become success, and display transformation cannot mutate the returned answer.",
     )
     replace_once(
         path,
         "- The official-starter orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, logging operation, or mutable global state.",
         "- The project-directory prompt tranche adds no dependency, parser, network call, filesystem operation, subprocess, logger, unsafe code, or mutable global state.\n"
-        "- Its production terminal and filesystem providers remain blocked until input, identity, race, cancellation, and supported-platform contracts are proven.\n"
+        "- Its production terminal, filesystem, and JavaScript host providers remain blocked until input, identity, race, display, cancellation, error-classification, and supported-platform contracts are proven.\n"
         "- The official-starter orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, logging operation, or mutable global state.",
     )
     replace_once(
         path,
         "- map typed failures to the existing JavaScript public contracts;",
         "- map typed failures to the existing JavaScript public contracts;\n"
-        "- implement the production project-directory prompt and handle-based validator providers with bounded enumeration and supported-platform differential tests;",
+        "- implement the production project-directory prompt and handle-based validator providers with display-only transformation, bounded enumeration, and supported-platform differential tests;",
     )
 
 
@@ -247,7 +250,7 @@ def update_program_ledger() -> None:
 
 The RED contract exposed a source security bug: direct CLI arguments returned a false validation object, while the create caller ignored `valid` and continued. The TypeScript oracle is repaired so malformed or conflicting direct paths throw before project creation. The Rust core makes that state unrepresentable through a typed validator result.
 
-The Rust decision layer also preserves direct-argument truthiness, exact prompt text/default, and ECMAScript trimming while adding a 4,096-byte cap and early control/directionality rejection. Prompting and filesystem validation remain traits. Production cutover requires bounded terminal input, cancellation/non-TTY/signal behavior, no-follow component inspection, directory-handle identity, bounded enumeration, Windows reparse handling, and shared platform fixtures. Exact differences are in `packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md`.
+The Rust decision layer preserves direct-argument truthiness, exact prompt text/default, Inquirer's display-only ECMAScript trim transformer, and the raw accepted answer while adding a 4,096-byte cap and early control/directionality rejection. Prompting, filesystem validation, and JavaScript host error mapping remain outside the core. Production cutover requires bounded terminal input, cancellation/non-TTY/signal behavior, no-follow component inspection, directory-handle identity, bounded enumeration, Windows reparse handling, typed user-error classification, and shared platform fixtures. Exact differences are in `packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md`.
 """
     insert_before(path, "### Package-manager prompt resolution", section)
     replace_once(
@@ -263,19 +266,19 @@ def update_repository_findings() -> None:
     path = "docs/rust-migration-security-findings.md"
     finding = """### RF-018: Invalid project-directory arguments could bypass validation failure
 
-**Status:** Fixed in the TypeScript oracle and Rust decision core; production filesystem/prompt providers remain blocked.
+**Status:** Fixed in the TypeScript oracle and Rust decision core; production filesystem/prompt/host providers remain blocked.
 
 The original `create-turbo` direct-argument branch returned `{ valid: false }` for malformed, conflicting, or non-directory paths, but the create caller ignored the flag and continued with the returned root. The same boundary also lacked an explicit input-size limit and could reflect control or bidirectional text into terminal-facing diagnostics.
 
-The RED TypeScript tests demonstrate the false-success route. The repaired TypeScript implementation throws before acquisition. The Rust core uses a typed validator result, caps input at 4,096 UTF-8 bytes, rejects C0/C1 and selected Unicode format controls before providers, preserves exact prompt/default and ECMAScript trim behavior, and never includes rejected input in its public error display.
+The RED TypeScript tests demonstrate the false-success route. The repaired TypeScript implementation throws before acquisition. The Rust core uses a typed validator result, caps input at 4,096 UTF-8 bytes, rejects C0/C1 and selected Unicode format controls before providers, preserves exact prompt/default and Inquirer's display-only transformer behavior, validates the raw answer, and never includes rejected input in its public error display.
 
-Production closure still requires a prompt provider with bounded reads and exact cancellation/non-TTY/signal behavior, plus a directory validator that binds no-follow component inspection and bounded enumeration to a stable directory handle on Linux, macOS, and Windows. Regression evidence and the complete divergence ledger are in `packages/create-turbo/rust/tests/directory_prompt_*` and `DIRECTORY_PROMPT_DIVERGENCES.md`."""
+Production closure still requires a prompt provider with bounded reads and exact display/cancellation/non-TTY/signal behavior, a directory validator that binds no-follow component inspection and bounded enumeration to a stable directory handle on Linux, macOS, and Windows, and a JavaScript host mapping that treats typed directory rejection as user input rather than an internal bug. Regression evidence and the complete divergence ledger are in `packages/create-turbo/rust/tests/directory_prompt_*` and `DIRECTORY_PROMPT_DIVERGENCES.md`."""
     insert_before(path, "## Required repository gates", finding)
     replace_once(
         path,
         "- close the package-manager discovery and prompt provider contract, including canonical execution, cancellation, non-TTY/signals, terminal-safe UI, and supported-platform differentials;",
         "- close the package-manager discovery and prompt provider contract, including canonical execution, cancellation, non-TTY/signals, terminal-safe UI, and supported-platform differentials;\n"
-        "- close the project-directory prompt and validator provider contract, including bounded input/enumeration, no-follow handle identity, reparse-point behavior, cancellation, and supported-platform differentials;",
+        "- close the project-directory prompt, host-error, and validator provider contract, including bounded input/enumeration, display-only transformation, no-follow handle identity, reparse-point behavior, cancellation, and supported-platform differentials;",
     )
 
 
