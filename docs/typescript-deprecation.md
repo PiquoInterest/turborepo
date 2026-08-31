@@ -9,9 +9,9 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 The integration branch currently contains two workspace-registered Rust migration cores:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
-- `packages/turbo-utils/rust`: 63 translated parity tests and 29 security regression tests. Covered surfaces include case conversion, upward/root/config discovery, folder and directory validation, writability, package-manager version/global-bin discovery, `createProject` orchestration, update-notification behavior, and archive entry path/link policy.
+- `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests. Covered surfaces include case conversion, upward/root/config discovery, folder and directory validation, writability, package-manager discovery, `createProject` orchestration, update notifications, archive entry policy, and GitHub token/proxy selection.
 
-That is 130 authored Rust tests. Neither TypeScript package is removed yet because safe-input differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open. Migration CI auto-discovers package-local Rust migration crates, requires their evidence documents and dated advisory records, then compiles, tests, lints, and audits the resolved Rust dependency graph.
+That is 144 authored Rust tests. Neither TypeScript package is removed yet because safe-input differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open. Migration CI auto-discovers package-local Rust migration crates, requires their evidence documents and dated advisory records, then compiles, tests, lints, and audits the resolved Rust dependency graph.
 
 The mandatory workflow is recorded in `AGENTS.md`: every tranche must use TDD and differential tests, perform a current authoritative advisory lookup, and update its `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, and this ledger in the same change. Repository-level findings are indexed in [`rust-migration-security-findings.md`](./rust-migration-security-findings.md).
 
@@ -34,7 +34,7 @@ Tests, declarations, build metadata, and host adapters are tracked separately fr
 | --- | --- | --- | --- | --- |
 | Core `turbo` engine and CLI | Predominantly Rust | Existing Rust crates | Existing | Continue removing legacy wrappers and keep compatibility tests. |
 | `packages/turbo-ignore` decision engine | TypeScript | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS. |
-| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Implement and differentially test the production GitHub/network/archive provider and registry update checker; port remaining template/example utilities; close Windows ACL/process/shim gaps; add bindings and migrate callers. |
+| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Implement and differentially test request execution, GitHub repository resolution, network/archive extraction, and registry update checking; port remaining template/example utilities; close Windows ACL/process/shim gaps; add bindings and migrate callers. |
 | `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. Reuse reviewed `turbo-utils-rs` providers. |
 | `packages/turbo-gen` | TypeScript CLI | Rust CLI | Queued | Preserve generator discovery, prompts, template rendering, and workspace mutations. |
 | `packages/turbo-codemod` | TypeScript CLI | Rust CLI | Queued | Port transformations with golden fixtures and idempotence tests. |
@@ -48,33 +48,37 @@ Tests, declarations, build metadata, and host adapters are tracked separately fr
 
 ## Current `turbo-utils` tranche
 
-The project coordinator is separated from network and archive execution through `ProjectSource`. The translated contract covers default and named examples, GitHub repository selection, four acquisition attempts, generated `package.json` inspection, JavaScript script-key ordering, missing sources, and strict URL/path/destination/metadata boundaries.
+The project coordinator is separated from network/archive execution through `ProjectSource`. It covers source selection, four acquisition attempts, generated `package.json` inspection, JavaScript script-key ordering, missing sources, and strict URL/path/destination/metadata boundaries.
 
-The update notification core is separated from registry lookup through `UpdateChecker` and dynamic command resolution through `UpgradeCommandProvider`. It covers one stored update decision, failed/no-update silence, static and dynamic command rendering, exit-code preservation, TypeScript-compatible debug handling, and bounded control-safe output.
+The notification core is separated from registry lookup through `UpdateChecker` and dynamic command resolution through `UpgradeCommandProvider`. It covers one stored update decision, failed/no-update silence, command rendering, exit-code preservation, TypeScript-compatible debug handling, and bounded control-safe output.
 
-The archive entry policy now translates the existing `isPathSafe` and `isLinkEntry` behavior for safe paths and adds cross-platform safeguards:
+The archive entry policy translates `isPathSafe` and `isLinkEntry` for safe paths and rejects NULs, escaping traversal, absolute/UNC/drive paths, alternate streams, excessive length/depth, symbolic links, and hard links. It also fixes the TypeScript `relativePath.startsWith("..")` false positive for safe names such as `..cache`.
 
-- normal and nested relative paths remain valid;
-- `..` is allowed only while the lexical destination remains below the extraction root;
-- NULs, absolute paths, UNC paths, Windows drive prefixes, alternate data streams, excessive path length, excessive component counts, symbolic links, and hard links are rejected;
-- safe names beginning with two dots, such as `..cache`, are accepted. The TypeScript `relativePath.startsWith("..")` check incorrectly rejects them even though they are not parent components.
+The GitHub network policy translates environment precedence without performing I/O:
 
-The actual HTTP, proxy, GitHub authentication, sparse Git fallback, tar streaming, extraction writes, registry lookup, staging, and atomic promotion implementations remain outside these pure coordinators until each has one shared differential-tested security contract.
+- `GITHUB_TOKEN` takes precedence over `GH_TOKEN`; an invalid selected primary token does not silently fall back to secondary credentials;
+- bearer credentials are emitted only for credential-free HTTPS requests to exact `api.github.com` or `codeload.github.com` authorities with no explicit port;
+- look-alike domains, malformed URLs, plaintext HTTP, userinfo, ports, non-ASCII/control-bearing tokens, and oversized tokens receive no credentials;
+- HTTPS proxy precedence remains lowercase HTTPS, uppercase HTTPS, lowercase HTTP, uppercase HTTP; non-HTTPS uses only HTTP proxy values;
+- an invalid selected proxy is an error rather than permission to bypass proxy policy with a direct connection.
+
+Actual HTTP execution, redirect handling, proxy agent construction, `NO_PROXY` policy, GitHub repository/default-branch resolution, sparse Git fallback, tar streaming/writes, registry lookup, staging, and atomic promotion remain outside these pure cores until their complete contracts are differential-tested.
 
 TDD history:
 
 - Project creation: RED `0468eda3829e5b1bb98f96b86a7f0817ac542f51`, implementation `b2992a27dbf44c5ab8bc7405dc088236eb53c70e`.
-- Update notification: RED `7a446b29f3e6054a58e891b898d3f8c4f85854ce`, implementation `cabec01820809f34d8f42cf1adbbff50c3307e68`, bidi regression RED `28f7ec2f0388c93a92d6ed7261c10832e29f5925`, fix `84e5ed11155af39a151d56b1e6b4580eaf6f057e`.
-- Archive entry policy: RED `5ab1da42327a85e4c026e8531953fb108b56434d`, corrected `..`-prefix regression `37f6b4caaea9d06e87ec82f550560d989a6af872`, implementation `bdeb6760d41d5f9d72d2b9fb8042339b55011923`.
+- Update notification: RED `7a446b29f3e6054a58e891b898d3f8c4f85854ce`, implementation `cabec01820809f34d8f42cf1adbbff50c3307e68`, bidi RED `28f7ec2f0388c93a92d6ed7261c10832e29f5925`, fix `84e5ed11155af39a151d56b1e6b4580eaf6f057e`.
+- Archive entry policy: RED `5ab1da42327a85e4c026e8531953fb108b56434d`, `..`-prefix RED `37f6b4caaea9d06e87ec82f550560d989a6af872`, implementation `bdeb6760d41d5f9d72d2b9fb8042339b55011923`.
+- GitHub token/proxy policy: RED `903d7836a01e6ec47e4df339adc71456b4ecbd0d`, implementation `2e90ea8daa8542aa13cd94ceb981b653756789cb`.
 
 ## Security review method
 
-Each tranche gets a colocated `SECURITY.md` containing attacker inputs and trust boundaries, subprocess and executable behavior, filesystem and race considerations, parser/resource limits, network/package acquisition, logging and redaction, a dated authoritative advisory lookup, and every intentional incompatibility where exact parity would preserve unsafe behavior.
+Each tranche gets a colocated `SECURITY.md` containing attacker inputs and trust boundaries, subprocess/executable behavior, filesystem/race considerations, resource limits, network/package acquisition, logging/redaction, a dated authoritative advisory lookup, and intentional incompatibilities where exact parity would preserve unsafe behavior.
 
 Security fixes require regression tests. Memory safety alone is not completion: semantic injection, package acquisition, path trust, authorization, denial of service, and fail-open/fail-closed behavior require explicit review.
 
-The repository-level index records affected `webbrowser` under `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`. The observed call site uses a constant HTTP URL, limiting current reachability, but the dependency must be upgraded or removed before merge. Migration CI temporarily ignores only that documented advisory so additional findings still fail.
+The repository-level index records affected `webbrowser` under `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33`. The observed call uses a constant HTTP URL, limiting current reachability, but the dependency must be upgraded or removed before merge. Migration CI temporarily ignores only that documented advisory so additional findings still fail.
 
 ## Branch and pull-request policy
 
-The long-lived integration branch is `rust/typescript-deprecation`. Work lands in reviewable conventional-commit tranches. The branch must remain buildable; repository-wide parity is declared only when this ledger has no executable TypeScript runtime entries and production packaging points to Rust for all supported targets.
+The integration branch is `rust/typescript-deprecation`. Work lands in reviewable conventional-commit tranches. Repository-wide parity is declared only when this ledger has no executable TypeScript runtime entries and production packaging points to Rust for all supported targets.

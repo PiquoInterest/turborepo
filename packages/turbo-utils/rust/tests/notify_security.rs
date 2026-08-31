@@ -12,10 +12,7 @@ use turbo_utils_rs::{
 struct Checker(Result<Option<UpdateInfo>, UpdateCheckError>);
 
 impl UpdateChecker for Checker {
-    fn check(
-        &self,
-        _package_info: &PackageInfo,
-    ) -> Result<Option<UpdateInfo>, UpdateCheckError> {
+    fn check(&self, _package_info: &PackageInfo) -> Result<Option<UpdateInfo>, UpdateCheckError> {
         self.0.clone()
     }
 }
@@ -44,9 +41,9 @@ fn is_directional_format_control(character: char) -> bool {
 fn assert_no_terminal_controls(values: &[String]) {
     for value in values {
         assert!(
-            !value
-                .chars()
-                .any(|character| character.is_control() || is_directional_format_control(character)),
+            !value.chars().any(|character| {
+                character.is_control() || is_directional_format_control(character)
+            }),
             "terminal control leaked in {value:?}"
         );
     }
@@ -116,11 +113,7 @@ fn dynamic_error_controls_are_escaped_before_debug_logging() {
         &checker,
     );
 
-    let outcome = notification.notify(
-        ExitCode::Failure,
-        UpgradeCommand::Dynamic(&command),
-        true,
-    );
+    let outcome = notification.notify(ExitCode::Failure, UpgradeCommand::Dynamic(&command), true);
 
     assert_no_terminal_controls(&outcome.stderr);
     assert_eq!(
@@ -143,11 +136,7 @@ fn rendered_untrusted_fields_are_bounded() {
     );
     let command = "c".repeat(NOTIFY_MAX_UNTRUSTED_CHARS * 4);
 
-    let outcome = notification.notify(
-        ExitCode::Success,
-        UpgradeCommand::Static(&command),
-        false,
-    );
+    let outcome = notification.notify(ExitCode::Success, UpgradeCommand::Static(&command), false);
 
     assert!(outcome.stdout[1].chars().count() <= NOTIFY_MAX_UNTRUSTED_CHARS + 50);
     assert!(outcome.stdout[2].chars().count() <= NOTIFY_MAX_UNTRUSTED_CHARS + 40);

@@ -60,9 +60,7 @@ pub fn is_archive_path_safe(
     stripped_path: &str,
     resolved_root: Option<&Path>,
 ) -> bool {
-    if stripped_path.contains('\0')
-        || stripped_path.chars().count() > ARCHIVE_MAX_PATH_CHARS
-    {
+    if stripped_path.contains('\0') || stripped_path.chars().count() > ARCHIVE_MAX_PATH_CHARS {
         return false;
     }
 
