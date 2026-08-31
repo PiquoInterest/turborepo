@@ -44,6 +44,62 @@ where
     A: PackageManagerAvailability + ?Sized,
     I: CreateInstaller + ?Sized,
 {
-    let _ = (input, availability, installer);
-    Ok(CreateInstallOutcome::Skipped)
+    // TypeScript chooses the source manager whenever transforms are skipped
+    // or the prompt returned no selection. Snapshot availability once so a
+    // mutable provider cannot change the install decision between checks.
+    let project_package_manager = match (
+        input.skip_transforms,
+        input.selected_package_manager,
+    ) {
+        (false, Some(selection)) => selection,
+        _ => PackageManagerSelection {
+            name: input.source_package_manager,
+            version: available_version(availability, input.source_package_manager),
+        },
+    };
+
+    // Preserve source ordering: manager resolution happens before these two
+    // gates, even though neither branch performs an installation.
+    if !input.has_package_json || input.skip_install {
+        return Ok(CreateInstallOutcome::Skipped);
+    }
+
+    if input.skip_transforms && project_package_manager.version.is_none() {
+        return Ok(CreateInstallOutcome::WarnUnavailable(
+            UnavailablePackageManagerWarning {
+                example_name: input.example_name,
+                package_manager: input.source_package_manager,
+            },
+        ));
+    }
+
+    let Some(version) = project_package_manager
+        .version
+        .filter(|version| !version.is_empty())
+    else {
+        return Ok(CreateInstallOutcome::Skipped);
+    };
+
+    let request = CreateInstallRequest {
+        package_manager: PackageManagerSelection {
+            name: project_package_manager.name,
+            version: Some(version),
+        },
+        interactive: false,
+    };
+    installer.install(request)?;
+
+    Ok(CreateInstallOutcome::Installed(request))
+}
+
+fn available_version<A>(
+    availability: &A,
+    manager: WorkspacePackageManager,
+) -> Option<&str>
+where
+    A: PackageManagerAvailability + ?Sized,
+{
+    availability
+        .version(manager)
+        .filter(|version| !version.is_empty())
 }
