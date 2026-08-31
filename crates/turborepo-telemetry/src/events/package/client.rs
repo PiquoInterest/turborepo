@@ -3,13 +3,11 @@ use uuid::Uuid;
 use super::{
     MAX_PENDING_REQUESTS,
     config::PackageTelemetryConfig,
-    sanitize::{
-        bounded_event_key, bounded_event_value, public_value_or_other, telemetry_endpoint,
-    },
+    sanitize::{bounded_event_key, bounded_event_value, public_value_or_other, telemetry_endpoint},
     transport::{PackageSendFuture, PackageTelemetryTransport},
     types::{
-        PackageEvent, PackageEventEnvelope, PackageInfo, PackageRuntimeInfo,
-        PackageTelemetryError, PackageTelemetryOptions, PackageTelemetryRequest,
+        PackageEvent, PackageEventEnvelope, PackageInfo, PackageRuntimeInfo, PackageTelemetryError,
+        PackageTelemetryOptions, PackageTelemetryRequest,
     },
 };
 
@@ -73,11 +71,7 @@ impl<T: PackageTelemetryTransport> PackageTelemetryClient<T> {
         )
     }
 
-    pub(super) fn track_option(
-        &mut self,
-        option: &str,
-        value: impl Into<String>,
-    ) -> PackageEvent {
+    pub(super) fn track_option(&mut self, option: &str, value: impl Into<String>) -> PackageEvent {
         self.track(
             format!("option:{}", public_value_or_other(option, 64)),
             value.into(),

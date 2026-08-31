@@ -14,7 +14,9 @@ mod wrappers;
 pub use client::PackageTelemetryClient;
 pub use config::PackageTelemetryConfig;
 pub use sanitize::environment_value_is_truthy;
-pub use transport::{PackageSendFuture, PackageTelemetryTransport, ReqwestPackageTelemetryTransport};
+pub use transport::{
+    PackageSendFuture, PackageTelemetryTransport, ReqwestPackageTelemetryTransport,
+};
 pub use types::{
     PackageEvent, PackageEventEnvelope, PackageInfo, PackageKind, PackageRuntimeInfo,
     PackageTelemetryError, PackageTelemetryOptions, PackageTelemetryRequest,

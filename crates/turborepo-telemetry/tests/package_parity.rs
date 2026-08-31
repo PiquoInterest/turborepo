@@ -79,7 +79,10 @@ async fn batch_threshold_sends_exact_package_event_shape() {
     assert_eq!(transport.requests().len(), 1);
     let requests = transport.requests();
     let request = &requests[0];
-    assert_eq!(request.endpoint.as_str(), "https://example.com/api/turborepo/v1/events");
+    assert_eq!(
+        request.endpoint.as_str(),
+        "https://example.com/api/turborepo/v1/events"
+    );
     assert_eq!(request.telemetry_id, "telemetry-test-id");
     assert_eq!(request.user_agent, "create-turbo 1.0.0 v20.11.30 Linux x64");
     assert_eq!(request.events.len(), 2);
@@ -137,11 +140,22 @@ fn create_turbo_classifies_examples_without_retaining_credentials() {
     let (_temp, client) = client(PackageKind::CreateTurbo, false, 20, transport);
     let mut telemetry = CreateTurboTelemetry::new(client);
 
-    assert_eq!(telemetry.track_option_example(Some("default")).unwrap().value, "default");
-    assert_eq!(telemetry.track_option_example(Some("basic")).unwrap().value, "official");
     assert_eq!(
         telemetry
-            .track_option_example(Some("https://user:ghp_secret@github.com/acme/private?token=secret"))
+            .track_option_example(Some("default"))
+            .unwrap()
+            .value,
+        "default"
+    );
+    assert_eq!(
+        telemetry.track_option_example(Some("basic")).unwrap().value,
+        "official"
+    );
+    assert_eq!(
+        telemetry
+            .track_option_example(Some(
+                "https://user:ghp_secret@github.com/acme/private?token=secret"
+            ))
             .unwrap()
             .value,
         "github_url"
@@ -177,9 +191,16 @@ fn create_turbo_optional_events_match_typescript_truthiness() {
 
     assert!(telemetry.track_option_example(None).is_none());
     assert!(telemetry.track_option_skip_install(Some(false)).is_none());
-    assert!(telemetry.track_option_skip_transforms(Some(false)).is_none());
+    assert!(
+        telemetry
+            .track_option_skip_transforms(Some(false))
+            .is_none()
+    );
     assert_eq!(
-        telemetry.track_option_skip_install(Some(true)).unwrap().value,
+        telemetry
+            .track_option_skip_install(Some(true))
+            .unwrap()
+            .value,
         "true"
     );
     assert_eq!(
@@ -208,7 +229,10 @@ fn turbo_ignore_task_allowlist_matches_typescript() {
         assert_eq!(telemetry.track_option_task(Some(task)).unwrap().value, task);
     }
     assert_eq!(
-        telemetry.track_option_task(Some("workspace#build")).unwrap().value,
+        telemetry
+            .track_option_task(Some("workspace#build"))
+            .unwrap()
+            .value,
         "other"
     );
     assert!(telemetry.track_option_task(None).is_none());
@@ -225,7 +249,10 @@ fn turbo_ignore_tracks_presence_without_workspace_or_directory_values() {
         "provided"
     );
     assert_eq!(
-        telemetry.track_option_directory(Some("/private/path")).unwrap().value,
+        telemetry
+            .track_option_directory(Some("/private/path"))
+            .unwrap()
+            .value,
         "custom"
     );
     assert!(telemetry.track_argument_workspace(false).is_none());
@@ -239,7 +266,13 @@ fn turbo_ignore_ci_and_max_buffer_values_match_typescript() {
     let mut telemetry = TurboIgnoreTelemetry::new(client);
 
     assert_eq!(telemetry.track_ci(None).value, "unknown");
-    assert_eq!(telemetry.track_ci(Some("GitHub Actions")).value, "GitHub Actions");
-    assert_eq!(telemetry.track_option_max_buffer(Some(0)).unwrap().value, "0");
+    assert_eq!(
+        telemetry.track_ci(Some("GitHub Actions")).value,
+        "GitHub Actions"
+    );
+    assert_eq!(
+        telemetry.track_option_max_buffer(Some(0)).unwrap().value,
+        "0"
+    );
     assert!(telemetry.track_option_max_buffer(None).is_none());
 }

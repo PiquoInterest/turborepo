@@ -204,8 +204,8 @@ fn write_config_atomically(
     fs::create_dir_all(parent).map_err(PackageTelemetryError::ConfigIo)?;
     ensure_safe_parent(parent)?;
 
-    let serialized = serde_json::to_vec_pretty(config)
-        .map_err(|_| PackageTelemetryError::InvalidConfig)?;
+    let serialized =
+        serde_json::to_vec_pretty(config).map_err(|_| PackageTelemetryError::InvalidConfig)?;
     if serialized.len() as u64 > MAX_CONFIG_BYTES {
         return Err(PackageTelemetryError::InvalidConfig);
     }

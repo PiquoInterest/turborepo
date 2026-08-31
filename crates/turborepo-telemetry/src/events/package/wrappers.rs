@@ -26,10 +26,7 @@ impl<T: PackageTelemetryTransport> CreateTurboTelemetry<T> {
     }
 
     pub fn track_option_example(&mut self, value: Option<&str>) -> Option<PackageEvent> {
-        value.map(|value| {
-            self.client
-                .track_option("example", classify_example(value))
-        })
+        value.map(|value| self.client.track_option("example", classify_example(value)))
     }
 
     pub fn track_option_package_manager(&mut self, value: Option<&str>) -> Option<PackageEvent> {
@@ -46,9 +43,10 @@ impl<T: PackageTelemetryTransport> CreateTurboTelemetry<T> {
     }
 
     pub fn track_option_skip_transforms(&mut self, value: Option<bool>) -> Option<PackageEvent> {
-        value
-            .filter(|value| *value)
-            .map(|value| self.client.track_option("skip_transforms", value.to_string()))
+        value.filter(|value| *value).map(|value| {
+            self.client
+                .track_option("skip_transforms", value.to_string())
+        })
     }
 
     pub fn track_option_turbo_version(&mut self, value: Option<&str>) -> Option<PackageEvent> {
@@ -100,10 +98,8 @@ impl<T: PackageTelemetryTransport> TurboIgnoreTelemetry<T> {
     }
 
     pub fn track_ci(&mut self, name: Option<&str>) -> PackageEvent {
-        self.client.track_public(
-            "ci",
-            public_value_or_other(name.unwrap_or("unknown"), 128),
-        )
+        self.client
+            .track_public("ci", public_value_or_other(name.unwrap_or("unknown"), 128))
     }
 
     pub fn track_argument_workspace(&mut self, provided: bool) -> Option<PackageEvent> {

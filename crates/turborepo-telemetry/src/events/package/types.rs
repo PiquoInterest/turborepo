@@ -53,7 +53,10 @@ pub struct PackageInfo {
 }
 
 impl PackageInfo {
-    pub fn new(kind: PackageKind, version: impl Into<String>) -> Result<Self, PackageTelemetryError> {
+    pub fn new(
+        kind: PackageKind,
+        version: impl Into<String>,
+    ) -> Result<Self, PackageTelemetryError> {
         let version = checked_metadata(version.into())?;
         Ok(Self { kind, version })
     }
