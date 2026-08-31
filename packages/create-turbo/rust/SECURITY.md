@@ -4,6 +4,7 @@ This review covers the current Rust ports of:
 
 - `packages/create-turbo/src/transforms/update-commands-in-readme.ts`
 - `packages/create-turbo/src/transforms/git-ignore.ts`
+- `packages/create-turbo/src/transforms/package-manager.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
@@ -12,9 +13,11 @@ It is a tranche review, not a claim that the full `create-turbo` package has bee
 
 ## Trust boundaries
 
-Repository-controlled or attacker-influenced inputs include the selected package manager, project-root path, example name, `README.md`, `.gitignore`, Markdown bytes, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
+Repository-controlled or attacker-influenced inputs include the selected package manager, package-manager version text, project-root path, example name, `README.md`, `.gitignore`, Markdown bytes, package and lockfile contents, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
 
 The example name determines whether acquisition is classified as a built-in default path. That routing decision must use exact membership so prefixes, paths, Unicode lookalikes, whitespace, controls, or normalization do not silently broaden trust.
+
+The package-manager transform decides whether broad workspace mutation is invoked and which manager adapter receives control. The reviewed Rust core carries only a closed manager enum, a borrowed root path, and `skip_install: true`. Actual package metadata, lockfile, configuration, and process effects remain behind `PackageManagerConverter` and are not yet production-approved.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -75,6 +78,8 @@ Regression test: `successful_write_leaves_no_temporary_files`.
 A faulty port could rewrite prose, `npx`, or embedded identifiers. The Rust scanner preserves the TypeScript region precedence, ordered replacements, JavaScript ASCII word-boundary behavior, and whitespace-plus-`run` exclusion.
 
 Evidence: all README parity tests.
+
+The shared TypeScript package-manager type also admits `nub` and `aube`, while the source regex scans only `pnpm`, `npm`, `yarn`, and `bun`. The Rust README core currently models the four scanned spellings. This is recorded as an unresolved differential target-type contract, not silently treated as full shared-type parity.
 
 ### CT-RS-007: `.gitignore` check/write race can overwrite a concurrent path
 
@@ -180,11 +185,46 @@ Parity tests prove exact values, case sensitivity, whitespace sensitivity, and n
 
 Residual risk: production routing still calls the TypeScript helper. This fix protects only the Rust core until the caller is bound and differentially tested.
 
+### CT-RS-017: Package-manager conversion mutates multiple workspace artifacts without a proven transaction
+
+**Severity:** High until the provider contract is closed
+
+The TypeScript `package-manager` transform delegates to `@turbo/workspaces.convert`. The reviewed conversion flow performs manager-specific cleanup and creation and updates package metadata and manager-owned files across multiple steps. No single atomic commit or repository-wide rollback contract is evident in that orchestration. A failure after early mutation can therefore leave a partially converted workspace unless every adapter supplies complete recovery behavior.
+
+The Rust tranche intentionally implements only the decision and typed request core. It cannot read or write files, launch a package manager, or alter a lockfile. The mutation boundary is explicit as `PackageManagerConverter`.
+
+A production provider must prove, with translated and failure-injection tests:
+
+- the complete six-manager source/target matrix;
+- root containment and no-follow behavior for package and lockfile paths;
+- bounded reads, writes, parsing, subprocess time, and output;
+- safe executable resolution without shell construction or project-local substitution;
+- staged writes plus atomic promotion, or a documented rollback journal that restores every touched artifact;
+- cleanup ownership and concurrent-path behavior;
+- exact package metadata, lockfile, workspace, and manager configuration semantics;
+- Linux, macOS, and Windows behavior;
+- deterministic public error mapping and a non-success result on any partial failure.
+
+Regression tests in the current core prove that no provider call occurs for absent or unchanged selections, exactly one typed call occurs for a change, `skip_install` is always true, all six variants are closed enum values, and converter errors cannot become success.
+
+### CT-RS-018: Prompt package-manager version is present but intentionally not forwarded
+
+**Severity:** Informational logic contract
+
+The selected package manager includes optional version text, but the TypeScript transform forwards only the selected manager name to `convert`. A caller could incorrectly assume that the selected version pins conversion output. The Rust core preserves the observed source behavior rather than inventing version semantics.
+
+`PackageManagerSelection.version` is borrowed for parity documentation but is not copied, logged, normalized, parsed, or passed to `PackageManagerConverter`. This also avoids accidentally propagating a large, control-containing, or sensitive value into process arguments or logs.
+
+Required production closure: differential tests must prove whether version is purely prompt/display metadata or whether a later source stage owns pinning. Any decision to start enforcing a version is a deliberate compatibility change and needs its own RED contract, security review, and migration note.
+
+Regression tests: `prompt_version_is_not_forwarded_to_the_converter`, `a_large_untrusted_version_is_borrowed_and_not_forwarded`, and `no_mutating_provider_call_occurs_when_the_selection_is_absent_or_unchanged`.
+
 ## Security invariants
 
-- No `unsafe` or shell command construction is introduced by these tranches.
-- README, `.gitignore`, and default-example operations add no network, package acquisition, credential, or telemetry behavior.
+- No new `unsafe` or shell command construction is introduced by these tranches.
+- README, `.gitignore`, default-example, and package-manager orchestration add no network or credential behavior.
 - The default-example route uses exact borrowed ASCII literals only.
+- The package-manager core accepts a closed enum, preserves the root as a path, does not forward version text, and cannot mutate files or execute a process directly.
 - The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
 - Untrusted README size is bounded before allocation and writing.
 - Rejected README inputs remain unchanged.
@@ -192,7 +232,7 @@ Residual risk: production routing still calls the TypeScript helper. This fix pr
 - Broken or existing destination symlinks are errors.
 - Temporary files use `create_new`, bounded retries, and ordinary failure cleanup.
 - VCS roots are structurally validated before any provider invocation.
-- Cleanup is requested only after successful init and later command failure.
+- Git cleanup is requested only after successful init and later command failure.
 - Every intentional incompatibility is recorded here and in `PARITY_MATRIX.md` with regression coverage.
 
 ## Advisory lookup
@@ -209,6 +249,8 @@ Authoritative sources checked:
 
 Disposition:
 
+- The package-manager orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
+- A production converter cannot be approved until its manager adapters, executable versions, filesystem/process policies, transaction or rollback model, and supported platforms are reviewed.
 - The default-example tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
 - The Git core adds no external Rust crate and does not yet execute an external tool.
 - A production Git/Hg provider cannot be approved until its exact executable versions, resolution path, environment/config policy, and supported platforms are reviewed.
@@ -221,10 +263,12 @@ Repeat the lookup before merge when dependencies, subprocess providers, network 
 
 - map typed failures to the existing JavaScript public contracts;
 - bind `is_default_example` into acquisition orchestration and compare TypeScript/Rust routing over shared fixtures;
+- implement the production `PackageManagerConverter` with complete six-manager parity, rollback or atomic promotion, and failure injection;
+- prove the shared README target behavior for `nub` and `aube` without broadening the source's four scanned command spellings;
 - run TypeScript-versus-Rust differential host fixtures on Linux, macOS, and Windows;
 - implement handle-relative publication and atomic Windows replacement with an explicit metadata/ACL policy;
 - implement and review production Git/Hg runner and `.git` cleanup providers;
 - isolate or deliberately preserve Git templates, global/system configuration, hooks, signing, and credential-helper behavior;
-- integrate the transforms and Git core into Rust orchestration;
+- integrate the transforms and provider cores into Rust orchestration;
 - migrate package entry points and downstream callers;
 - prove through artifact/removal tests that the TypeScript implementation is neither loaded nor shipped before deletion.

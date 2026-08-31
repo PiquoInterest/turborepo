@@ -8,6 +8,7 @@ Current Rust tranches cover:
 2. `git-ignore` creation using the exact TypeScript default content.
 3. the dependency-injected core of `tryGitInit`, including Git/Mercurial detection, initialization ordering, post-init cleanup, and root validation.
 4. exact `isDefaultExample` routing for the exported `basic` and `default` examples.
+5. the dependency-injected `package-manager` transform decision and conversion-request contract.
 
 The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
 
@@ -56,11 +57,24 @@ The current Git tranche is an orchestration core. A production `VcsRunner` and `
 - rejects prefixes, suffixes, path-like values, Unicode confusables, and oversized arbitrary names without copying the input;
 - uses a borrowed `&str` match with no heap allocation or mutable global set.
 
+### Package-manager transform core
+
+- exports the exact transform name `package-manager`;
+- represents all six repository package-manager variants: `yarn`, `npm`, `pnpm`, `bun`, `nub`, and `aube`;
+- returns `not-applicable` without invoking the mutation provider when the prompt has no selection or the selected manager already matches the project;
+- requests exactly one conversion when the manager changes;
+- forwards the project root as a borrowed `Path`, the target manager as a closed enum, and `skip_install: true`;
+- intentionally does not forward the prompt's version string, matching the TypeScript transform;
+- propagates provider failure instead of reporting a false success;
+- preserves non-UTF-8 Unix roots and never constructs a shell command or executable name in the orchestration core.
+
+A production `PackageManagerConverter` is deliberately absent. The existing TypeScript `@turbo/workspaces` converter performs broad package and lockfile mutation, so its Rust provider requires its own translated tests, rollback model, atomic-write policy, supported-manager matrix, and platform review before cutover.
+
 ## Not yet implemented in Rust
 
 - CLI argument parsing, help/version output, and prompts;
 - example discovery and secure network/archive acquisition;
-- package-manager installation orchestration;
+- production package-manager workspace conversion and installation orchestration;
 - production Git/Hg process execution and `.git` cleanup providers;
 - the remaining source transforms;
 - telemetry binding into the production command path;
@@ -69,7 +83,7 @@ The current Git tranche is an orchestration core. A production `VcsRunner` and `
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -77,18 +91,22 @@ The Git initialization core never resolves an executable, inherits no process en
 
 The default-example predicate cannot broaden routing through trimming, normalization, regexes, prefixes, suffixes, or mutable collection state. It is intentionally a two-literal borrowed-string match.
 
+The package-manager transform does not receive free-form manager text at its mutation boundary. It also does not copy, log, or forward the prompt version. That preserves the source decision contract while keeping destructive conversion outside the reviewed core.
+
 ## TDD history
 
 ```text
-README RED:             a0930bc5bd0eee5bc7c6edf09daf8caf38875781
-README GREEN:           0af47426b5ef00bbff6dfc7d60aaca23daa71720
-.gitignore RED:         f8edbb984cd7255f1d7630689384324009de5ac4
-.gitignore GREEN:       c74d664d718691660be969d779d25a76af31fb3e
-Git init RED import:    e57cc31afd1d83a015ae49136d71c7daa3217fb7
-Git oracle/security:    221586118db79fca2f94cebb15785de4111bde8e
-Git init GREEN:         1d7b485d597b70f40bb4aa492f45d1c0638f844e
-Default example RED:    edc3b96b106e2c0bebaee299690c7769f9ba6bc2
-Default example GREEN:  57f19c56209312fb2d04423fdd86ad239150a753
+README RED:              a0930bc5bd0eee5bc7c6edf09daf8caf38875781
+README GREEN:            0af47426b5ef00bbff6dfc7d60aaca23daa71720
+.gitignore RED:          f8edbb984cd7255f1d7630689384324009de5ac4
+.gitignore GREEN:        c74d664d718691660be969d779d25a76af31fb3e
+Git init RED import:     e57cc31afd1d83a015ae49136d71c7daa3217fb7
+Git oracle/security:     221586118db79fca2f94cebb15785de4111bde8e
+Git init GREEN:          1d7b485d597b70f40bb4aa492f45d1c0638f844e
+Default example RED:     edc3b96b106e2c0bebaee299690c7769f9ba6bc2
+Default example GREEN:   57f19c56209312fb2d04423fdd86ad239150a753
+Package manager RED:     9f9b33f889d92e5b61a484ac445b4e297110f6f0
+Package manager GREEN:   c7a1776c5f6fa53db4e30d418a9897b56c6263cd
 ```
 
 Focused validation:
@@ -101,7 +119,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 32 translated parity tests and 26 security regression tests, for 58 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
+The crate contains 39 translated parity tests and 30 security regression tests, for 69 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
 
 ## Production status
 

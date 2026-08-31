@@ -1,12 +1,12 @@
 # create-turbo TypeScript-to-Rust parity matrix
 
-Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, and `not-implemented`. A row marked `implemented` means the listed safe-input behavior has translated tests. It does not imply that the package is the production entry point.
+Status values are `implemented`, `intentional-deviation`, `intentional-hardening`, `partial`, `blocked`, and `not-implemented`. A row marked `implemented` means the listed safe-input behavior has translated tests. It does not imply that the package is the production entry point.
 
 ## `update-commands-in-readme` tranche
 
 | TypeScript boundary | Rust boundary | Status | Evidence and notes |
 | --- | --- | --- | --- |
-| supported managers `pnpm`, `npm`, `yarn`, `bun` | `PackageManager` | implemented | All four managers are covered by translated tests. |
+| supported command spellings `pnpm`, `npm`, `yarn`, `bun` | `PackageManager` | implemented | All four managers named by the source transform's replacement patterns are covered by translated tests. |
 | ordered `<pm> run` replacement | `replace_run_commands` | implemented | Preserves the literal single-space TypeScript pattern and JavaScript-style ASCII word boundaries. |
 | bare `<pm>` replacement with `(?!\s+run)` | `replace_bare_commands` | implemented | Preserves subcommands and the JavaScript whitespace exclusion before `run`. |
 | inline code and triple-backtick fenced regions | `next_code_region` | implemented | Region precedence, multiple regions, language identifiers, and prose isolation are tested. |
@@ -17,6 +17,7 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | replacement decoding of malformed UTF-8 | strict UTF-8 validation | intentional-deviation | Invalid bytes are not silently rewritten. See CT-RS-002. |
 | symlink following | no-follow and Unix identity checks | intentional-deviation | Outside targets are not modified. See CT-RS-003. |
 | in-place truncating write | synchronized sibling temporary write and replacement | intentional-deviation | Reduces partial-write corruption. See CT-RS-004. |
+| shared `PackageManager` type also admits `nub` and `aube` | README transform enum currently models only four source replacement spellings | partial | The TypeScript regex intentionally scans only the four real package-manager command spellings while its target type is wider. Differential tests must decide the exact `nub`/`aube` target behavior before production binding. |
 | public JavaScript `TransformError` mapping | internal typed Rust errors | partial | The production binding must map errors to the established public class and fatality metadata. |
 | Windows replacement/metadata contract | remove-then-rename fallback | blocked | Atomic replacement and ACL/ownership policy remain required. |
 
@@ -51,7 +52,7 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | JavaScript string-only root | `Path`/`PathBuf` root and cwd | intentional-deviation | Unix non-UTF-8 paths remain lossless. See CT-RS-012. |
 | actual `spawnSync("git"/"hg")` execution | `VcsRunner` trait only | blocked | Production provider must prove executable resolution, environment/config isolation, no shell, deadlines, bounded output, and descendant cleanup. See CT-RS-013. |
 | recursive `rmSync(root/.git)` | `GitDirectoryCleaner` trait only | blocked | Production provider must prove no-follow, root identity, repository ownership, bounded traversal, and Windows reparse-point behavior. See CT-RS-014. |
-| inherited Git templates/config/hooks | no provider yet | blocked | Git init can copy configured templates and Git commit can execute configured hooks; production execution must isolate or explicitly approve this behavior. |
+| inherited Git templates/config/hooks | no provider yet | blocked | Git init can copy configured templates and Git commit can execute commit-related hooks; production execution must isolate or explicitly approve this behavior. |
 
 ## Default-example routing tranche
 
@@ -65,9 +66,26 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | large untrusted example name | no allocation and two literal comparisons | intentional-hardening | Rust borrows the input and does not construct a set, normalized copy, or regex. See CT-RS-016. |
 | use inside `create` acquisition orchestration | TypeScript caller remains | partial | Rust predicate is not yet bound into the production command path. |
 
+## Package-manager transform tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| transform metadata name `package-manager` | `PACKAGE_MANAGER_TRANSFORM_NAME` | implemented | Exact response name is covered in no-op and success tests. |
+| package-manager union `yarn`, `npm`, `pnpm`, `bun`, `nub`, `aube` | `WorkspacePackageManager` | implemented core | All six repository variants and exact string spellings are translated. |
+| no selected manager | `selection: None` | implemented | Returns `not-applicable` and never invokes the converter. |
+| selected manager equals project manager | enum equality | implemented | Returns `not-applicable` and never invokes the converter, regardless of supplied version text. |
+| selected manager differs | `PackageManagerConverter::convert` | implemented core | Exactly one typed conversion request is issued, and success is returned only after the provider succeeds. |
+| `root: project.paths.root` | borrowed `&Path` in `PackageManagerConversion` | implemented | Root bytes are preserved, including non-UTF-8 Unix paths; the orchestration core performs no lossy conversion. |
+| `to: packageManager.name` | closed `WorkspacePackageManager` enum | implemented | No free-form executable, package spec, or command text crosses the provider boundary. |
+| `options: { skipInstall: true }` | `skip_install: true` | implemented | Exact source option is asserted for every manager target. |
+| prompt `version` exists but source transform does not forward it | `PackageManagerSelection.version` borrowed but omitted from conversion | implemented | Large or control-containing version values are not copied, logged, or passed to the mutation provider. See CT-RS-018. |
+| `convert` rejection | provider error propagation | implemented | The Rust core does not synthesize a success response after a converter error. |
+| `@turbo/workspaces.convert` cleanup/create/package metadata/lockfile mutation | production `PackageManagerConverter` | blocked | Requires translated manager-specific tests, atomicity or rollback, no-follow filesystem handling, bounded process execution, and platform closure. See CT-RS-017. |
+| TypeScript transform's untyped broad side effects | explicit mutation provider boundary | intentional-hardening | The reviewed core cannot execute a process or mutate a file directly. |
+
 ## Existing TypeScript test mapping
 
-| TypeScript test group | Rust test coverage | Status |
+| TypeScript test or source contract | Rust test coverage | Status |
 | --- | --- | --- |
 | README compound/bare replacements | README parity tests | implemented |
 | README subcommand preservation, prose isolation, fenced/inline regions, identity, `npx` | README parity tests | implemented |
@@ -78,6 +96,8 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | Git initialization root/cleanup regressions absent from the TypeScript suite | seven Git initialization security tests | intentional-deviation evidence |
 | `isDefaultExample` source contract without direct Jest coverage | six translated parity tests | implemented and stronger than the source suite |
 | default-route confusable/prefix/control/large-input regressions | five robustness/security tests | intentional-hardening evidence |
+| package-manager transform source contract without focused direct Jest coverage | seven translated parity tests | implemented core |
+| package-manager version/path/provider-boundary regressions | four security tests | intentional-hardening evidence |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -91,7 +111,8 @@ Status values are `implemented`, `intentional-deviation`, `partial`, `blocked`, 
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |
 | `official-starter` transform | not-implemented | Translate package/workspace mutations with deterministic JSON ordering. |
-| package-manager transform | not-implemented | Preserve lockfile and package-manager metadata behavior. |
+| package-manager transform | implemented orchestration core, provider blocked | Port and prove manager-specific conversion, package/lockfile mutation, rollback, process, and platform behavior. |
+| README target behavior for `nub`/`aube` | partial | Preserve the source's four-spelling scan while proving the wider target type through differential fixtures. |
 | telemetry integration | partial | The package telemetry Rust core is consolidated; bind it without retaining business logic in TypeScript. |
 | npm/native packaging | blocked | Build, sign, publish, select, and roll back Rust binaries on every supported platform. |
 | TypeScript removal | blocked | Migrate every downstream caller and prove the old runtime is neither loaded nor shipped. |

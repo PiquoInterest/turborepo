@@ -55,7 +55,7 @@ Rust escapes terminal controls and Unicode directionality controls and bounds ea
 
 Rust limits input to 4 MiB, scans linearly, rejects malformed UTF-8 and symlinked roots/files, checks Unix file identity, writes through a synchronized sibling temporary file, preserves mode bits, and replaces only after revalidation.
 
-Windows atomic replacement, complete metadata/ACL preservation, and descriptor-relative concurrent-path handling remain open.
+Windows atomic replacement, complete metadata/ACL preservation, descriptor-relative concurrent-path handling, and differential behavior for the shared `nub`/`aube` target type remain open.
 
 ### RF-007: `.gitignore` check/write race and broken-link following
 
@@ -149,12 +149,32 @@ The Rust core exports the exact source-order values `basic` and `default` and ma
 
 Required closure is to bind the Rust predicate into production acquisition orchestration and run shared TypeScript/Rust routing fixtures before the TypeScript helper is removed.
 
+### RF-014: Package-manager conversion lacks a proven multi-file transaction and rollback contract
+
+**Status:** Production cutover blocked; only the decision/request core is implemented.
+
+The TypeScript `package-manager` transform delegates to `@turbo/workspaces.convert`, whose reviewed flow performs manager-specific cleanup and creation and updates package metadata and manager-owned lock/configuration files across multiple steps. No single shared atomic commit or complete repository rollback contract is evident in that orchestration. A failure after an early mutation can therefore leave a partially converted workspace unless each adapter closes every recovery path.
+
+The Rust `create-turbo` core narrows this boundary:
+
+- absent or unchanged manager selections cannot invoke mutation;
+- all six repository manager names are closed enum variants;
+- changed selections produce exactly one typed request with a borrowed root and `skip_install: true`;
+- prompt version text is not copied, logged, or forwarded, matching the source transform;
+- provider errors propagate and cannot become success;
+- no filesystem operation, process execution, or free-form command exists in the reviewed core.
+
+Required closure is a production `PackageManagerConverter` with translated manager-specific tests, the complete source/target matrix, path containment and no-follow behavior, bounded parsing and process execution, safe executable resolution, atomic staging or a complete rollback journal, deterministic errors, and Linux/macOS/Windows differential fixtures.
+
+Regression coverage is in `packages/create-turbo/rust/tests/package_manager_transform_parity.rs` and `package_manager_transform_security.rs`.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
 
 - keep lockfile-wide RustSec auditing enabled and remove every temporary exception after remediation;
 - resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
+- close the package-manager conversion transaction, rollback, and supported-platform contract;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;

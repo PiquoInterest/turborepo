@@ -10,10 +10,10 @@ The migration program currently contains these Rust migration cores on the singl
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 32 translated parity tests and 26 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, and default-example routing.
+- `packages/create-turbo/rust`: 39 translated parity tests and 30 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, and package-manager transform orchestration.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **218 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
+That is **229 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -34,7 +34,7 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **69%**. Across the complete repository production program it remains about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **70%**. Across the complete repository production program it remains about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
 
 This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
@@ -60,10 +60,10 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
 | `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
-| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, and exact default-example routing cores are ported. CLI, prompts, discovery/acquisition, production VCS providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
+| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, default-example routing, and package-manager decision/request cores are ported. CLI, prompts, discovery/acquisition, production VCS and converter providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
-| `packages/turbo-workspaces` | Rust CLI/library | Queued | Package-manager adapters and lock/workspace mutation semantics. |
+| `packages/turbo-workspaces` | Rust CLI/library | Queued and partially exposed through provider boundary | Package-manager adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, and packaging. |
 | `packages/turbo-telemetry` | existing telemetry Rust crate plus package contract | In progress | Package event core is consolidated. Consent/config persistence, production binding, transport integration, caller cutover, and removal proof remain. |
 | ESLint plugin/config | Rust/WASM rule core with minimal JS adapter | Host-bound | Preserve ESLint node/range/fix semantics and package compatibility. |
 | VS Code and language-tool adapters | Rust LSP plus minimal extension bootstrap | Host-bound | Move business logic to Rust while retaining host-required JavaScript only. |
@@ -87,7 +87,7 @@ Security closure in the Rust core:
 - synchronized sibling temporary writes and permission preservation;
 - ordinary failure cleanup.
 
-Windows atomic replacement and complete metadata/ACL preservation remain blockers.
+The shared source target type also admits the repository's `nub` and `aube` test managers while the replacement regex scans only four real command spellings. That wider target behavior remains a differential-test gap. Windows atomic replacement and complete metadata/ACL preservation also remain blockers.
 
 ### `.gitignore` transform
 
@@ -122,6 +122,20 @@ The Rust predicate preserves the exported source-order values `basic` and `defau
 
 This closes the pure routing core but not the production route. The TypeScript `create` command still owns acquisition orchestration, so binding and shared differential fixtures remain required.
 
+### Package-manager transform orchestration
+
+The Rust core preserves the source no-op and conversion-request behavior behind `PackageManagerConverter`:
+
+- absent selection and unchanged manager return `not-applicable` without mutation;
+- all six repository manager variants are represented by a closed enum;
+- changed manager issues exactly one request with the borrowed root, target enum, and `skip_install: true`;
+- the optional prompt version is deliberately not forwarded, matching the source transform;
+- provider errors propagate and cannot become success;
+- non-UTF-8 Unix roots remain lossless;
+- no filesystem or process effect exists in the reviewed orchestration core.
+
+The production converter remains blocked. The TypeScript `@turbo/workspaces.convert` path performs manager-specific cleanup, creation, package metadata, lockfile, and configuration mutation across multiple steps without a proven shared atomic transaction. Rust cutover requires a complete six-manager source/target matrix, failure injection, atomic promotion or rollback, no-follow filesystem handling, bounded process behavior, exact errors, and Linux/macOS/Windows differential tests.
+
 TDD history:
 
 - README RED: `a0930bc5bd0eee5bc7c6edf09daf8caf38875781`.
@@ -133,6 +147,8 @@ TDD history:
 - Git implementation: `1d7b485d597b70f40bb4aa492f45d1c0638f844e`.
 - default-example RED: `edc3b96b106e2c0bebaee299690c7769f9ba6bc2`.
 - default-example implementation: `57f19c56209312fb2d04423fdd86ad239150a753`.
+- package-manager transform RED: `9f9b33f889d92e5b61a484ac445b4e297110f6f0`.
+- package-manager transform implementation: `c7a1776c5f6fa53db4e30d418a9897b56c6263cd`.
 
 ## Current `turbo-utils` tranche
 
