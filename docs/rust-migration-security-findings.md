@@ -8,6 +8,7 @@ This index is evidence-based but not exhaustive. A component is not considered a
 
 - [`packages/turbo-ignore/rust/SECURITY.md`](../packages/turbo-ignore/rust/SECURITY.md)
 - [`packages/turbo-utils/rust/SECURITY.md`](../packages/turbo-utils/rust/SECURITY.md)
+- [`packages/create-turbo/rust/SECURITY.md`](../packages/create-turbo/rust/SECURITY.md)
 
 ## Repository findings
 
@@ -70,6 +71,16 @@ The detailed instances and regression names are recorded in the package security
 The TypeScript update notification renders package names, upgrade commands, and debug error values without a uniform control-character or length policy. The Rust core escapes terminal controls and Unicode directionality controls and bounds each untrusted field. Safe printable values retain the same message ordering and exit behavior.
 
 Production risk remains until the Rust notification core is bound into the affected CLIs and the TypeScript path is removed.
+
+### RF-006: README transforms follow links, process unbounded content, and write in place
+
+**Status:** Fixed in the `create-turbo` Rust transform core; TypeScript production path remains.
+
+The TypeScript `update-commands-in-readme` transform reads the entire README without an explicit size limit, follows symlinked roots and files, decodes malformed UTF-8 with replacement behavior, and writes directly to the original path. In attacker-influenced project trees, those behaviors create denial-of-service, external-file overwrite, silent byte-corruption, and partial-write risks.
+
+The Rust tranche limits input to 4 MiB, performs a linear scan, rejects malformed UTF-8 and symlinked roots/files, checks file identity on Unix, writes to a newly created same-directory temporary file, preserves Unix mode bits, and replaces the original only after revalidation. Security differences are covered by regression tests and recorded in `packages/create-turbo/rust/SECURITY.md` and `PARITY_MATRIX.md`.
+
+Windows atomic replacement plus ACL, ownership, extended-attribute, and complete concurrent-path handling remain open cutover requirements.
 
 ## Required repository gates
 

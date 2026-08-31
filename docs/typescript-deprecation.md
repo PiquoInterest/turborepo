@@ -6,12 +6,13 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 
 ## Current progress
 
-The integration branch currently contains two workspace-registered Rust migration cores:
+The migration program currently contains three workspace-registered Rust migration cores:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests. Covered surfaces include case conversion, upward/root/config discovery, folder and directory validation, writability, package-manager discovery, `createProject` orchestration, update notifications, archive entry policy, and GitHub token/proxy selection.
+- `packages/create-turbo/rust`: 12 translated parity tests and 9 security regression tests for the `update-commands-in-readme` transform.
 
-That is 144 authored Rust tests. Neither TypeScript package is removed yet because safe-input differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open. Migration CI auto-discovers package-local Rust migration crates, requires their evidence documents and dated advisory records, then compiles, tests, lints, and audits the resolved Rust dependency graph.
+That is 165 authored Rust tests on this migration branch. No TypeScript package is removed yet because safe-input differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open. Migration CI auto-discovers package-local Rust migration crates, requires their evidence documents and dated advisory records, then compiles, tests, lints, and audits the resolved Rust dependency graph.
 
 The mandatory workflow is recorded in `AGENTS.md`: every tranche must use TDD and differential tests, perform a current authoritative advisory lookup, and update its `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, and this ledger in the same change. Repository-level findings are indexed in [`rust-migration-security-findings.md`](./rust-migration-security-findings.md).
 
@@ -35,7 +36,7 @@ Tests, declarations, build metadata, and host adapters are tracked separately fr
 | Core `turbo` engine and CLI | Predominantly Rust | Existing Rust crates | Existing | Continue removing legacy wrappers and keep compatibility tests. |
 | `packages/turbo-ignore` decision engine | TypeScript | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS. |
 | `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Implement and differentially test request execution, GitHub repository resolution, network/archive extraction, and registry update checking; port remaining template/example utilities; close Windows ACL/process/shim gaps; add bindings and migrate callers. |
-| `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. Reuse reviewed `turbo-utils-rs` providers. |
+| `packages/create-turbo` | TypeScript CLI | `packages/create-turbo/rust` | In progress | README command rewriting is ported. Preserve CLI parsing, prompts, templates, package-manager behavior, Git behavior, remaining transforms, network/filesystem failures, telemetry binding, packaging, and downstream cutover. Reuse reviewed `turbo-utils-rs` providers. |
 | `packages/turbo-gen` | TypeScript CLI | Rust CLI | Queued | Preserve generator discovery, prompts, template rendering, and workspace mutations. |
 | `packages/turbo-codemod` | TypeScript CLI | Rust CLI | Queued | Port transformations with golden fixtures and idempotence tests. |
 | `packages/turbo-workspaces` | TypeScript CLI/library | Rust CLI/library | Queued | Preserve package-manager adapters and lock/workspace mutation semantics. |
@@ -45,6 +46,26 @@ Tests, declarations, build metadata, and host adapters are tracked separately fr
 | Factory/web UI and `.tsx` surfaces | TypeScript/React | Rust/WASM only where justified | Host-bound | Define browser/WASM architecture and DOM bindings before deprecation. |
 | Test-only TypeScript fixtures | TypeScript | Rust tests or retained cross-language oracle | Later | Remove only after every migrated component has equivalent coverage. |
 | npm/native publishing wrappers | JavaScript/TypeScript | Generated platform loaders and signed Rust binaries | Queued | Preserve package names, install behavior, platform selection, provenance, and rollback. |
+
+## Current `create-turbo` tranche
+
+The `update-commands-in-readme` transform is now represented by a package-local Rust crate. The pure transformer preserves the TypeScript alternation order for triple-backtick fences and inline code spans, then performs the same two ordered command substitutions for `pnpm`, `npm`, `yarn`, and `bun`. Prose and `npx` remain untouched.
+
+The filesystem wrapper intentionally tightens unsafe TypeScript behavior:
+
+- README reads are limited to 4 MiB and processed with a linear scanner;
+- malformed UTF-8 is rejected without rewriting bytes;
+- symlinked roots and README files are rejected;
+- Unix builds compare file identity before replacement;
+- writes use a same-directory newly created temporary file and preserve Unix mode bits;
+- ordinary failure paths leave the original file unchanged and remove temporary files.
+
+Windows atomic replacement and metadata/ACL preservation are not closed and therefore block production cutover. The TypeScript implementation remains the production oracle and entry point.
+
+TDD history:
+
+- README command transform RED contract: `a0930bc5bd0eee5bc7c6edf09daf8caf38875781`.
+- Lockfile-only bootstrap commit: `ba93b4772e15fa1211bc7b70ae5eb1f223d66e67`.
 
 ## Current `turbo-utils` tranche
 
