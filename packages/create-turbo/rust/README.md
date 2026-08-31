@@ -12,6 +12,11 @@ Current Rust tranches cover:
 6. the dependency-injected `official-starter` transform orchestration contract.
 7. the fixed-order transform-pipeline and fatal/nonfatal error-control contract.
 8. the package-manager prompt resolution and installed-choice ordering contract.
+9. the create-command error classification and terminal-safe display policy.
+10. the create-command package-install decision and unavailable-manager warning policy.
+11. the bounded terminal renderer for workspace summaries, success text, and get-started output.
+12. the package-manager installation profile and no-shell/no-local-executable invocation policy.
+13. the project-directory argument/prompt decision and fail-closed validator boundary.
 
 The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
 
@@ -112,14 +117,64 @@ Logging, telemetry, async adaptation, `process.exit(1)` mapping, and public Java
 
 Discovery and terminal UI remain behind typed providers. Exact string casting, truthiness, disabled-choice validation, and remaining platform/UI differences are recorded in [`PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`](./PACKAGE_MANAGER_PROMPT_DIVERGENCES.md).
 
+### Create-command error policy core
+
+- preserves transform, conversion, download, and unknown-error classification;
+- preserves safe printable output order and exit-code decisions;
+- returns typed `Continue`, `Exit(1)`, or `Rethrow` actions instead of terminating inside the core;
+- escapes terminal controls, directionality and invisible format controls;
+- bounds error messages to 4096 UTF-8 bytes and labels to 256 UTF-8 bytes;
+- never renders unknown errors.
+
+Exact differences and binding blockers are in [`CREATE_ERROR_POLICY_DIVERGENCES.md`](./CREATE_ERROR_POLICY_DIVERGENCES.md).
+
+### Create installation and warning policy core
+
+- chooses the source manager when transforms are skipped or no selected manager exists;
+- preserves resolution order, `skipInstall`, missing-package, unavailable-source, and empty-version behavior;
+- issues at most one noninteractive install request and propagates provider errors;
+- snapshots availability once to remove a mutable-provider time-of-check/time-of-use ambiguity;
+- returns structured warning data and renders bounded terminal-safe warning lines.
+
+Exact differences are in [`CREATE_INSTALL_POLICY_DIVERGENCES.md`](./CREATE_INSTALL_POLICY_DIVERGENCES.md).
+
+### Create output policy core
+
+- preserves safe workspace heading/item, success, and get-started text;
+- accepts already-derived ordered workspace records and closed script variants;
+- escapes terminal-active project, path, workspace, and description fields;
+- bounds fields and lines and caps workspace/script counts.
+
+Path-relative, grouping, locale ordering, coloring, and host emission remain binding work. See [`CREATE_OUTPUT_POLICY_DIVERGENCES.md`](./CREATE_OUTPUT_POLICY_DIVERGENCES.md).
+
+### Package-manager installation profile core
+
+- preserves all eight source profiles and source-order/default selection;
+- keeps Node-semver matching behind a provider boundary;
+- represents programs as the closed six-manager enum and arguments as static slices;
+- forbids project-local executable preference and shell execution on every platform;
+- always ignores standard input.
+
+The production runner remains blocked on canonical executable resolution, environment isolation, deadlines, bounded output, descendant cleanup, Windows shims, and platform differentials. See [`PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md`](./PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md).
+
+### Project-directory prompt core
+
+- preserves direct-argument versus prompt selection, message/default text, and display-only ECMAScript trimming;
+- preserves the raw accepted answer for validation;
+- rejects inputs over 4096 UTF-8 bytes and terminal-active or invisible control text before providers;
+- represents validator rejection as an error, preventing the confirmed TypeScript fail-open path;
+- keeps terminal and filesystem authority behind typed providers.
+
+The repaired TypeScript caller now checks validation, but production Rust prompting and handle-relative filesystem validation remain blocked. See [`DIRECTORY_PROMPT_DIVERGENCES.md`](./DIRECTORY_PROMPT_DIVERGENCES.md).
+
 ## Not yet implemented in Rust
 
-- production package-manager discovery and interactive prompt providers, including cancellation and non-TTY behavior;
+- production directory and package-manager prompt providers, including bounded input, cancellation, EOF, signals, and non-TTY behavior;
 - example discovery and secure network/archive acquisition;
-- production package-manager workspace conversion and installation orchestration;
+- production package-manager workspace conversion plus the no-shell installation runner and Node-semver-compatible matcher;
 - production Git/Hg process execution and `.git` cleanup providers;
 - production filesystem/JSON provider for the `official-starter` transform, including deterministic JSON ordering and atomic no-follow writes;
-- transform-pipeline async binding, terminal-safe logging, telemetry, fatal-exit handling, and public `TransformError` mapping;
+- transform-pipeline, create-error, install-warning, and final-output host binding, including terminal emission, telemetry, cleanup-before-exit, and public error mapping;
 - the remaining source transforms;
 - telemetry binding into the production command path;
 - native/JavaScript host boundary and npm packaging;
@@ -127,7 +182,7 @@ Discovery and terminal UI remain behind typed providers. Exact string casting, t
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation. `create_error_policy` owns typed error classification and bounded display fields. `create_install_policy` owns package-install selection and warning data. `create_output_policy` owns bounded final terminal lines. `package_manager_install_policy` owns static profile selection and no-shell/no-local invocation metadata. `directory_prompt` owns argument/prompt selection, input policy, and typed validator propagation.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -159,6 +214,19 @@ Pipeline RED:            9d6426ae91f810e093466817ff581f7bc7a5d9cc
 Pipeline GREEN:          7b208824412f008a942567faa5e37740948a541e
 Package prompt RED:      36b49a6cfad94bab8487dda62871b60c99a84115
 Package prompt GREEN:    4f00ff3ebe627acb5a15ead535f27d623d8a9a2c
+Create error RED:       ae46b703826d866d21b5acd64fd681c0d9313e10
+Create error GREEN:     de9be3378d3eba70ffd105bdc9692f60c6b9cc48
+Install policy RED:     ff359432f3b91d1f164c68ed0270d62ec8b15f42
+Install policy GREEN:   02eb3f5ba3a8733cf27c5377aaca3fae1ad09f2a
+Install warning RED:    39a4ed083dcb021f673d51b599cf58bc7878e7a2
+Install warning GREEN:  9423b807e72883f30c3e6bbf83fa918d2d846e34
+Create output RED:      68f5ddf67e95b41cf45623a8ada402f9a6a1cd57
+Create output GREEN:    f1ea07ef8404321a85fd0091cd612ba64779ef62
+Install profiles RED:   b858e98565eb0415c6ab85bb120220529b9a981b
+Install profiles GREEN: a200c283e0cfb17bec0cb3422b44cdfaa3f7c60c
+Directory prompt RED:   11131d1fc01536c151bdda04ba39fdc4aec5779a
+Directory prompt GREEN: e0d5663e51c084f4f25051270ed9bb494df1b21a
+Directory consolidation: 3ac9a5c4864602372d1b88f8e39986c700d52508
 ```
 
 Focused validation:
@@ -171,7 +239,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 73 translated parity tests and 51 security regression tests, for 124 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
+The crate contains 116 translated parity tests and 92 security regression tests, for 208 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
 
 ## Production status
 

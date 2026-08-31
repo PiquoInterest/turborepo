@@ -198,6 +198,48 @@ The TypeScript prompt casts free-form manager text before indexing discovered ve
 
 Production closure requires canonical no-shell discovery with bounded process handling, exact interactive cancellation/non-TTY/signal behavior, terminal-safe rendering, supported-platform differentials, host binding, and TypeScript removal proof. Regression evidence is in the package-manager prompt parity/security tests and `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
 
+### RF-018: Invalid direct project directories could continue after validator rejection
+
+**Status:** Repaired in TypeScript and represented fail-closed in the Rust core; production Rust providers remain blocked.
+
+The original direct-argument path returned a validation object whose `valid: false` result was ignored by the create caller. The repaired TypeScript caller maps this to a trusted known input error, while Rust uses `Result` so rejection cannot be destructured as success.
+
+### RF-019: Create-command error, warning, and final output accept terminal-active untrusted text
+
+**Status:** Fixed in Rust policy/rendering cores; TypeScript production output remains.
+
+Rust escapes terminal, line, directionality, and invisible format controls, applies explicit UTF-8 and record-count limits, and never renders unknown errors. Production bindings must emit only these reviewed strings, apply coloring afterwards, and prove there is no second raw-output path.
+
+### RF-020: Package installation permits project-local substitution and Windows shell mediation
+
+**Status:** Fixed in typed Rust invocation policy; production runner blocked.
+
+The current TypeScript installer uses `preferLocal: true` and `shell: true` on Windows. Rust profile metadata forbids both and uses closed manager/program identities plus static arguments. Canonical executable resolution, environment isolation, deadlines, bounded output, descendant cleanup, and Windows shim behavior remain provider requirements.
+
+### RF-021: Directory allow-listing ignores file type and can alias non-UTF-8 names
+
+**Status:** Fixed in the Rust directory provider; TypeScript production path remains.
+
+Rust treats every symlink entry as a conflict, including allow-listed names, and rejects non-UTF-8 names rather than applying lossy conversion before suffix/allow-list decisions.
+
+### RF-022: Directory validation misses option-like basenames and symlinked ancestors
+
+**Status:** Fixed for stable existing paths in Rust; handle-relative production closure remains blocked.
+
+Rust validates the basename itself and inspects existing path components for symlinks before enumeration. Portable path checks remain raceable and may be conservative on symlink-aliased system paths, so supported-platform differential tests plus Unix directory handles and Windows reparse-point-aware handles are required.
+
+### RF-023: Directory enumeration and conflict collection are unbounded
+
+**Status:** Fixed in Rust with a 256-entry fail-closed limit; TypeScript production path remains.
+
+The Rust validator stops before building an unbounded conflict collection and converts inspection overflow into an invalid-directory result.
+
+### RF-024: Project-directory prompt input is unbounded and can contain invisible terminal controls
+
+**Status:** Fixed in the Rust decision core and partially repaired TypeScript boundary; production prompt provider blocked.
+
+Rust rejects input over 4096 UTF-8 bytes and rejects C0/C1, line separators, bidi controls, zero-width and related format controls before terminal or filesystem providers. The production prompt must enforce the limit while reading and preserve cancellation, EOF, signals, and non-TTY behavior.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
@@ -208,6 +250,7 @@ Before declaring repository-wide TypeScript deprecation complete:
 - close the official-starter bounded JSON, truthiness, no-follow identity, deterministic ordering, atomic publication, and supported-platform provider contract;
 - close the transform-pipeline async binding, telemetry, terminal-safe logging, cleanup-before-exit, runtime typing, and supported-platform differential contract;
 - close the package-manager discovery and prompt provider contract, including canonical execution, cancellation, non-TTY/signals, terminal-safe UI, and supported-platform differentials;
+- close project-directory prompting and validation with bounded reads, trusted diagnostics, stable Unix directory handles, Windows reparse-point-aware handles, atomic/private staging, and platform differentials;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;

@@ -137,6 +137,63 @@ Detailed differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
 
 Detailed differences are in `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
 
+## Create-command error policy tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| transform, conversion, download, and unknown errors | closed typed classification | implemented core | Safe-input action and display order are translated. |
+| immediate fatal `process.exit(1)` | typed `Exit(1)` | intentional-hardening | Allows cleanup and telemetry flush before termination. |
+| raw unbounded terminal error text | bounded control-safe display fields | intentional-hardening | Unknown errors are never rendered. |
+| logging, telemetry, stack/class identity, and termination | production host binding | blocked | Must consume sanitized fields only and prove exactly-once effects. |
+
+Detailed differences are in `CREATE_ERROR_POLICY_DIVERGENCES.md`.
+
+## Create installation and warning tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| source/selected manager resolution and install gates | `apply_create_install_policy` | implemented core | Preserves ordering, skip, warning, and noninteractive install behavior. |
+| repeated mutable availability lookup | one borrowed snapshot | intentional-hardening | Removes a time-of-check/time-of-use ambiguity for unstable providers. |
+| raw example name in warning output | bounded terminal-safe renderer | intentional-hardening | Safe wording is preserved; hostile controls and large text are escaped/truncated. |
+| real installation and logger effects | typed providers/host binding | blocked | Requires secure runner, exact errors, and supported-platform differentials. |
+
+Detailed differences are in `CREATE_INSTALL_POLICY_DIVERGENCES.md`.
+
+## Create output rendering tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| workspace summary, success, and get-started safe text | pure line renderers | implemented core | Exact safe headings/items and fixed text are translated. |
+| raw project/workspace/path/description fields | bounded terminal-safe fields | intentional-hardening | Prevents line forging, OSC/BEL, bidi, and invisible-control spoofing. |
+| unbounded workspaces and scripts | 256 workspace and 64 script limits | intentional-hardening | Emits an explicit truncation record. |
+| path-relative/group/locale derivation and coloring | host binding | blocked | Requires Linux/macOS/Windows differential fixtures and no raw logger bypass. |
+
+Detailed differences are in `CREATE_OUTPUT_POLICY_DIVERGENCES.md`.
+
+## Package-manager installation profile tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| eight source profiles and order/default selection | static profile tables | implemented core | All six managers and eight profiles are translated. |
+| `semver.satisfies` | injected matcher | partial | Production binding must prove Node-semver behavior. |
+| `preferLocal: true` | `prefer_local: false` | intentional-hardening | Blocks generated-project executable substitution. |
+| Windows `shell: true` | `shell: false` | intentional-hardening | Requires an explicit safe Windows shim adapter or typed unsupported result. |
+| process execution | typed invocation metadata only | blocked | Needs canonical resolution, environment policy, deadlines, output bounds, and tree cleanup. |
+
+Detailed differences are in `PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md`.
+
+## Project-directory prompt tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| direct non-empty argument bypasses prompt without trimming | exact `Option<&str>` branch | implemented core | Preserves JavaScript truthiness for the empty-string case. |
+| prompt message/default and display-only trim | typed prompt request | implemented core | Raw accepted answer is validated unchanged. |
+| invalid direct result returned and ignored by caller | typed validator rejection | fixed in Rust and repaired TypeScript | Prevents acquisition against a validator-rejected path. |
+| unbounded/control-bearing path input | 4096-byte and terminal-active-text rejection | intentional-hardening | Rejected values are not reflected in public core errors. |
+| terminal and filesystem behavior | production `DirectoryPrompter`/`DirectoryValidator` | blocked | Needs bounded reading, cancellation, stable handles, Windows reparse-point behavior, and platform differentials. |
+
+Detailed differences are in `DIRECTORY_PROMPT_DIVERGENCES.md`.
+
 ## Existing TypeScript test mapping
 
 | TypeScript test or source contract | Rust test coverage | Status |
@@ -158,6 +215,11 @@ Detailed differences are in `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
 | fixed-pipeline/error-boundary regressions | seven security tests | intentional-hardening evidence |
 | package-manager prompt source contract | eight translated parity tests | implemented core |
 | manager-cast, disabled-choice, confusable, and bound regressions | five security tests | intentional-hardening evidence |
+| create-command error routing and terminal bounds | seven parity and eight security tests | implemented core and intentional-hardening evidence |
+| create install decision and warning rendering | fourteen parity and thirteen security tests | implemented core and intentional-hardening evidence |
+| final create output rendering | six parity and six security tests | implemented core and intentional-hardening evidence |
+| package-manager installation profiles | eight parity and five security tests | implemented core and intentional-hardening evidence |
+| directory argument/prompt/validator behavior | eight parity and nine security tests plus TypeScript regressions | implemented core, repaired oracle, providers blocked |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces

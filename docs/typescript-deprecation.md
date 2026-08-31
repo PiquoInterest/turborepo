@@ -9,11 +9,11 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 The migration program currently contains these Rust migration cores on the single `rust/typescript-deprecation` integration branch:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
-- `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 73 translated parity tests and 51 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, package-manager prompt/transform and official-starter orchestration, and transform-pipeline control flow.
+- `packages/turbo-utils/rust`: 70 translated parity tests and 41 security regression tests.
+- `packages/create-turbo/rust`: 116 translated parity tests and 92 security regression tests across README/`.gitignore`, Git, default/official routing, transform and prompt policy, error/install/output policy, installation profiles, and project-directory selection.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **284 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
+That is **373 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The consolidated directory and provider-hardening tranches are not treated as reviewable until their merge-head workflow formats, compiles, tests, lints, and audits them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -34,7 +34,7 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The official-starter tranche advances create-turbo core and test evidence without completing a new production stage, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the evidence-weighted estimate is now about **75%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The official-starter tranche advances create-turbo core and test evidence without completing a new production stage, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the recalculated evidence-weighted estimate is about **78%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
 
 This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
@@ -59,8 +59,8 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | --- | --- | --- | --- |
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
-| `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
-| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, default-example routing, package-manager decision/request, and official-starter orchestration cores are ported. CLI, prompts, discovery/acquisition, production VCS/converter/JSON providers, transform binding, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
+| `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Stable handle-relative directory validation/mutation, production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
+| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README/`.gitignore`, Git, default/official routing, transform/prompt, error/install/output, installation-profile, and directory-selection cores are ported. Production prompt/filesystem/VCS/converter/JSON/process providers, bindings, telemetry, packaging, callers, platform differentials, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
 | `packages/turbo-workspaces` | Rust CLI/library | Queued and partially exposed through provider boundary | Package-manager adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, and packaging. |
@@ -151,6 +151,20 @@ The Rust core ports the exact fixed transform order, skip behavior, JavaScript s
 
 The async JavaScript binding remains blocked until it proves exact argument forwarding, exactly-once telemetry, terminal-safe error display, cleanup and flush before fatal exit code 1, strict runtime metadata typing, unknown-error propagation, supported-platform differentials, and removal proof. The full divergence ledger is `packages/create-turbo/rust/TRANSFORM_PIPELINE_DIVERGENCES.md`.
 
+### Create-command error, installation, and output policies
+
+The consolidated Rust policies preserve safe create-command error classification, package-install selection, unavailable-manager wording, workspace summaries, success text, and get-started instructions. They intentionally return typed actions and bounded rendered strings rather than logging or terminating inside the core.
+
+Security closure includes terminal-control and directionality escaping, explicit field/line/count bounds, unknown-error non-disclosure, cleanup-before-exit capability, one-shot installer invocation, and a single availability snapshot. Production host bindings must prove exactly-once telemetry and output, error identity, path/group/locale derivation, coloring after sanitization, and no raw logger bypass.
+
+### Package-manager installation profiles
+
+The Rust core preserves all eight npm/pnpm/yarn/bun/nub/aube profiles while forbidding project-local executable preference and shell execution. Node-semver matching and real execution remain provider-owned. Production closure requires canonical executables, environment policy, deadlines, output bounds, descendant cleanup, Windows shim handling, and platform differentials.
+
+### Project-directory selection
+
+The Rust core preserves direct-argument versus prompt behavior, exact prompt metadata, and display-only trimming while validating the raw answer. It fixes the confirmed TypeScript fail-open path by making validator rejection typed, rejects terminal-active or oversized input before providers, and keeps raw rejected values out of public core errors. The TypeScript caller is repaired, but production Rust prompting and stable handle-relative filesystem validation remain blocked.
+
 ### Package-manager transform orchestration
 
 The Rust core preserves the source no-op and conversion-request behavior behind `PackageManagerConverter`:
@@ -183,7 +197,13 @@ TDD history:
 - transform-pipeline RED: `9d6426ae91f810e093466817ff581f7bc7a5d9cc`.
 - transform-pipeline implementation: `7b208824412f008a942567faa5e37740948a541e`.
 - package-manager prompt RED: `36b49a6cfad94bab8487dda62871b60c99a84115`.
-- package-manager prompt implementation: `4f00ff3ebe627acb5a15ead535f27d623d8a9a2c`.
+- package-manager prompt implementation: `4f00ff3ebe627acb5a15ead535f27d623d8a9a2c`;
+- create-error RED/GREEN: `ae46b703826d866d21b5acd64fd681c0d9313e10` / `de9be3378d3eba70ffd105bdc9692f60c6b9cc48`;
+- install-policy RED/GREEN: `ff359432f3b91d1f164c68ed0270d62ec8b15f42` / `02eb3f5ba3a8733cf27c5377aaca3fae1ad09f2a`;
+- create-output RED/GREEN: `68f5ddf67e95b41cf45623a8ada402f9a6a1cd57` / `f1ea07ef8404321a85fd0091cd612ba64779ef62`;
+- install-profile RED/GREEN: `b858e98565eb0415c6ab85bb120220529b9a981b` / `a200c283e0cfb17bec0cb3422b44cdfaa3f7c60c`;
+- directory-prompt RED/GREEN: `11131d1fc01536c151bdda04ba39fdc4aec5779a` / `e0d5663e51c084f4f25051270ed9bb494df1b21a`;
+- directory consolidation merge: `3ac9a5c4864602372d1b88f8e39986c700d52508`.
 
 ## Current `turbo-utils` tranche
 
@@ -198,14 +218,17 @@ Notable intentional fixes include:
 - bounded process output/deadlines in implemented runners;
 - control-safe terminal output;
 - traversal/link/archive-entry rejection;
-- correct handling of safe names such as `..cache` rather than the TypeScript `startsWith("..")` false positive.
+- correct handling of safe names such as `..cache` rather than the TypeScript `startsWith("..")` false positive;
+- rejection of option-like project basenames and existing symlinked path components;
+- symlink-aware allow-listing, strict UTF-8 entry classification, and a 256-entry directory-inspection bound.
 
 TDD history includes:
 
 - project creation RED `0468eda3829e5b1bb98f96b86a7f0817ac542f51`, implementation `b2992a27dbf44c5ab8bc7405dc088236eb53c70e`;
 - notification RED `7a446b29f3e6054a58e891b898d3f8c4f85854ce`, implementation `cabec01820809f34d8f42cf1adbbff50c3307e68`;
 - archive policy RED `5ab1da42327a85e4c026e8531953fb108b56434d`, implementation `bdeb6760d41d5f9d72d2b9fb8042339b55011923`;
-- GitHub policy RED `903d7836a01e6ec47e4df339adc71456b4ecbd0d`, implementation `2e90ea8daa8542aa13cd94ceb981b653756789cb`.
+- GitHub policy RED `903d7836a01e6ec47e4df339adc71456b4ecbd0d`, implementation `2e90ea8daa8542aa13cd94ceb981b653756789cb`;
+- directory-provider RED `53a55eefd92b919824374eb27159ff876e008147`, implementation `c77464a7e6f36813a3b52262e78caa9ee449bb72`, formatting `8ee51022fd84264e0abeee17014802da3afcae20`, and Clippy correction `e47b4994e0d97641c2f976231aa89833aa142913`.
 
 ## Current package telemetry tranche
 

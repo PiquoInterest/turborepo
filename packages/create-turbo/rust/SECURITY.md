@@ -11,6 +11,10 @@ This review covers the current Rust ports of:
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
+- the create-command package-install decision and unavailable-manager warning
+- final create-command terminal output rendering
+- package-manager installation profile selection and invocation policy
+- project-directory argument/prompt selection and validator propagation
 
 It is a tranche review, not a claim that the full `create-turbo` package has been audited or migrated.
 
@@ -27,6 +31,12 @@ The official-starter tranche adds trust boundaries for exact repository classifi
 Package-manager prompting receives free-form CLI text, discovered executable versions, terminal input, cancellation, and non-TTY state. The reviewed Rust core accepts only a closed enum after exact parsing and revalidates every selected manager against a non-empty discovered version. Discovery and UI effects remain provider-owned.
 
 The transform pipeline decides which mutation stages run, whether later stages continue, and whether a failure terminates the command. The Rust core uses a closed four-step enum and typed error classes. It performs no logging, telemetry, process exit, filesystem access, or transform side effect directly.
+
+The create-command error, install-warning, and final-output tranches accept attacker-influenced error, example, path, workspace, and description text at terminal boundaries. Their Rust cores return bounded control-safe strings and typed actions without logging or terminating directly.
+
+Package-manager installation profile selection controls executable identity, arguments, standard input, local executable preference, and shell mediation. The reviewed core produces typed static invocation metadata but does not execute a process.
+
+Project-directory selection accepts CLI text and terminal input before filesystem authority. The Rust core bounds and validates the text and requires validator failure to remain an error; prompting and filesystem inspection stay behind providers.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -299,6 +309,62 @@ The source relies on Inquirer to prevent selection of unavailable managers. A fa
 Actual discovery can execute manager binaries and interactive prompting consumes attacker-controlled terminal state. Production providers must use canonical executables, explicit environment policy, no shell, bounded duration/output, descendant cleanup, terminal-safe rendering, exact cancellation/non-TTY/signal behavior, and supported-platform differential tests.
 
 The decision core adds no dependencies or direct side effects.
+
+### CT-RS-028: Untrusted example names reach unavailable-manager warnings
+
+**Severity:** Medium until production cutover
+
+TypeScript interpolates the example name directly into two warning lines. Rust returns structured warning data and renders the example through bounded terminal-safe fields. Safe wording remains exact; controls, bidi/invisible format text, and oversized input cannot become raw terminal output.
+
+Regression coverage is in `create_install_warning_parity.rs` and `create_install_warning_security.rs`.
+
+### CT-RS-029: Project-local executable substitution during installation
+
+**Severity:** High until TypeScript cutover
+
+The TypeScript installer uses `preferLocal: true`, allowing a generated project to substitute a package-manager-named local executable. Rust installation metadata sets `prefer_local: false`, uses a closed manager enum, and keeps arguments in static profile tables.
+
+A production runner still must prove canonical executable resolution, environment isolation, deadlines, output bounds, descendant cleanup, and platform behavior.
+
+### CT-RS-030: Windows installation uses command-shell mediation
+
+**Severity:** High until TypeScript cutover
+
+The TypeScript installer sets `shell: true` on Windows. Rust sets `shell: false` for every platform. A Windows provider must resolve an approved executable or shim without command-string construction, or return a typed unsupported result.
+
+### CT-RS-031: Generated create output can inject terminal controls
+
+**Severity:** Medium until production cutover
+
+TypeScript sends generated workspace descriptions and path-derived names through terminal coloring without a uniform control policy. Rust sanitizes attacker-influenced fields and complete lines, preserving safe text while escaping terminal, line, bidi, and invisible format controls.
+
+### CT-RS-032: Create output volume is unbounded
+
+**Severity:** Medium until production cutover
+
+Rust caps interpolated fields at 1024 UTF-8 bytes, final lines at 4096 bytes, workspace records at 256, and scripts at 64. TypeScript has no equivalent explicit bounds.
+
+### CT-RS-033: Rejected direct directories could continue into acquisition
+
+**Severity:** High
+
+The original direct-argument path returned `validateDirectory(dir)` even when `valid` was false, and the caller destructured the result without checking `valid`. A malformed, conflicting, or non-directory path could therefore proceed after validator rejection.
+
+The repaired TypeScript caller throws a trusted `InvalidDirectoryError`; Rust represents validator rejection as `Result`, so it cannot be destructured as success. Regression coverage is in `directory-security.test.ts`, `directory_prompt_parity.rs`, and `directory_prompt_security.rs`.
+
+### CT-RS-034: Project-directory input can spoof output or exhaust path work
+
+**Severity:** Medium
+
+Rust rejects directory input over 4096 UTF-8 bytes and rejects C0/C1, ESC/BEL, line separators, bidi overrides/isolates, zero-width and related invisible format controls before providers. Public core errors do not reflect the rejected value.
+
+The production prompt must enforce the bound while reading, not only after submission, and preserve cancellation, EOF, signals, and non-TTY behavior.
+
+### CT-RS-035: Directory validation and later mutation remain a TOCTOU boundary
+
+**Severity:** High until provider closure
+
+The decision core does not own filesystem mutation. A production validator and creator must use stable directory handles or private staging plus atomic promotion, define symlink/reparse-point behavior for every path component, bound enumeration and diagnostics, and pass Linux/macOS/Windows differential tests.
 
 ## Security invariants
 
