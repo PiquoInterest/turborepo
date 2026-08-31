@@ -1,9 +1,11 @@
 use std::path::Path;
 
 use create_turbo_rs::{
-    PackageManagerInstallPlatform, PackageManagerSelection, PackageManagerVersionMatcher,
-    WorkspacePackageManager, build_package_manager_install_invocation,
-    package_manager_install_profiles, resolve_package_manager_install_profile,
+    NodeSemverMatcher, NodeSemverMatcherError, PACKAGE_MANAGER_RANGE_INPUT_LIMIT,
+    PACKAGE_MANAGER_VERSION_INPUT_LIMIT, PackageManagerInstallPlatform, PackageManagerSelection,
+    PackageManagerVersionMatcher, WorkspacePackageManager,
+    build_package_manager_install_invocation, package_manager_install_profiles,
+    resolve_package_manager_install_profile,
 };
 
 #[derive(Debug, Default)]
@@ -119,6 +121,45 @@ fn programs_and_arguments_come_only_from_closed_static_profiles() {
                 assert!(!contains_shell_control(argument));
             }
         }
+    }
+}
+
+#[test]
+fn concrete_matcher_rejects_oversized_versions_before_parsing() {
+    let version = "1".repeat(PACKAGE_MANAGER_VERSION_INPUT_LIMIT + 1);
+    let mut matcher = NodeSemverMatcher;
+
+    assert_eq!(
+        matcher.satisfies(&version, "*"),
+        Err(NodeSemverMatcherError::VersionTooLong)
+    );
+}
+
+#[test]
+fn concrete_matcher_rejects_oversized_ranges_before_parsing() {
+    let requirement = "1".repeat(PACKAGE_MANAGER_RANGE_INPUT_LIMIT + 1);
+    let mut matcher = NodeSemverMatcher;
+
+    assert_eq!(
+        matcher.satisfies("1.2.3", &requirement),
+        Err(NodeSemverMatcherError::RangeTooLong)
+    );
+}
+
+#[test]
+fn concrete_matcher_does_not_normalize_hostile_or_ambiguous_version_text() {
+    let inputs = [
+        " 1.2.3",
+        "1.2.3 ",
+        "1.2.3\n",
+        "１.２.３",
+        "1.2.3\u{202e}",
+        "1.2.3\u{0}",
+    ];
+
+    for input in inputs {
+        let mut matcher = NodeSemverMatcher;
+        assert_eq!(matcher.satisfies(input, "*"), Ok(false));
     }
 }
 

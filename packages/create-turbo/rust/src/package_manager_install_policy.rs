@@ -6,6 +6,9 @@ const INSTALL_ARGS: &[&str] = &["install"];
 const PNPM_INSTALL_ARGS: &[&str] = &["install", "--fix-lockfile"];
 const YARN_BERRY_INSTALL_ARGS: &[&str] = &["install", "--no-immutable"];
 
+pub const PACKAGE_MANAGER_VERSION_INPUT_LIMIT: usize = 256;
+pub const PACKAGE_MANAGER_RANGE_INPUT_LIMIT: usize = 256;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PackageManagerInstallProfile {
     pub name: &'static str,
@@ -116,6 +119,37 @@ pub trait PackageManagerVersionMatcher {
     type Error;
 
     fn satisfies(&mut self, version: &str, requirement: &str) -> Result<bool, Self::Error>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeSemverMatcherError {
+    VersionTooLong,
+    RangeTooLong,
+    InvalidRange,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct NodeSemverMatcher;
+
+impl PackageManagerVersionMatcher for NodeSemverMatcher {
+    type Error = NodeSemverMatcherError;
+
+    fn satisfies(&mut self, version: &str, requirement: &str) -> Result<bool, Self::Error> {
+        if version.len() > PACKAGE_MANAGER_VERSION_INPUT_LIMIT {
+            return Err(NodeSemverMatcherError::VersionTooLong);
+        }
+        if requirement.len() > PACKAGE_MANAGER_RANGE_INPUT_LIMIT {
+            return Err(NodeSemverMatcherError::RangeTooLong);
+        }
+        if requirement.is_empty() {
+            return Err(NodeSemverMatcherError::InvalidRange);
+        }
+
+        // RED stub: the concrete Node-compatible parser is added in the
+        // following GREEN commit. Keeping this callable makes the behavioral
+        // tests compile and fail for the missing matching behavior.
+        Ok(false)
+    }
 }
 
 pub fn resolve_package_manager_install_profile<M>(

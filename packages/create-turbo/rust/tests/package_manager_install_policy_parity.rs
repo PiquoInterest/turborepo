@@ -2,10 +2,11 @@ use std::path::Path;
 
 use create_turbo_rs::{
     AUBE_INSTALL_PROFILES, BUN_INSTALL_PROFILES, NPM_INSTALL_PROFILES, NUB_INSTALL_PROFILES,
-    PNPM_INSTALL_PROFILES, PackageManagerInstallPlatform, PackageManagerInstallStdin,
-    PackageManagerSelection, PackageManagerVersionMatcher, WorkspacePackageManager,
-    YARN_INSTALL_PROFILES, build_package_manager_install_invocation,
-    package_manager_install_profiles, resolve_package_manager_install_profile,
+    PNPM_INSTALL_PROFILES, NodeSemverMatcher, NodeSemverMatcherError,
+    PackageManagerInstallPlatform, PackageManagerInstallStdin, PackageManagerSelection,
+    PackageManagerVersionMatcher, WorkspacePackageManager, YARN_INSTALL_PROFILES,
+    build_package_manager_install_invocation, package_manager_install_profiles,
+    resolve_package_manager_install_profile,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,4 +225,69 @@ fn invocation_preserves_program_arguments_root_and_ignored_stdin() {
     assert_eq!(invocation.args, &["install", "--fix-lockfile"]);
     assert_eq!(invocation.cwd, root);
     assert_eq!(invocation.stdin, PackageManagerInstallStdin::Ignore);
+}
+
+#[test]
+fn concrete_node_semver_matcher_selects_the_exact_source_profiles() {
+    let cases = [
+        (WorkspacePackageManager::Npm, "10.9.0", Some("npm")),
+        (WorkspacePackageManager::Pnpm, "6.35.1", Some("pnpm6")),
+        (WorkspacePackageManager::Pnpm, "7.0.0", Some("pnpm")),
+        (WorkspacePackageManager::Yarn, "1.22.22", Some("yarn")),
+        (WorkspacePackageManager::Yarn, "2.0.0", Some("berry")),
+        (WorkspacePackageManager::Bun, "1.0.0", None),
+        (WorkspacePackageManager::Bun, "1.0.1", Some("bun")),
+        (WorkspacePackageManager::Bun, "1.99.0", Some("bun")),
+        (WorkspacePackageManager::Bun, "2.0.0", None),
+        (WorkspacePackageManager::Nub, "0.1.0", Some("nub")),
+        (WorkspacePackageManager::Aube, "0.1.0", Some("aube")),
+    ];
+
+    for (manager, version, expected_name) in cases {
+        let mut matcher = NodeSemverMatcher;
+        let result = resolve_package_manager_install_profile(
+            PackageManagerSelection {
+                name: manager,
+                version: Some(version),
+            },
+            &mut matcher,
+        );
+        let Ok(profile) = result else {
+            panic!("valid Node-semver input must not produce a matcher error");
+        };
+
+        assert_eq!(profile.map(|profile| profile.name), expected_name);
+    }
+}
+
+#[test]
+fn concrete_node_semver_matcher_preserves_build_and_prerelease_behavior() {
+    let mut matcher = NodeSemverMatcher;
+    assert_eq!(matcher.satisfies("7.0.0+build.5", ">=7"), Ok(true));
+    assert_eq!(matcher.satisfies("7.0.0-rc.1", ">=7"), Ok(false));
+    assert_eq!(matcher.satisfies("1.0.1-beta.1", "^1.0.1"), Ok(false));
+}
+
+#[test]
+fn malformed_versions_are_ordinary_non_matches() {
+    let malformed_versions = [
+        "not-a-version",
+        "1.2",
+        "1.2.3.4",
+        "999999999999999999999999999999.0.0",
+    ];
+
+    for version in malformed_versions {
+        let mut matcher = NodeSemverMatcher;
+        assert_eq!(matcher.satisfies(version, "*"), Ok(false));
+    }
+}
+
+#[test]
+fn malformed_profile_ranges_are_typed_configuration_errors() {
+    let mut matcher = NodeSemverMatcher;
+    assert_eq!(
+        matcher.satisfies("1.2.3", "["),
+        Err(NodeSemverMatcherError::InvalidRange)
+    );
 }
