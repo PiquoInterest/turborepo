@@ -1,0 +1,163 @@
+name: Fix package-manager probe ownership once
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/rust-migration-fix-manager-probes-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-migration-fix-manager-probes-once
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: >-
+      github.repository == 'PiquoInterest/turborepo' &&
+      github.ref == 'refs/heads/rust/typescript-deprecation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Own scoped-thread requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/turbo-utils/rust/src/managers.rs")
+          source = path.read_text(encoding="utf-8")
+
+          replacements = (
+              (
+                  "Yarn probes",
+                  '''        let yarn_handle = (!yarn_metadata.has_project_yarn_config)
+                      .then(|| scope.spawn(|| runner.run(&yarn_request)));
+          ''',
+                  '''        let yarn_handle = if yarn_metadata.has_project_yarn_config {
+                      None
+                  } else {
+                      let runner = runner;
+                      Some(scope.spawn(move || runner.run(&yarn_request)))
+                  };
+          ''',
+                  2,
+              ),
+              (
+                  "npm probes",
+                  '''        let npm_handle = scope.spawn(|| runner.run(&npm_request));
+          ''',
+                  '''        let npm_handle = {
+                      let runner = runner;
+                      scope.spawn(move || runner.run(&npm_request))
+                  };
+          ''',
+                  2,
+              ),
+              (
+                  "pnpm probes",
+                  '''        let pnpm_handle = scope.spawn(|| runner.run(&pnpm_request));
+          ''',
+                  '''        let pnpm_handle = {
+                      let runner = runner;
+                      scope.spawn(move || runner.run(&pnpm_request))
+                  };
+          ''',
+                  2,
+              ),
+              (
+                  "Bun probes",
+                  '''        let bun_handle = scope.spawn(|| runner.run(&bun_request));
+          ''',
+                  '''        let bun_handle = {
+                      let runner = runner;
+                      scope.spawn(move || runner.run(&bun_request))
+                  };
+          ''',
+                  2,
+              ),
+              (
+                  "Nub probe",
+                  '''        let nub_handle = scope.spawn(|| runner.run(&nub_request));
+          ''',
+                  '''        let nub_handle = {
+                      let runner = runner;
+                      scope.spawn(move || runner.run(&nub_request))
+                  };
+          ''',
+                  1,
+              ),
+              (
+                  "Aube probe",
+                  '''        let aube_handle = scope.spawn(|| runner.run(&aube_request));
+          ''',
+                  '''        let aube_handle = {
+                      let runner = runner;
+                      scope.spawn(move || runner.run(&aube_request))
+                  };
+          ''',
+                  1,
+              ),
+          )
+
+          for label, old, new, expected in replacements:
+              count = source.count(old)
+              if count != expected:
+                  raise SystemExit(f"expected {expected} {label}, found {count}")
+              source = source.replace(old, new)
+
+          path.write_text(source, encoding="utf-8")
+          PY
+
+      - name: Install pinned Rust formatter
+        uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7
+        with:
+          toolchain: nightly-2026-05-22
+          components: rustfmt
+          cache: false
+
+      - name: Format migration crates
+        shell: bash
+        run: cargo fmt --all
+
+      - name: Remove one-shot workflow and validate scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/rust-migration-fix-manager-probes-once.yml
+
+          unexpected="$({
+            git diff --name-only --diff-filter=ACMRTUXB
+            git diff --name-only --diff-filter=D
+          } | sort -u | grep -Ev '^(packages/turbo-utils/rust/src/managers\.rs|\.github/workflows/rust-migration-fix-manager-probes-once\.yml)$' || true)"
+
+          if [[ -n "$unexpected" ]]; then
+            printf 'ownership fix touched files outside the approved scope:\n%s\n' "$unexpected" >&2
+            exit 1
+          fi
+
+          git diff --check
+
+      - name: Commit fix without rewriting history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            packages/turbo-utils/rust/src/managers.rs \
+            .github/workflows/rust-migration-fix-manager-probes-once.yml
+          git commit -m 'fix: Own package-manager probe requests'
+          git push origin HEAD:rust/typescript-deprecation
