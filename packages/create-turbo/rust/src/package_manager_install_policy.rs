@@ -178,14 +178,14 @@ pub struct PackageManagerInstallInvocation<'a> {
 pub fn build_package_manager_install_invocation<'a>(
     profile: &'static PackageManagerInstallProfile,
     project_root: &'a Path,
-    platform: PackageManagerInstallPlatform,
+    _platform: PackageManagerInstallPlatform,
 ) -> PackageManagerInstallInvocation<'a> {
     PackageManagerInstallInvocation {
         program: profile.command,
         args: profile.install_args,
         cwd: project_root,
-        prefer_local: true,
-        shell: matches!(platform, PackageManagerInstallPlatform::Windows),
+        prefer_local: false,
+        shell: false,
         stdin: PackageManagerInstallStdin::Ignore,
     }
 }
