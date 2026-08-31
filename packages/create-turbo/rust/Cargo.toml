@@ -6,6 +6,9 @@ license = "MIT"
 publish = false
 description = "Rust migration of create-turbo behavior"
 
+[dependencies]
+serde_json = { workspace = true }
+
 [lib]
 path = "src/lib.rs"
 
