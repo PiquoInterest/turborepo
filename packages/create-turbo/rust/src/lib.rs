@@ -1,4 +1,5 @@
 mod create_error_policy;
+mod create_install_policy;
 mod default_example;
 mod git_ignore;
 mod git_init;
@@ -13,6 +14,10 @@ pub use create_error_policy::{
     CREATE_COMMAND_ERROR_TRANSFORM_LIMIT, ConvertErrorType, CreateCommandError,
     CreateCommandErrorAction, CreateCommandErrorLine, CreateCommandErrorOutcome,
     DOWNLOAD_ERROR_HEADING, classify_create_command_error, sanitize_terminal_text,
+};
+pub use create_install_policy::{
+    CreateInstallInput, CreateInstallOutcome, CreateInstallRequest, CreateInstaller,
+    UnavailablePackageManagerWarning, apply_create_install_policy,
 };
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use git_ignore::{

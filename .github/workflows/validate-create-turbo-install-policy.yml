@@ -1,0 +1,115 @@
+name: Validate create-turbo install-policy tranche
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-install-policy
+    paths:
+      - .github/workflows/validate-create-turbo-install-policy.yml
+      - packages/create-turbo/rust/**
+      - packages/create-turbo/src/commands/create/index.ts
+      - packages/create-turbo/__tests__/index.test.ts
+      - packages/create-turbo/__tests__/create-install-policy.test.ts
+      - Cargo.toml
+      - Cargo.lock
+
+concurrency:
+  group: validate-create-turbo-install-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the exact tranche head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pin the TypeScript oracle revision
+        run: |
+          set -euo pipefail
+          test "$(git hash-object packages/create-turbo/src/commands/create/index.ts)" = \
+            "41cc507454c6adcbd36833d19d072383e8b730e9"
+          grep -Fq 'skipTransforms || !selectedPackageManagerDetails' \
+            packages/create-turbo/src/commands/create/index.ts
+          grep -Fq 'interactive: false' \
+            packages/create-turbo/src/commands/create/index.ts
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the preserved RED behavior
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/create-install-policy-red \
+            ff359432f3b91d1f164c68ed0270d62ec8b15f42
+          set +e
+          (
+            cd /tmp/create-install-policy-red
+            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/create-install-policy-red" \
+              cargo test --locked -p create-turbo-rs \
+                --test create_install_policy_parity \
+                --test create_install_policy_security
+          ) > /tmp/create-install-policy-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/create-install-policy-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "RED contract unexpectedly passed before implementation" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/create-install-policy-red.log; then
+            echo "RED contract failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/create-install-policy-red.log
+          grep -Fq 'selected_manager_is_installed_non_interactively' \
+            /tmp/create-install-policy-red.log
+          grep -Fq 'skip_transforms_snapshots_availability_once' \
+            /tmp/create-install-policy-red.log
+          git worktree remove --force /tmp/create-install-policy-red
+
+      - name: Validate the GREEN Rust implementation
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/create-turbo/rust/src/create_install_policy.rs \
+            packages/create-turbo/rust/tests/create_install_policy_*.rs; then
+            echo "install-policy tranche introduced unsafe code" >&2
+            exit 1
+          fi
+          git diff --exit-code \
+            b3948eaa2ff37381fecfa759e2050fe7d5f14219 -- \
+            Cargo.toml Cargo.lock
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 22
+
+      - name: Run the TypeScript create-command oracle tests
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --check \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+          pnpm --filter @turbo/workspaces exec tsdown
+          pnpm --filter create-turbo exec jest --runInBand \
+            __tests__/index.test.ts \
+            __tests__/create-install-policy.test.ts
