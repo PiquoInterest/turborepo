@@ -540,18 +540,37 @@ pub fn get_available_package_managers_with<R: PackageManagerCommandRunner + ?Siz
     let yarn_metadata = get_project_yarn_metadata(project_root);
     let (yarn, npm, pnpm, bun, nub, aube) = thread::scope(|scope| {
         let yarn_request = request("yarnpkg", &["--version"], command_cwd);
-        let yarn_handle = (!yarn_metadata.has_project_yarn_config)
-            .then(|| scope.spawn(|| runner.run(&yarn_request)));
+        let yarn_handle = if yarn_metadata.has_project_yarn_config {
+            None
+        } else {
+            let runner = runner;
+            Some(scope.spawn(move || runner.run(&yarn_request)))
+        };
         let npm_request = request("npm", &["--version"], command_cwd);
         let pnpm_request = request("pnpm", &["--version"], command_cwd);
         let bun_request = request("bun", &["--version"], command_cwd);
         let nub_request = request("nub", &["--version"], command_cwd);
         let aube_request = request("aube", &["--version"], command_cwd);
-        let npm_handle = scope.spawn(|| runner.run(&npm_request));
-        let pnpm_handle = scope.spawn(|| runner.run(&pnpm_request));
-        let bun_handle = scope.spawn(|| runner.run(&bun_request));
-        let nub_handle = scope.spawn(|| runner.run(&nub_request));
-        let aube_handle = scope.spawn(|| runner.run(&aube_request));
+        let npm_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&npm_request))
+        };
+        let pnpm_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&pnpm_request))
+        };
+        let bun_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&bun_request))
+        };
+        let nub_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&nub_request))
+        };
+        let aube_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&aube_request))
+        };
 
         let yarn = yarn_metadata
             .version
@@ -592,14 +611,27 @@ pub fn get_package_managers_bin_paths_with<R: PackageManagerCommandRunner + ?Siz
     let yarn_metadata = get_project_yarn_metadata(project_root);
     let (initial_yarn, npm, pnpm, bun) = thread::scope(|scope| {
         let yarn_request = request("yarnpkg", &["--version"], command_cwd);
-        let yarn_handle = (!yarn_metadata.has_project_yarn_config)
-            .then(|| scope.spawn(|| runner.run(&yarn_request)));
+        let yarn_handle = if yarn_metadata.has_project_yarn_config {
+            None
+        } else {
+            let runner = runner;
+            Some(scope.spawn(move || runner.run(&yarn_request)))
+        };
         let npm_request = request("npm", &["config", "get", "prefix"], command_cwd);
         let pnpm_request = request("pnpm", &["bin", "--global"], command_cwd);
         let bun_request = request("bun", &["pm", "--g", "bin"], command_cwd);
-        let npm_handle = scope.spawn(|| runner.run(&npm_request));
-        let pnpm_handle = scope.spawn(|| runner.run(&pnpm_request));
-        let bun_handle = scope.spawn(|| runner.run(&bun_request));
+        let npm_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&npm_request))
+        };
+        let pnpm_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&pnpm_request))
+        };
+        let bun_handle = {
+            let runner = runner;
+            scope.spawn(move || runner.run(&bun_request))
+        };
         let yarn = yarn_metadata
             .version
             .clone()
