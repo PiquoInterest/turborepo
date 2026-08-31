@@ -1,0 +1,84 @@
+name: Apply bounded NO_PROXY migration documentation
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/apply-no-proxy-docs.yml
+      - tools/migration/apply_no_proxy_docs.py
+
+concurrency:
+  group: apply-no-proxy-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate-document-and-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the exact integration head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Validate the integrated network-policy tranche
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p turbo-utils-rs --all-targets
+          cargo test --locked -p turbo-utils-rs --all-targets
+          cargo clippy --locked -p turbo-utils-rs --all-targets -- -D warnings
+
+      - name: Record parity, security, and program evidence
+        run: python tools/migration/apply_no_proxy_docs.py
+
+      - name: Validate the documentation mutation
+        run: |
+          set -euo pipefail
+          test ! -e .github/workflows/apply-no-proxy-docs.yml
+          test ! -e tools/migration/apply_no_proxy_docs.py
+          grep -Fq '73 parity tests and 47 security regression tests' \
+            packages/turbo-utils/rust/README.md
+          grep -Fq '382 authored Rust migration tests' \
+            docs/typescript-deprecation.md
+          grep -Fq '## TU-030: Missing or permissive `NO_PROXY` policy' \
+            packages/turbo-utils/rust/SECURITY.md
+          grep -Fq '### RF-025: Missing or permissive `NO_PROXY` handling' \
+            docs/rust-migration-security-findings.md
+          grep -Fq '1ffcd4010de0e5505c21b64caa51af66ef44b8b6' \
+            packages/turbo-utils/rust/README.md
+          grep -Fq '94c14b4b530db457923ede6dfee906ef45cb07d9' \
+            packages/turbo-utils/rust/README.md
+          git diff --check
+
+      - name: Commit and push the reviewed documentation
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A \
+            .github/workflows/apply-no-proxy-docs.yml \
+            tools/migration/apply_no_proxy_docs.py \
+            packages/turbo-utils/rust/README.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-utils/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs: Record bounded NO_PROXY policy"
+          git push origin HEAD:rust/typescript-deprecation
