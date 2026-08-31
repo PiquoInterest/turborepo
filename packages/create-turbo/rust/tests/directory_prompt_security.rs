@@ -154,6 +154,31 @@ fn invisible_and_bidirectional_format_controls_are_rejected() {
 }
 
 #[test]
+fn extended_terminal_format_controls_are_rejected() {
+    for input in [
+        "project\u{034f}",
+        "project\u{180e}",
+        "project\u{2028}line",
+        "project\u{2029}line",
+        "project\u{fff9}annotation",
+    ] {
+        let mut prompter = CountingPrompter::failing();
+        let mut validator = CountingValidator::accepting();
+
+        let result = resolve_directory_prompt(Some(input), &mut prompter, &mut validator);
+
+        assert_eq!(
+            result,
+            Err(DirectoryPromptError::Input(
+                DirectoryInputRejection::UnsafeControl
+            ))
+        );
+        assert!(prompter.calls.is_empty());
+        assert!(validator.calls.is_empty());
+    }
+}
+
+#[test]
 fn oversized_argument_is_rejected_before_prompt_or_validation() {
     let oversized = "a".repeat(MAX_DIRECTORY_INPUT_BYTES + 1);
     let mut prompter = CountingPrompter::failing();

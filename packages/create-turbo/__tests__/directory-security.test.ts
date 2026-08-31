@@ -41,6 +41,31 @@ describe("directory prompt security", () => {
     });
   });
 
+  it.each([
+    "project\u034f",
+    "project\u180e",
+    "project\u2028line",
+    "project\u2029line",
+    "project\ufff9annotation"
+  ])("rejects terminal-active Unicode text %p", async (attackerInput) => {
+    await expect(directory({ dir: attackerInput })).rejects.toMatchObject({
+      name: "InvalidDirectoryError",
+      reason: "unsafe-input",
+      message: expect.not.stringContaining(attackerInput)
+    });
+  });
+
+  it.each(["project\ud800", "project\udc00"])(
+    "rejects ill-formed UTF-16 input %p before path conversion",
+    async (attackerInput) => {
+      await expect(directory({ dir: attackerInput })).rejects.toMatchObject({
+        name: "InvalidDirectoryError",
+        reason: "unsafe-input",
+        message: expect.not.stringContaining(attackerInput)
+      });
+    }
+  );
+
   it("bounds direct directory input before path resolution or filesystem access", async () => {
     const oversized = "a".repeat(MAX_DIRECTORY_INPUT_BYTES + 1);
     await expect(directory({ dir: oversized })).rejects.toMatchObject({
