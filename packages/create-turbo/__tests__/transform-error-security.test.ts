@@ -16,9 +16,7 @@ describe("TransformError terminal security", () => {
     expect(error.message).toBe(
       "failed\\u{1b}[31m\\nnext\\rline\\tcol\\u{202e}txt\\u{2066}iso\\u{200b}hidden\\u{9b}csi"
     );
-    expect(error.transform).toBe(
-      "../../official-starter\\0\\u{2069}"
-    );
+    expect(error.transform).toBe("../../official-starter\\0\\u{2069}");
     expect(error.rawMessage).toBe(rawMessage);
     expect(error.rawTransform).toBe(rawTransform);
     expect(error.fatal).toBe(false);
