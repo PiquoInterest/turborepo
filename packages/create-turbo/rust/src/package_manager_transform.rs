@@ -51,7 +51,7 @@ pub fn transform_package_manager<C: PackageManagerConverter>(
     root: &Path,
     current: WorkspacePackageManager,
     selection: Option<PackageManagerSelection<'_>>,
-    _converter: &mut C,
+    converter: &mut C,
 ) -> Result<TransformResponse, C::Error> {
     let Some(selection) = selection else {
         return Ok(not_applicable());
@@ -60,8 +60,16 @@ pub fn transform_package_manager<C: PackageManagerConverter>(
         return Ok(not_applicable());
     }
 
-    let _ = root;
-    Ok(not_applicable())
+    converter.convert(PackageManagerConversion {
+        root,
+        to: selection.name,
+        skip_install: true,
+    })?;
+
+    Ok(TransformResponse {
+        result: TransformStatus::Success,
+        name: PACKAGE_MANAGER_TRANSFORM_NAME,
+    })
 }
 
 fn not_applicable() -> TransformResponse {
