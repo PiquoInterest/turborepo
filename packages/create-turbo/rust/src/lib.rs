@@ -2,6 +2,7 @@ mod create_error_policy;
 mod create_install_policy;
 mod create_output_policy;
 mod default_example;
+mod directory_prompt;
 mod git_ignore;
 mod git_init;
 mod official_starter;
@@ -29,6 +30,11 @@ pub use create_output_policy::{
     render_create_workspace_summary,
 };
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
+pub use directory_prompt::{
+    DEFAULT_PROJECT_DIRECTORY, DIRECTORY_PROMPT_MESSAGE, DirectoryDisplayTransform,
+    DirectoryInputRejection, DirectoryPromptError, DirectoryPromptRequest, DirectoryPrompter,
+    DirectoryValidator, MAX_DIRECTORY_INPUT_BYTES, resolve_directory_prompt,
+};
 pub use git_ignore::{
     DEFAULT_IGNORE, GIT_IGNORE_TRANSFORM_NAME, GitIgnoreError, create_git_ignore,
 };

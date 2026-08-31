@@ -1,0 +1,76 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "@jest/globals";
+import {
+  INVALID_PROJECT_DIRECTORY_MESSAGE,
+  InvalidDirectoryError,
+  MAX_DIRECTORY_INPUT_BYTES,
+  directory
+} from "../src/commands/create/prompts";
+
+describe("directory prompt security", () => {
+  it("rejects an invalid direct argument instead of returning an invalid result", async () => {
+    await expect(directory({ dir: "invalid directory" })).rejects.toBeInstanceOf(
+      InvalidDirectoryError
+    );
+  });
+
+  it("rejects a conflicting direct directory before project creation can continue", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "create-turbo-directory-security-")
+    );
+    try {
+      fs.writeFileSync(path.join(root, "package.json"), "{}", "utf8");
+      await expect(directory({ dir: root })).rejects.toMatchObject({
+        name: "InvalidDirectoryError",
+        reason: "validation",
+        message: INVALID_PROJECT_DIRECTORY_MESSAGE
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects terminal controls without reflecting them in the public error", async () => {
+    const attackerInput = "project\u001b[31m";
+    await expect(directory({ dir: attackerInput })).rejects.toMatchObject({
+      name: "InvalidDirectoryError",
+      reason: "unsafe-input",
+      message: expect.not.stringContaining("\u001b")
+    });
+  });
+
+  it.each([
+    "project\u034f",
+    "project\u180e",
+    "project\u2028line",
+    "project\u2029line",
+    "project\ufff9annotation"
+  ])("rejects terminal-active Unicode text %p", async (attackerInput) => {
+    await expect(directory({ dir: attackerInput })).rejects.toMatchObject({
+      name: "InvalidDirectoryError",
+      reason: "unsafe-input",
+      message: expect.not.stringContaining(attackerInput)
+    });
+  });
+
+  it.each(["project\ud800", "project\udc00"])(
+    "rejects ill-formed UTF-16 input %p before path conversion",
+    async (attackerInput) => {
+      await expect(directory({ dir: attackerInput })).rejects.toMatchObject({
+        name: "InvalidDirectoryError",
+        reason: "unsafe-input",
+        message: expect.not.stringContaining(attackerInput)
+      });
+    }
+  );
+
+  it("bounds direct directory input before path resolution or filesystem access", async () => {
+    const oversized = "a".repeat(MAX_DIRECTORY_INPUT_BYTES + 1);
+    await expect(directory({ dir: oversized })).rejects.toMatchObject({
+      name: "InvalidDirectoryError",
+      reason: "unsafe-input"
+    });
+  });
+});
