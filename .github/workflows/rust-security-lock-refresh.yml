@@ -1,0 +1,62 @@
+name: Temporary Rust security lock refresh
+
+on:
+  push:
+    branches:
+      - rust/security-advisory-upgrades
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: rust/security-advisory-upgrades
+          fetch-depth: 1
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: false
+
+      - name: Record reverse dependency chains
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo tree --locked -i h2@0.4.5 || true
+          cargo tree --locked -i quick-xml@0.38.4 || true
+
+      - name: Upgrade vulnerable transitive dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo update -p h2@0.4.5 --precise 0.4.16
+          cargo update -p quick-xml@0.38.4 --precise 0.41.0
+
+      - name: Validate the updated dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --locked --workspace --all-targets
+          cargo test --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets
+
+      - name: Commit generated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo 'No lockfile change was produced.' >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: Upgrade vulnerable Rust dependencies'
+          git push origin HEAD:rust/security-advisory-upgrades
