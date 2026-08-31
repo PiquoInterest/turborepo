@@ -9,8 +9,8 @@ on:
       - tools/migration/apply_network_authority_bounds.py
 
 concurrency:
-  group: apply-network-authority-bounds
-  cancel-in-progress: false
+  group: apply-network-authority-bounds-v2-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
