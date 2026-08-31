@@ -213,6 +213,7 @@ fn no_proxy_values_are_bounded_by_length_and_entry_count() {
 fn no_proxy_supports_exact_ipv4_and_bracketed_ipv6_without_cross_matching() {
     let mut env = NetworkEnvironment {
         https_proxy: Some("http://proxy.example:8080".into()),
+        http_proxy: Some("http://proxy.example:8080".into()),
         no_proxy: Some("127.0.0.1,[::1]".into()),
         ..Default::default()
     };
