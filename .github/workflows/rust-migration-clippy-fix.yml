@@ -27,43 +27,23 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: rust/typescript-deprecation
-          fetch-depth: 1
+          fetch-depth: 20
           persist-credentials: true
 
       - name: Set up repository Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          cache-key: rust-typescript-deprecation-clippy-fix
+          cache-key: rust-typescript-deprecation-clippy-fix-final
           save-cache: false
 
-      - name: Apply exact lint fixes
+      - name: Apply final test-only lint fix
         shell: python
         run: |
           from pathlib import Path
 
-          managers = Path("packages/turbo-utils/rust/src/managers.rs")
-          managers_text = managers.read_text(encoding="utf-8")
-          redundant = "            let runner = runner;\n"
-          count = managers_text.count(redundant)
-          if count != 10:
-              raise SystemExit(f"expected 10 redundant runner bindings, found {count}")
-          managers.write_text(managers_text.replace(redundant, ""), encoding="utf-8")
-
-          project = Path("packages/turbo-utils/rust/src/project.rs")
-          project_text = project.read_text(encoding="utf-8")
-          replacements = {
-              ".find(|character| matches!(character, '/' | '?' | '#'))": ".find(['/', '?', '#'])",
-              ".find(|character| matches!(character, '?' | '#'))": ".find(['?', '#'])",
-          }
-          for old, new in replacements.items():
-              if project_text.count(old) != 1:
-                  raise SystemExit(f"expected exactly one occurrence of {old!r}")
-              project_text = project_text.replace(old, new)
-          project.write_text(project_text, encoding="utf-8")
-
           parity = Path("packages/turbo-utils/rust/tests/project_parity.rs")
-          parity_text = parity.read_text(encoding="utf-8")
+          text = parity.read_text(encoding="utf-8")
           old = "    let mut source = FakeSource::default();\n    source.example_exists = false;\n"
           new = (
               "    let source = FakeSource {\n"
@@ -71,9 +51,11 @@ jobs:
               "        ..FakeSource::default()\n"
               "    };\n"
           )
-          if parity_text.count(old) != 1:
-              raise SystemExit("expected exactly one default-then-reassign test initializer")
-          parity.write_text(parity_text.replace(old, new), encoding="utf-8")
+          count = text.count(old)
+          if count > 1:
+              raise SystemExit(f"expected at most one default-then-reassign initializer, found {count}")
+          if count == 1:
+              parity.write_text(text.replace(old, new), encoding="utf-8")
 
       - name: Validate formatted, compiled, tested, and lint-clean result
         shell: bash
@@ -93,25 +75,35 @@ jobs:
           unexpected="$({
             git diff --name-only --diff-filter=ACMRTUXB
             git diff --name-only --diff-filter=D
-          } | sort -u | grep -Ev '^(packages/turbo-utils/rust/src/(managers|project)\.rs|packages/turbo-utils/rust/tests/project_parity\.rs|\.github/workflows/rust-migration-clippy-fix\.yml$)' || true)"
+          } | sort -u | grep -Ev '^(packages/turbo-utils/rust/tests/project_parity\.rs|\.github/workflows/rust-migration-clippy-fix\.yml$)' || true)"
 
           if [[ -n "$unexpected" ]]; then
-            printf 'Clippy fix touched files outside the approved scope:\n%s\n' "$unexpected" >&2
+            printf 'Clippy cleanup touched files outside the approved scope:\n%s\n' "$unexpected" >&2
             exit 1
           fi
 
           git diff --check
 
-      - name: Commit fixes without rewriting history
+      - name: Commit and push without rewriting concurrent history
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- \
-            packages/turbo-utils/rust/src/managers.rs \
-            packages/turbo-utils/rust/src/project.rs \
             packages/turbo-utils/rust/tests/project_parity.rs \
             .github/workflows/rust-migration-clippy-fix.yml
-          git commit -m 'fix: Resolve Rust migration Clippy findings'
-          git push origin HEAD:rust/typescript-deprecation
+          git commit -m 'fix: Complete Rust migration lint cleanup'
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin rust/typescript-deprecation
+            git rebase origin/rust/typescript-deprecation
+            cargo fmt --all --check
+            if git push origin HEAD:rust/typescript-deprecation; then
+              exit 0
+            fi
+            sleep "$attempt"
+          done
+
+          echo 'Unable to fast-forward the migration branch after five rebase attempts.' >&2
+          exit 1
