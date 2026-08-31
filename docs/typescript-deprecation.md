@@ -9,9 +9,11 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 The integration branch currently contains two workspace-registered Rust migration cores:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
-- `packages/turbo-utils/rust`: 10 translated parity tests and 5 security regression tests for case conversion, upward search, folder-conflict detection, writability, and directory validation.
+- `packages/turbo-utils/rust`: 22 translated parity tests and 11 security regression tests. Covered surfaces now include case conversion, upward/root/config discovery, folder and directory validation, writability, and package-manager version/global-bin discovery.
 
-That is 53 authored Rust tests. Neither TypeScript package is removed yet because compiled CI, differential execution, production bindings, packaging, and downstream cutover are still open.
+That is 71 authored Rust tests. Neither TypeScript package is removed yet because compiled CI for the latest tranche, differential execution, production bindings, packaging, supported-platform closure, and downstream cutover are still open.
+
+The mandatory agent workflow is recorded in `AGENTS.md`: every tranche must use TDD and differential tests, perform a current authoritative advisory lookup, and update its `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, and this ledger in the same change.
 
 ## Completion rules
 
@@ -28,21 +30,21 @@ Tests, type declarations, build metadata, and host-specific adapters are tracked
 
 ## Migration ledger
 
-| Surface                                         | Current implementation              | Rust target                                                    | Status      | Required closure                                                                                                                                                                 |
-| ----------------------------------------------- | ----------------------------------- | -------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core `turbo` engine and CLI                     | Predominantly Rust                  | Existing Rust crates                                           | Existing    | Continue removing legacy wrappers and keep compatibility tests.                                                                                                                  |
-| `packages/turbo-ignore` decision engine         | TypeScript                          | `packages/turbo-ignore/rust`                                   | In progress | Compile/lint, differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS.                       |
-| `packages/turbo-utils`                          | TypeScript utilities                | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Compile/lint the migrated pure core; port root/config, package-manager, network, template, update-notification, and project-creation behavior; add bindings and migrate callers. |
-| `packages/create-turbo`                         | TypeScript CLI                      | Rust CLI                                                       | Queued      | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes.                                                                                     |
-| `packages/turbo-gen`                            | TypeScript CLI                      | Rust CLI                                                       | Queued      | Preserve generator discovery, prompts, template rendering, and workspace mutations.                                                                                              |
-| `packages/turbo-codemod`                        | TypeScript CLI                      | Rust CLI                                                       | Queued      | Port transformations with golden fixtures and idempotence tests.                                                                                                                 |
-| `packages/turbo-workspaces`                     | TypeScript CLI/library              | Rust CLI/library                                               | Queued      | Preserve package-manager adapters and lock/workspace mutation semantics.                                                                                                         |
-| `packages/turbo-telemetry`                      | TypeScript                          | Rust telemetry client or explicit retirement                   | Queued      | Define consent, persistence, transport, retry, and redaction contract.                                                                                                           |
-| `packages/eslint-plugin-turbo` and config       | TypeScript in a JavaScript host     | Rust/WASM rule core with minimal JS adapter                    | Host-bound  | Preserve ESLint node/range/fix semantics and publish compatible packages.                                                                                                        |
-| VS Code extension and language tooling adapters | TypeScript host layer plus Rust LSP | Rust LSP with minimal extension adapter                        | Host-bound  | Move business logic into Rust; retain only API bootstrap required by VS Code.                                                                                                    |
-| Factory/web UI and `.tsx` surfaces              | TypeScript/React                    | Rust/WASM only where technically justified                     | Host-bound  | This is not a mechanical native rewrite. Define browser/WASM architecture and DOM bindings before deprecation.                                                                   |
-| Test-only TypeScript fixtures                   | TypeScript                          | Rust tests or retained cross-language oracle                   | Later       | Remove only after every migrated component has equivalent coverage.                                                                                                              |
-| npm/native publishing wrappers                  | JavaScript/TypeScript               | Generated platform loaders and signed Rust binaries            | Queued      | Preserve package names, install behavior, platform selection, provenance, and rollback.                                                                                          |
+| Surface | Current implementation | Rust target | Status | Required closure |
+| --- | --- | --- | --- | --- |
+| Core `turbo` engine and CLI | Predominantly Rust | Existing Rust crates | Existing | Continue removing legacy wrappers and keep compatibility tests. |
+| `packages/turbo-ignore` decision engine | TypeScript | `packages/turbo-ignore/rust` | In progress | Compile/lint, differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS. |
+| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Compile/lint the package-manager tranche; port network/example/template, update-notification, and project-creation behavior; close Windows ACL/process/shim gaps; add differential bindings and migrate callers. |
+| `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. |
+| `packages/turbo-gen` | TypeScript CLI | Rust CLI | Queued | Preserve generator discovery, prompts, template rendering, and workspace mutations. |
+| `packages/turbo-codemod` | TypeScript CLI | Rust CLI | Queued | Port transformations with golden fixtures and idempotence tests. |
+| `packages/turbo-workspaces` | TypeScript CLI/library | Rust CLI/library | Queued | Preserve package-manager adapters and lock/workspace mutation semantics. |
+| `packages/turbo-telemetry` | TypeScript | Rust telemetry client or explicit retirement | Queued | Define consent, persistence, transport, retry, and redaction contract. |
+| `packages/eslint-plugin-turbo` and config | TypeScript in a JavaScript host | Rust/WASM rule core with minimal JS adapter | Host-bound | Preserve ESLint node/range/fix semantics and publish compatible packages. |
+| VS Code extension and language tooling adapters | TypeScript host layer plus Rust LSP | Rust LSP with minimal extension adapter | Host-bound | Move business logic into Rust; retain only API bootstrap required by VS Code. |
+| Factory/web UI and `.tsx` surfaces | TypeScript/React | Rust/WASM only where technically justified | Host-bound | This is not a mechanical native rewrite. Define browser/WASM architecture and DOM bindings before deprecation. |
+| Test-only TypeScript fixtures | TypeScript | Rust tests or retained cross-language oracle | Later | Remove only after every migrated component has equivalent coverage. |
+| npm/native publishing wrappers | JavaScript/TypeScript | Generated platform loaders and signed Rust binaries | Queued | Preserve package names, install behavior, platform selection, provenance, and rollback. |
 
 ## Security review method
 
@@ -54,6 +56,7 @@ Each tranche gets a colocated `SECURITY.md` containing:
 - parser size/depth limits;
 - network acquisition and package-spec behavior;
 - logging, telemetry, and secret-redaction behavior;
+- current authoritative advisory sources, lookup date, affected versions, and disposition;
 - intentional incompatibilities where exact parity would preserve an unsafe behavior.
 
 Security fixes must have regression tests. A migration is not complete merely because memory safety improves: semantic injection, package acquisition, path trust, authorization, denial of service, and fail-open/fail-closed behavior still require explicit review.
