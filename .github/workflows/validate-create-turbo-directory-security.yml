@@ -86,10 +86,38 @@ jobs:
             packages/create-turbo/package.json \
             packages/create-turbo/rust/Cargo.toml
           python <<'PY'
+          from pathlib import Path
+          import re
           import subprocess
 
+          base = "b3948eaa2ff37381fecfa759e2050fe7d5f14219"
+          workflow_path = ".github/workflows/validate-create-turbo-directory-security.yml"
+          product_paths = [
+              "packages/create-turbo/src/commands/create/prompts.ts",
+              "packages/create-turbo/__tests__/directory-security.test.ts",
+              "packages/create-turbo/rust/src/directory_prompt.rs",
+              "packages/create-turbo/rust/src/lib.rs",
+              "packages/create-turbo/rust/tests/directory_prompt_parity.rs",
+              "packages/create-turbo/rust/tests/directory_prompt_security.rs",
+          ]
+          allowed_paths = set(product_paths) | {
+              workflow_path,
+              "tools/migration/apply_directory_security_docs.py",
+          }
+          changed = set(
+              subprocess.run(
+                  ["git", "diff", "--name-only", base, "--"],
+                  check=True,
+                  text=True,
+                  capture_output=True,
+              ).stdout.splitlines()
+          )
+          unexpected = sorted(changed - allowed_paths)
+          if unexpected:
+              raise SystemExit(f"focused branch contains unexpected paths: {unexpected}")
+
           diff = subprocess.run(
-              ["git", "diff", "b3948eaa2ff37381fecfa759e2050fe7d5f14219", "--", "*.rs", "*.ts", "*.yml", "*.yaml"],
+              ["git", "diff", base, "--", *product_paths],
               check=True,
               text=True,
               capture_output=True,
@@ -100,14 +128,25 @@ jobs:
               "#[allow(clippy::unwrap_used)]",
               "#[allow(clippy::expect_used)]",
           )
+          added_lines = [line[1:] for line in diff.splitlines() if line.startswith("+") and not line.startswith("+++")]
           for token in forbidden:
-              if any(line.startswith("+") and token in line for line in diff.splitlines()):
-                  raise SystemExit(f"new failure suppression is forbidden: {token}")
-          if any(
-              line.startswith("+") and "unsafe {" in line
-              for line in diff.splitlines()
-          ):
+              if any(token in line for line in added_lines):
+                  raise SystemExit(f"new failure suppression is forbidden in product/test code: {token}")
+          if any("unsafe {" in line for line in added_lines):
               raise SystemExit("the project-directory tranche must not add unsafe code")
+
+          workflow = Path(workflow_path).read_text(encoding="utf-8")
+          in_python = False
+          for line in workflow.splitlines():
+              stripped = line.strip()
+              if stripped == "python <<'PY'":
+                  in_python = True
+                  continue
+              if in_python and stripped == "PY":
+                  in_python = False
+                  continue
+              if not in_python and re.fullmatch(r"\s*continue-on-error:\s*true\s*", line):
+                  raise SystemExit("validation workflow must not suppress a failed step")
           PY
 
       - name: Format and validate Rust implementation
