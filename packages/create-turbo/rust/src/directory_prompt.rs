@@ -11,7 +11,7 @@ pub enum DirectoryDisplayTransform {
 
 impl DirectoryDisplayTransform {
     #[must_use]
-    pub fn apply<'a>(self, value: &'a str) -> &'a str {
+    pub fn apply(self, value: &str) -> &str {
         match self {
             Self::TrimEcmascriptWhitespace => value.trim_matches(is_ecmascript_whitespace),
         }
