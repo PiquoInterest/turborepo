@@ -37,6 +37,21 @@ fn invalid_or_control_character_project_names_are_rejected() -> Result<(), Box<d
     Ok(())
 }
 
+#[test]
+fn option_like_project_name_is_rejected_before_filesystem_inspection() -> Result<(), Box<dyn Error>> {
+    let directory = tempfile::tempdir()?;
+    let result = validate_directory("-rf", directory.path());
+
+    assert!(!result.valid);
+    assert_eq!(result.project_name, "-rf");
+    assert!(
+        result
+            .error
+            .is_some_and(|error| error.contains("is not a valid directory"))
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn symlinked_project_root_is_rejected() -> Result<(), Box<dyn Error>> {

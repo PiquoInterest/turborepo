@@ -141,4 +141,17 @@ describe("validateDirectory", () => {
       projectName: "project"
     });
   });
+
+  test("rejects an option-like final directory component", () => {
+    mockFs.existsSync.mockReturnValue(false);
+    mockFs.lstatSync.mockReturnValue(undefined as any);
+
+    const result = validateDirectory("-rf");
+
+    expect(result.valid).toBe(false);
+    expect(result.projectName).toBe("-rf");
+    expect(result.error).toContain("is not a valid directory");
+    expect(mockFs.lstatSync).not.toHaveBeenCalled();
+    expect(mockIsFolderEmpty).not.toHaveBeenCalled();
+  });
 });
