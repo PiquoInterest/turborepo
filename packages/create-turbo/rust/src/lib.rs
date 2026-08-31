@@ -1,3 +1,4 @@
+mod create_install_policy;
 mod default_example;
 mod git_ignore;
 mod git_init;
@@ -7,6 +8,10 @@ mod package_manager_transform;
 mod readme_transform;
 mod transform_pipeline;
 
+pub use create_install_policy::{
+    CreateInstallInput, CreateInstallOutcome, CreateInstallRequest, CreateInstaller,
+    UnavailablePackageManagerWarning, apply_create_install_policy,
+};
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use git_ignore::{
     DEFAULT_IGNORE, GIT_IGNORE_TRANSFORM_NAME, GitIgnoreError, create_git_ignore,
