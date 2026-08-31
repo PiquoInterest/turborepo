@@ -1,6 +1,6 @@
 use create_turbo_rs::{
-    ExampleRepository, OFFICIAL_STARTER_TRANSFORM_NAME, OfficialStarterInput,
-    TransformStatus, is_official_starter, plan_official_starter,
+    ExampleRepository, OFFICIAL_STARTER_TRANSFORM_NAME, OfficialStarterInput, TransformStatus,
+    is_official_starter, plan_official_starter,
 };
 use serde_json::{Map, Value, json};
 
@@ -210,10 +210,9 @@ fn missing_or_falsy_turbo_dependency_is_not_rewritten() {
 
 #[test]
 fn absent_or_javascript_falsy_package_json_skips_the_write() {
-    let absent = plan_official_starter(input(
-        "starter", None, "project", None, "1.0.0", None, None,
-    ))
-    .expect("missing package JSON should not fail");
+    let absent =
+        plan_official_starter(input("starter", None, "project", None, "1.0.0", None, None))
+            .expect("missing package JSON should not fail");
     assert_eq!(absent.package_json_contents, None);
 
     for package in [
@@ -278,9 +277,16 @@ fn package_json_uses_two_space_indentation_and_a_final_newline() {
 
     assert_eq!(
         plan.package_json_contents.as_deref(),
-        Some(
-            "{\n  \"private\": true,\n  \"name\": \"new-name\",\n  \"devDependencies\": {\n    \"turbo\": \"2.0.0\",\n    \"typescript\": \"5.0.0\"\n  }\n}\n"
-        )
+        Some(concat!(
+            "{\n",
+            "  \"private\": true,\n",
+            "  \"name\": \"new-name\",\n",
+            "  \"devDependencies\": {\n",
+            "    \"turbo\": \"2.0.0\",\n",
+            "    \"typescript\": \"5.0.0\"\n",
+            "  }\n",
+            "}\n",
+        ))
     );
 }
 
@@ -313,8 +319,19 @@ fn serialization_uses_javascript_property_enumeration_order_recursively() {
 
     assert_eq!(
         plan.package_json_contents.as_deref(),
-        Some(
-            "{\n  \"2\": \"two\",\n  \"10\": \"ten\",\n  \"4294967294\": \"last-index\",\n  \"01\": \"leading\",\n  \"4294967295\": \"not-index\",\n  \"nested\": {\n    \"1\": \"one\",\n    \"3\": \"three\",\n    \"02\": \"leading\"\n  }\n}\n"
-        )
+        Some(concat!(
+            "{\n",
+            "  \"2\": \"two\",\n",
+            "  \"10\": \"ten\",\n",
+            "  \"4294967294\": \"last-index\",\n",
+            "  \"01\": \"leading\",\n",
+            "  \"4294967295\": \"not-index\",\n",
+            "  \"nested\": {\n",
+            "    \"1\": \"one\",\n",
+            "    \"3\": \"three\",\n",
+            "    \"02\": \"leading\"\n",
+            "  }\n",
+            "}\n",
+        ))
     );
 }
