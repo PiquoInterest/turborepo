@@ -58,14 +58,10 @@ fn case_whitespace_paths_and_confusables_do_not_become_direct_manager_values() {
             choice_count: 0,
         };
 
-        let result = resolve_package_manager_prompt(
-            Some(candidate),
-            false,
-            &availability,
-            &mut selector,
-        )
-        .expect("the typed selector returns an installed manager")
-        .expect("transforms are enabled");
+        let result =
+            resolve_package_manager_prompt(Some(candidate), false, &availability, &mut selector)
+                .expect("the typed selector returns an installed manager")
+                .expect("transforms are enabled");
 
         assert_eq!(result.name, WorkspacePackageManager::Pnpm);
         assert_eq!(selector.calls, 1);
@@ -85,14 +81,10 @@ fn a_large_unknown_manager_is_borrowed_and_cannot_expand_the_choice_set() {
         choice_count: 0,
     };
 
-    let result = resolve_package_manager_prompt(
-        Some(&candidate),
-        false,
-        &availability,
-        &mut selector,
-    )
-    .expect("the typed selector returns an installed manager")
-    .expect("transforms are enabled");
+    let result =
+        resolve_package_manager_prompt(Some(&candidate), false, &availability, &mut selector)
+            .expect("the typed selector returns an installed manager")
+            .expect("transforms are enabled");
 
     assert_eq!(result.name, WorkspacePackageManager::Npm);
     assert_eq!(selector.choice_count, PACKAGE_MANAGER_PROMPT_ORDER.len());

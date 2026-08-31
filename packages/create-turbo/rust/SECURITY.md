@@ -7,6 +7,7 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/package-manager.ts`
 - `packages/create-turbo/src/transforms/official-starter.ts`
 - the transform loop and `handleErrors` in `packages/create-turbo/src/commands/create/index.ts`
+- package-manager selection in `packages/create-turbo/src/commands/create/prompts.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
@@ -22,6 +23,8 @@ The example name determines whether acquisition is classified as a built-in defa
 The package-manager transform decides whether broad workspace mutation is invoked and which manager adapter receives control. The reviewed Rust core carries only a closed manager enum, a borrowed root path, and `skip_install: true`. Actual package metadata, lockfile, configuration, and process effects remain behind `PackageManagerConverter` and are not yet production-approved.
 
 The official-starter tranche adds trust boundaries for exact repository classification, the pre-metadata `package.json` existence snapshot, best-effort `meta.json` read/removal, project-name and version data, JavaScript truthiness, unknown package fields, JSON ordering, parser limits, links, concurrent replacement, and atomic publication. The reviewed core performs only ordering and mutation decisions; all filesystem and JSON effects remain behind typed providers.
+
+Package-manager prompting receives free-form CLI text, discovered executable versions, terminal input, cancellation, and non-TTY state. The reviewed Rust core accepts only a closed enum after exact parsing and revalidates every selected manager against a non-empty discovered version. Discovery and UI effects remain provider-owned.
 
 The transform pipeline decides which mutation stages run, whether later stages continue, and whether a failure terminates the command. The Rust core uses a closed four-step enum and typed error classes. It performs no logging, telemetry, process exit, filesystem access, or transform side effect directly.
 
@@ -276,6 +279,26 @@ The TypeScript handler logs and calls `process.exit(1)` for fatal transform erro
 The TypeScript handler sends error text through terminal coloring without a control-character policy. The Rust core never logs. The future binding must sanitize controls and directionality characters for terminal display while preserving raw structured diagnostics. Unknown errors must remain unknown and must not inherit nonfatal handling.
 
 The core adds no dependencies or side-effect capability, so it introduces no new advisory surface.
+
+### CT-RS-025: Unchecked package-manager casting broadens a trusted key
+
+**Severity:** Medium
+
+The TypeScript prompt casts free-form input to `PackageManager` before indexing discovery results. The Rust core parses only six exact literals. Case changes, whitespace, paths, controls, Unicode confusables, and oversized unknown text cannot become direct manager selections or expand the choice set.
+
+### CT-RS-026: Disabled prompt choices require provider-side revalidation
+
+**Severity:** Medium
+
+The source relies on Inquirer to prevent selection of unavailable managers. A faulty or compromised adapter could violate that UI contract. Rust re-reads the selected manager's discovered version and rejects absent or empty values. It never fabricates a version or retries automatically.
+
+### CT-RS-027: Package-manager discovery and prompt UI remain privileged providers
+
+**Severity:** High until provider closure
+
+Actual discovery can execute manager binaries and interactive prompting consumes attacker-controlled terminal state. Production providers must use canonical executables, explicit environment policy, no shell, bounded duration/output, descendant cleanup, terminal-safe rendering, exact cancellation/non-TTY/signal behavior, and supported-platform differential tests.
+
+The decision core adds no dependencies or direct side effects.
 
 ## Security invariants
 

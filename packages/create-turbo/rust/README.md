@@ -11,6 +11,7 @@ Current Rust tranches cover:
 5. the dependency-injected `package-manager` transform decision and conversion-request contract.
 6. the dependency-injected `official-starter` transform orchestration contract.
 7. the fixed-order transform-pipeline and fatal/nonfatal error-control contract.
+8. the package-manager prompt resolution and installed-choice ordering contract.
 
 The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
 
@@ -99,9 +100,21 @@ The exact type conversions and intentional security divergences are recorded in 
 
 Logging, telemetry, async adaptation, `process.exit(1)` mapping, and public JavaScript error construction remain binding work. The binding must sanitize terminal control characters for display and must flush telemetry and cleanup before a fatal exit. Exact differences are recorded in [`TRANSFORM_PIPELINE_DIVERGENCES.md`](./TRANSFORM_PIPELINE_DIVERGENCES.md).
 
+### Package-manager prompt core
+
+- returns no selection without discovery or prompting when transforms are skipped;
+- preserves the exact six-choice source order;
+- resolves an exact requested and installed manager without prompting;
+- treats an empty discovered version as JavaScript-falsey;
+- stably moves installed choices ahead of unavailable choices;
+- propagates selector failure without retry;
+- revalidates the selected manager and rejects disabled results.
+
+Discovery and terminal UI remain behind typed providers. Exact string casting, truthiness, disabled-choice validation, and remaining platform/UI differences are recorded in [`PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`](./PACKAGE_MANAGER_PROMPT_DIVERGENCES.md).
+
 ## Not yet implemented in Rust
 
-- CLI argument parsing, help/version output, and prompts;
+- production package-manager discovery and interactive prompt providers, including cancellation and non-TTY behavior;
 - example discovery and secure network/archive acquisition;
 - production package-manager workspace conversion and installation orchestration;
 - production Git/Hg process execution and `.git` cleanup providers;
@@ -114,7 +127,7 @@ Logging, telemetry, async adaptation, `process.exit(1)` mapping, and public Java
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -144,6 +157,8 @@ Official starter RED:   2ca25bd457cbe216f345b5f67cf9ac32f43a2c7a
 Official starter GREEN: cd2ba74b3040e654a63c9799e42c35a12f2c4dbc
 Pipeline RED:            9d6426ae91f810e093466817ff581f7bc7a5d9cc
 Pipeline GREEN:          7b208824412f008a942567faa5e37740948a541e
+Package prompt RED:      36b49a6cfad94bab8487dda62871b60c99a84115
+Package prompt GREEN:    4f00ff3ebe627acb5a15ead535f27d623d8a9a2c
 ```
 
 Focused validation:
@@ -156,7 +171,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 65 translated parity tests and 46 security regression tests, for 111 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
+The crate contains 73 translated parity tests and 51 security regression tests, for 124 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
 
 ## Production status
 

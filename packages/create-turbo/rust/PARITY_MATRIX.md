@@ -121,6 +121,22 @@ Detailed representation and security differences are in `OFFICIAL_STARTER_DIVERG
 
 Detailed differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
 
+## Package-manager prompt tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| `skipTransforms` early return | `resolve_package_manager_prompt` returns `None` | implemented core | Discovery and selector providers are untouched. |
+| source choices `npm`, `pnpm`, `yarn`, `bun`, `nub`, `aube` | `PACKAGE_MANAGER_PROMPT_ORDER` | implemented core | Exact order and closed variants are tested. |
+| requested installed manager | exact parse plus truthy version | implemented core | Bypasses selector like the source. |
+| unknown or unavailable manager | selector path | implemented core | No free-form value crosses the typed boundary. |
+| stable installed-first sort | stable sort by disabled state | implemented core | Relative order inside both groups is preserved. |
+| empty discovered version | unavailable | implemented core | Matches JavaScript string truthiness. |
+| selector cancellation/error | propagated once | implemented core | No retry or synthesized fallback. |
+| disabled selection | explicit unavailable-selection error | intentional-hardening | Defense in depth beyond Inquirer's UI disable flag. |
+| process discovery and interactive Inquirer behavior | production providers | blocked | Requires secure execution, cancellation/non-TTY/signal parity, terminal-safe UI, and platform differentials. |
+
+Detailed differences are in `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
+
 ## Existing TypeScript test mapping
 
 | TypeScript test or source contract | Rust test coverage | Status |
@@ -140,6 +156,8 @@ Detailed differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
 | official-route confusable/large-input/provider-boundary regressions | nine security tests | intentional-hardening evidence |
 | create command transform-loop source contract | ten translated parity tests | implemented core |
 | fixed-pipeline/error-boundary regressions | seven security tests | intentional-hardening evidence |
+| package-manager prompt source contract | eight translated parity tests | implemented core |
+| manager-cast, disabled-choice, confusable, and bound regressions | five security tests | intentional-hardening evidence |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -147,7 +165,7 @@ Detailed differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
 | Surface | Status | Required closure |
 | --- | --- | --- |
 | CLI argument parsing and help/version output | not-implemented | Translate CLI fixtures and process-level output/exit tests. |
-| interactive prompts | not-implemented | Preserve defaults, cancellation, validation, non-TTY behavior, and ordering. |
+| interactive prompts | package-manager decision core implemented, providers blocked | Add secure manager discovery, Inquirer-compatible UI, cancellation/non-TTY/signal behavior, platform differentials, binding, and removal proof. |
 | example resolution and download | partial | Exact default-route predicate is ported; discovery, GitHub/network/archive providers, redirects, extraction, and atomic promotion remain. |
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |

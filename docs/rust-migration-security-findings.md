@@ -190,6 +190,14 @@ The Rust core closes routing to four enum variants, bounds each to one invocatio
 
 Regression evidence is in `packages/create-turbo/rust/tests/transform_pipeline_parity.rs` and `transform_pipeline_security.rs`; exact differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
 
+### RF-017: Package-manager prompt casting and disabled choices need a typed provider boundary
+
+**Status:** Decision core implemented; discovery and UI providers blocked.
+
+The TypeScript prompt casts free-form manager text before indexing discovered versions and relies on Inquirer to enforce disabled choices. The Rust core accepts only six exact literals, preserves source ordering and truthiness, and revalidates the selected manager against a non-empty discovered version. It never retries or fabricates a fallback.
+
+Production closure requires canonical no-shell discovery with bounded process handling, exact interactive cancellation/non-TTY/signal behavior, terminal-safe rendering, supported-platform differentials, host binding, and TypeScript removal proof. Regression evidence is in the package-manager prompt parity/security tests and `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
@@ -199,6 +207,7 @@ Before declaring repository-wide TypeScript deprecation complete:
 - close the package-manager conversion transaction, rollback, and supported-platform contract;
 - close the official-starter bounded JSON, truthiness, no-follow identity, deterministic ordering, atomic publication, and supported-platform provider contract;
 - close the transform-pipeline async binding, telemetry, terminal-safe logging, cleanup-before-exit, runtime typing, and supported-platform differential contract;
+- close the package-manager discovery and prompt provider contract, including canonical execution, cancellation, non-TTY/signals, terminal-safe UI, and supported-platform differentials;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;

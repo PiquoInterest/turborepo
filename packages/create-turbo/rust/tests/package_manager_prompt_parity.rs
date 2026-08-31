@@ -132,13 +132,8 @@ fn skip_transforms_returns_none_without_availability_or_prompt_access() {
     let availability = Availability::default();
     let mut selector = ExplodingSelector;
 
-    let result = resolve_package_manager_prompt(
-        Some("npm"),
-        true,
-        &availability,
-        &mut selector,
-    )
-    .expect("skipTransforms is a successful no-selection branch");
+    let result = resolve_package_manager_prompt(Some("npm"), true, &availability, &mut selector)
+        .expect("skipTransforms is a successful no-selection branch");
 
     assert_eq!(result, None);
     assert!(availability.calls.borrow().is_empty());
@@ -170,14 +165,9 @@ fn unavailable_manager_argument_falls_back_to_the_prompt() {
     let availability = Availability::installed(WorkspacePackageManager::Pnpm, "10.0.0");
     let mut selector = Selector::returning(WorkspacePackageManager::Pnpm);
 
-    let result = resolve_package_manager_prompt(
-        Some("npm"),
-        false,
-        &availability,
-        &mut selector,
-    )
-    .expect("the prompt selection succeeds")
-    .expect("transforms are enabled");
+    let result = resolve_package_manager_prompt(Some("npm"), false, &availability, &mut selector)
+        .expect("the prompt selection succeeds")
+        .expect("transforms are enabled");
 
     assert_eq!(result.name, WorkspacePackageManager::Pnpm);
     assert_eq!(result.version, Some("10.0.0"));
@@ -191,14 +181,9 @@ fn empty_version_is_javascript_falsey_and_does_not_enable_direct_selection() {
     availability.set(WorkspacePackageManager::Pnpm, Some("10.0.0"));
     let mut selector = Selector::returning(WorkspacePackageManager::Pnpm);
 
-    let result = resolve_package_manager_prompt(
-        Some("npm"),
-        false,
-        &availability,
-        &mut selector,
-    )
-    .expect("the prompt selection succeeds")
-    .expect("transforms are enabled");
+    let result = resolve_package_manager_prompt(Some("npm"), false, &availability, &mut selector)
+        .expect("the prompt selection succeeds")
+        .expect("transforms are enabled");
 
     assert_eq!(result.name, WorkspacePackageManager::Pnpm);
     assert_eq!(result.version, Some("10.0.0"));
