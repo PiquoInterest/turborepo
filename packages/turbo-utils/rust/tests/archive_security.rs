@@ -61,3 +61,10 @@ fn path_at_the_documented_limits_is_allowed() {
     assert!(at_depth.chars().count() <= ARCHIVE_MAX_PATH_CHARS);
     assert!(is_archive_path_safe(root, &at_depth, None));
 }
+
+#[test]
+fn dot_dot_prefixed_normal_names_are_not_parent_traversal() {
+    let root = Path::new("/tmp/extract");
+    assert!(is_archive_path_safe(root, "..cache", None));
+    assert!(is_archive_path_safe(root, "dir/..metadata", None));
+}
