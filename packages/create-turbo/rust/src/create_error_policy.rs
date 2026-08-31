@@ -64,10 +64,7 @@ pub fn classify_create_command_error<E>(
             } else {
                 CreateCommandErrorAction::Continue
             };
-            outcome(
-                vec![display_line(Some(transform), message)],
-                action,
-            )
+            outcome(vec![display_line(Some(transform), message)], action)
         }
         CreateCommandError::Convert {
             source,
@@ -120,7 +117,8 @@ pub fn sanitize_terminal_text(input: &str, max_bytes: usize) -> String {
 
 fn display_line(label: Option<&str>, message: &str) -> CreateCommandErrorLine {
     CreateCommandErrorLine {
-        label: label.map(|value| sanitize_terminal_text(value, CREATE_COMMAND_ERROR_TRANSFORM_LIMIT)),
+        label: label
+            .map(|value| sanitize_terminal_text(value, CREATE_COMMAND_ERROR_TRANSFORM_LIMIT)),
         message: sanitize_terminal_text(message, CREATE_COMMAND_ERROR_MESSAGE_LIMIT),
     }
 }
@@ -148,11 +146,7 @@ fn terminal_fragment(character: char) -> String {
     }
 }
 
-fn append_truncation_marker(
-    output: &mut String,
-    chunk_lengths: &mut Vec<usize>,
-    max_bytes: usize,
-) {
+fn append_truncation_marker(output: &mut String, chunk_lengths: &mut Vec<usize>, max_bytes: usize) {
     if max_bytes < TRUNCATION_MARKER.len() {
         output.clear();
         output.push_str(&TRUNCATION_MARKER[..max_bytes]);
