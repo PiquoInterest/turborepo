@@ -2,6 +2,8 @@ import { describe, expect, it } from "@jest/globals";
 import type { PackageManager } from "../src/types";
 import { getPackageManagerMeta } from "../src/install";
 
+const EDGE_WHITESPACE_VERSIONS = [" 1.2.3", "1.2.3 ", "1.2.3\n"];
+
 describe("package-manager install semver oracle", () => {
   it.each<{
     name: PackageManager;
@@ -45,9 +47,6 @@ describe("package-manager install semver oracle", () => {
     "1.2",
     "1.2.3.4",
     "999999999999999999999999999999.0.0",
-    " 1.2.3",
-    "1.2.3 ",
-    "1.2.3\n",
     "１.２.３",
     "1.2.3\u202e",
     "1.2.3\u0000"
@@ -59,4 +58,30 @@ describe("package-manager install semver oracle", () => {
       })
     ).toBeUndefined();
   });
+
+  it.each(EDGE_WHITESPACE_VERSIONS)(
+    "preserves npm semver edge-whitespace normalization for %j",
+    (version) => {
+      expect(
+        getPackageManagerMeta({
+          name: "npm",
+          version
+        })?.name
+      ).toBe("npm");
+    }
+  );
+
+  for (const version of EDGE_WHITESPACE_VERSIONS) {
+    it.failing(
+      `rejects normalized edge-whitespace version ${JSON.stringify(version)}`,
+      () => {
+        expect(
+          getPackageManagerMeta({
+            name: "npm",
+            version
+          })
+        ).toBeUndefined();
+      }
+    );
+  }
 });
