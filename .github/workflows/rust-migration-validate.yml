@@ -243,19 +243,19 @@ jobs:
       - name: Format migration crates and resolve lockfile
         run: |
           cargo fmt --all
-          cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
+          cargo check -p turbo-ignore-rs -p turbo-utils-rs --all-targets
 
       - name: Apply machine-applicable Clippy repairs
         run: |
-          cargo clippy --fix --allow-dirty --allow-staged -p turbo-ignore -p turbo-utils-rs --all-targets
+          cargo clippy --fix --allow-dirty --allow-staged -p turbo-ignore-rs -p turbo-utils-rs --all-targets
           cargo fmt --all
-          cargo check --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+          cargo check --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets
 
       - name: Run migration parity and security tests
-        run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+        run: cargo test --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets
 
       - name: Run migration Clippy gate
-        run: cargo clippy --locked -p turbo-ignore -p turbo-utils-rs --all-targets -- -D warnings
+        run: cargo clippy --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets -- -D warnings
 
       - name: Set up Node for repository push hooks
         uses: ./.github/actions/setup-node
@@ -309,10 +309,10 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Compile committed migration crates
-        run: cargo check --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+        run: cargo check --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets
 
       - name: Run migration parity and security tests
-        run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+        run: cargo test --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets
 
       - name: Run migration Clippy gate
-        run: cargo clippy --locked -p turbo-ignore -p turbo-utils-rs --all-targets -- -D warnings
+        run: cargo clippy --locked -p turbo-ignore-rs -p turbo-utils-rs --all-targets -- -D warnings
