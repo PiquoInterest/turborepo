@@ -219,9 +219,9 @@ fn normalized_domain(value: &str) -> Option<&str> {
             || label.len() > 63
             || label.starts_with('-')
             || label.ends_with('-')
-            || !label.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
-            })
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
         {
             return None;
         }
@@ -239,10 +239,7 @@ fn looks_numeric(value: &str) -> bool {
 fn parse_unbracketed_host(value: &str) -> Option<RequestHost<'_>> {
     let candidate = value.strip_suffix('.').unwrap_or(value);
     if looks_numeric(candidate) {
-        return candidate
-            .parse::<Ipv4Addr>()
-            .ok()
-            .map(RequestHost::Ipv4);
+        return candidate.parse::<Ipv4Addr>().ok().map(RequestHost::Ipv4);
     }
     normalized_domain(candidate).map(RequestHost::Domain)
 }
