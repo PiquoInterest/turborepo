@@ -38,10 +38,34 @@ fn invalid_or_control_character_project_names_are_rejected() -> Result<(), Box<d
 }
 
 #[test]
-fn option_like_project_name_is_rejected() -> Result<(), Box<dyn Error>> {
-    let directory = tempfile::tempdir()?;
-    let result = validate_directory("-danger", directory.path());
-    assert!(!result.valid, "accepted an option-like project basename");
+fn option_like_project_names_are_rejected_before_filesystem_inspection() -> Result<(), Box<dyn Error>> {
+    let current_directory = tempfile::tempdir()?;
+    for (directory, project_name) in [
+        ("-rf", "-rf"),
+        ("--help", "--help"),
+        ("nested/-C", "-C"),
+    ] {
+        let result = validate_directory(directory, current_directory.path());
+
+        assert!(!result.valid, "accepted {directory:?}");
+        assert_eq!(result.project_name, project_name);
+        assert!(
+            result
+                .error
+                .is_some_and(|error| error.contains("is not a valid directory"))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn ordinary_hyphenated_project_name_remains_valid() -> Result<(), Box<dyn Error>> {
+    let current_directory = tempfile::tempdir()?;
+    let result = validate_directory("app-name", current_directory.path());
+
+    assert!(result.valid);
+    assert_eq!(result.project_name, "app-name");
+    assert_eq!(result.root, current_directory.path().join("app-name"));
     Ok(())
 }
 
