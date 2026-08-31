@@ -1,0 +1,270 @@
+name: Validate create-turbo directory security v2
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-directory-security-v2
+    paths:
+      - .github/workflows/validate-create-turbo-directory-security-v2.yml
+      - tools/migration/apply_directory_security_v2_docs.py
+      - packages/create-turbo/src/cli.ts
+      - packages/create-turbo/src/commands/create/prompts.ts
+      - packages/create-turbo/__tests__/directory-security.test.ts
+      - packages/create-turbo/rust/**
+      - docs/typescript-deprecation.md
+      - docs/rust-migration-security-findings.md
+
+concurrency:
+  group: create-turbo-directory-security-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+jobs:
+  validate-and-document:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout focused branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/create-turbo-directory-security-v2
+          fetch-depth: 0
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install JavaScript dependencies without lockfile drift
+        run: pnpm install --frozen-lockfile
+
+      - name: Prove the retained Rust RED contracts
+        env:
+          INITIAL_RED_SHA: 6bbef5a95cbc0e6cf908e62083e852db473b2456
+          UNICODE_RED_SHA: beb38232b84dca526a5b86accf40b5dca80a734c
+        run: |
+          set -euo pipefail
+          prove_red() {
+            local sha="$1"
+            local label="$2"
+            local test_filter="${3:-}"
+            local root="${RUNNER_TEMP}/${label}"
+            git worktree add --detach "$root" "$sha"
+            set +e
+            cargo test --locked \
+              --manifest-path "$root/packages/create-turbo/rust/Cargo.toml" \
+              --test directory_prompt_security \
+              ${test_filter:+$test_filter} \
+              >"${RUNNER_TEMP}/${label}.log" 2>&1
+            local status=$?
+            set -e
+            cat "${RUNNER_TEMP}/${label}.log"
+            if [[ $status -eq 0 ]]; then
+              echo "::error::$label unexpectedly passed"
+              exit 1
+            fi
+            if grep -Eqi 'failed to fetch|network failure|could not resolve host|no space left|toolchain.*not installed' "${RUNNER_TEMP}/${label}.log"; then
+              echo "::error::$label failed because of the environment"
+              exit 1
+            fi
+            git worktree remove --force "$root"
+          }
+
+          prove_red "$INITIAL_RED_SHA" directory-initial-red
+          grep -Eq 'DirectoryInputRejection|resolve_directory_prompt|DirectoryPromptError' \
+            "${RUNNER_TEMP}/directory-initial-red.log"
+
+          prove_red \
+            "$UNICODE_RED_SHA" \
+            directory-unicode-red \
+            extended_terminal_format_controls_are_rejected
+          grep -Fq 'extended_terminal_format_controls_are_rejected' \
+            "${RUNNER_TEMP}/directory-unicode-red.log"
+
+      - name: Prove the retained TypeScript RED contracts
+        env:
+          INITIAL_RED_SHA: 6bbef5a95cbc0e6cf908e62083e852db473b2456
+          UNICODE_RED_SHA: beb38232b84dca526a5b86accf40b5dca80a734c
+        run: |
+          set -euo pipefail
+          source_path='packages/create-turbo/src/commands/create/prompts.ts'
+          test_path='packages/create-turbo/__tests__/directory-security.test.ts'
+
+          prove_ts_red() {
+            local sha="$1"
+            local label="$2"
+            git show "$sha:$source_path" > "$source_path"
+            git show "$sha:$test_path" > "$test_path"
+            set +e
+            pnpm --filter create-turbo exec jest \
+              __tests__/directory-security.test.ts \
+              --runInBand \
+              --coverage=false \
+              >"${RUNNER_TEMP}/${label}.log" 2>&1
+            local status=$?
+            set -e
+            cat "${RUNNER_TEMP}/${label}.log"
+            git restore --source=HEAD -- "$source_path" "$test_path"
+            if [[ $status -eq 0 ]]; then
+              echo "::error::$label unexpectedly passed"
+              exit 1
+            fi
+            if grep -Eqi 'failed to fetch|network failure|could not resolve host|no space left|command not found' "${RUNNER_TEMP}/${label}.log"; then
+              echo "::error::$label failed because of the environment"
+              exit 1
+            fi
+          }
+
+          prove_ts_red "$INITIAL_RED_SHA" directory-typescript-initial-red
+          grep -Eq 'InvalidDirectoryError|MAX_DIRECTORY_INPUT_BYTES|INVALID_PROJECT_DIRECTORY_MESSAGE' \
+            "${RUNNER_TEMP}/directory-typescript-initial-red.log"
+
+          prove_ts_red "$UNICODE_RED_SHA" directory-typescript-unicode-red
+          grep -Eq 'ill-formed UTF-16|terminal-active Unicode|unsafe-input|validation' \
+            "${RUNNER_TEMP}/directory-typescript-unicode-red.log"
+
+      - name: Verify focused scope and absence of new privileged capability
+        env:
+          BASE_SHA: 0a3deb015bae518db715d724e8f1e8221b70dbb9
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$BASE_SHA" -- \
+            Cargo.toml Cargo.lock pnpm-lock.yaml package.json \
+            packages/create-turbo/package.json \
+            packages/create-turbo/rust/Cargo.toml
+          python <<'PY'
+          import subprocess
+
+          base = "0a3deb015bae518db715d724e8f1e8221b70dbb9"
+          product_paths = [
+              "packages/create-turbo/src/cli.ts",
+              "packages/create-turbo/src/commands/create/prompts.ts",
+              "packages/create-turbo/__tests__/directory-security.test.ts",
+              "packages/create-turbo/rust/src/directory_prompt.rs",
+              "packages/create-turbo/rust/src/lib.rs",
+              "packages/create-turbo/rust/tests/directory_prompt_parity.rs",
+              "packages/create-turbo/rust/tests/directory_prompt_security.rs",
+          ]
+          allowed = set(product_paths) | {
+              ".github/workflows/validate-create-turbo-directory-security-v2.yml",
+              "tools/migration/apply_directory_security_v2_docs.py",
+              "packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md",
+          }
+          changed = set(
+              subprocess.run(
+                  ["git", "diff", "--name-only", base, "--"],
+                  check=True,
+                  text=True,
+                  capture_output=True,
+              ).stdout.splitlines()
+          )
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit(f"focused branch contains unexpected paths: {unexpected}")
+
+          diff = subprocess.run(
+              ["git", "diff", base, "--", *product_paths],
+              check=True,
+              text=True,
+              capture_output=True,
+          ).stdout
+          added = [
+              line[1:]
+              for line in diff.splitlines()
+              if line.startswith("+") and not line.startswith("+++")
+          ]
+          forbidden = (
+              "continue-on-error: true",
+              "|| true",
+              "#[allow(clippy::unwrap_used)]",
+              "#[allow(clippy::expect_used)]",
+              "#[ignore]",
+              "it.skip",
+              "test.skip",
+              "it.failing",
+          )
+          for token in forbidden:
+              if any(token in line for line in added):
+                  raise SystemExit(f"new failure suppression is forbidden: {token}")
+          if any("unsafe {" in line for line in added):
+              raise SystemExit("the directory tranche must not add unsafe code")
+          PY
+          grep -Fq 'throw new InvalidDirectoryError' \
+            packages/create-turbo/src/commands/create/prompts.ts
+          if grep -Fq 'result.error' packages/create-turbo/src/commands/create/prompts.ts; then
+            echo '::error::raw validator diagnostics must not reach the prompt/CLI boundary'
+            exit 1
+          fi
+          grep -Fq 'reason instanceof InvalidDirectoryError' \
+            packages/create-turbo/src/cli.ts
+          grep -Fq 'await notifyUpdate(1)' packages/create-turbo/src/cli.ts
+
+      - name: Format and validate the Rust implementation
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+
+      - name: Format, type-check, and run the TypeScript oracle
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt \
+            packages/create-turbo/src/cli.ts \
+            packages/create-turbo/src/commands/create/prompts.ts \
+            packages/create-turbo/__tests__/directory-security.test.ts
+          git diff --check
+          pnpm --filter create-turbo exec tsc --noEmit --project tsconfig.json
+          pnpm --filter create-turbo exec jest \
+            __tests__/directory-security.test.ts \
+            --runInBand \
+            --coverage=false
+          pnpm --filter create-turbo exec jest \
+            --forceExit \
+            --detectOpenHandles \
+            --runInBand \
+            --coverage=false
+
+      - name: Verify the documented Rust test inventory
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          root = Path("packages/create-turbo/rust/tests")
+          parity = sum(path.read_text().count("#[test]") for path in root.glob("*_parity.rs"))
+          security = sum(path.read_text().count("#[test]") for path in root.glob("*_security.rs"))
+          if (parity, security) != (102, 81):
+              raise SystemExit(f"unexpected test inventory: parity={parity}, security={security}")
+          print(f"create-turbo Rust tests: {parity} parity, {security} security")
+          PY
+
+      - name: Record parity, security, and divergence evidence
+        run: python tools/migration/apply_directory_security_v2_docs.py
+
+      - name: Commit reviewed formatting and documentation
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "docs: Record project-directory security parity"
+          git push origin HEAD:rust/create-turbo-directory-security-v2
