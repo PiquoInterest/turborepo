@@ -323,8 +323,10 @@ fn malformed_package_json_is_present_but_has_no_scripts() {
 #[test]
 fn missing_named_example_returns_the_existing_failure_semantics() {
     let base = tempfile::tempdir().expect("base directory");
-    let mut source = FakeSource::default();
-    source.example_exists = false;
+    let source = FakeSource {
+        example_exists: false,
+        ..FakeSource::default()
+    };
     let request = options(base.path(), "my-app", "does-not-exist");
 
     let error = create_project(&request, &source).expect_err("example must be missing");
