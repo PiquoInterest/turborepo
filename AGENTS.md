@@ -25,6 +25,86 @@ When making changes to the codebase, check if the following docs need updates:
   - PR requirements or CI workflows
   - Repository conventions or policies
 
+## TypeScript-to-Rust Deprecation Workflow
+
+The long-lived integration branch for this program is `rust/typescript-deprecation`. Read [docs/typescript-deprecation.md](./docs/typescript-deprecation.md) before changing a migration tranche. Do not declare repository-wide parity while its ledger still contains executable TypeScript runtime entries.
+
+### 1. Inventory the complete behavior surface
+
+Before writing Rust code:
+
+- Identify the TypeScript runtime files, public exports, CLI flags, environment variables, serialized formats, filesystem/network/process side effects, platform-specific behavior, package metadata, release jobs, and downstream callers.
+- Locate the existing tests and fixtures that define the current behavior. Run them before changing implementation and record any pre-existing failures instead of silently accepting them as the new baseline.
+- Add or update the component row in `docs/typescript-deprecation.md`, including the exact remaining closure work.
+
+### 2. Use test-driven and differential development
+
+- Translate the existing behavioral tests into Rust before implementing the corresponding behavior. The new Rust test must fail for the missing behavior before the implementation is added.
+- Keep the TypeScript suite as an oracle until production cutover. Add differential fixtures that run both implementations over the same inputs and compare outputs, exit codes, error classes, ordering, mutations, and side effects.
+- Cover success, failure, malformed input, boundary sizes, cancellation, concurrency, platform differences, and deterministic behavior. Compilation alone is never parity evidence.
+- Preserve exact safe-input behavior unless a documented security fix intentionally changes it.
+
+### 3. Perform a security review and current advisory lookup
+
+Perform this review at the start of each tranche and repeat it before merge:
+
+- Map attacker-controlled inputs, privilege boundaries, credentials, network destinations, package acquisition, executable resolution, subprocess arguments, filesystem roots, parsers, caches, and persistence.
+- Check current authoritative security sources for every new or materially changed dependency and externally executed tool. At minimum, consult the RustSec Advisory Database, GitHub Security Advisories, and the dependency or tool's official security notices and release notes. Record the lookup date, affected versions, sources checked, and disposition in the component `SECURITY.md`.
+- Review command and argument injection, shell use, package-spec execution, `PATH` substitution, path traversal, symlink/hardlink and TOCTOU races, archive extraction, SSRF and redirects, TLS validation, parser size/depth limits, denial of service, secret logging, telemetry/redaction, authorization, unsafe code, integer/encoding boundaries, process cleanup, and fail-open/fail-closed behavior.
+- Do not preserve a known unsafe behavior merely to claim parity. Every intentional security incompatibility must be explicit, covered by a regression test, and recorded in both `SECURITY.md` and `PARITY_MATRIX.md`.
+- Use the fewest new dependencies possible, prefer workspace-managed versions, and do not add an unreviewed Git, path, URL, prerelease, or unpinned executable acquisition path.
+
+### 4. Populate the migration documentation in the same change
+
+Every migrated component must contain and keep current:
+
+- `README.md`: scope, architecture, test commands, packaging/binding status, production entry-point status, and remaining work.
+- `PARITY_MATRIX.md`: each TypeScript source/test boundary mapped to Rust, with implemented, intentional-deviation, partial, blocked, or not-implemented status.
+- `SECURITY.md`: trust boundaries, findings, severity, impact, fix, regression tests, advisory lookup record, and residual risk.
+- `docs/typescript-deprecation.md`: repository ledger status, test totals, production cutover state, and exact blockers.
+
+Do not leave these files as placeholders. Behavior, test, security, dependency, packaging, or cutover changes must update the relevant Markdown files in the same tranche. Update `AGENTS.md` whenever this workflow or its required gates change.
+
+### 5. Rust implementation rules
+
+- Follow the workspace panic-extraction policy. Production code must not introduce `.unwrap()`, `.unwrap_err()`, `.unwrap_none()`, or `.expect()`.
+- Avoid `unsafe`. When it is unavoidable, keep the block minimal, document the safety invariants next to it, and add tests around the boundary.
+- Invoke subprocesses with argument vectors rather than shell command construction. Bound execution time and output, validate semantic mini-languages, and clean up descendant processes.
+- Bound untrusted reads and parser depth, canonicalize or otherwise constrain filesystem access, and define symlink behavior deliberately.
+- Make errors deterministic and preserve exact public error/exit/serialization contracts where safe.
+
+### 6. Required validation before cutover
+
+Run the narrow component gates while developing, then the repository-required gates before merge. At minimum:
+
+```sh
+cargo fmt --all --check
+cargo check --locked -p <rust-package> --all-targets
+cargo test --locked -p <rust-package> --all-targets
+cargo clippy --locked -p <rust-package> --all-targets -- -D warnings
+pnpm --filter <typescript-package> test
+```
+
+Also run the tranche's differential tests and any supported dependency/advisory scanner. A missing tool, skipped job, or unavailable platform is a recorded blocker, not a pass.
+
+Executable TypeScript may be deleted only after all of these are true:
+
+- Safe-input differential parity passes on every supported platform.
+- Security deviations and residual risks are reviewed and tested.
+- Native/WASM bindings or the minimal required JavaScript host adapter are production-ready.
+- npm/native packaging, provenance, signing, release, rollback, and install behavior point to the Rust implementation.
+- All downstream callers are migrated.
+- Removal tests prove that the old TypeScript runtime is no longer loaded or shipped.
+- The component ledger and colocated Markdown files state complete with evidence.
+
+### 7. Commits and pull requests
+
+- Work in reviewable tranches on `rust/typescript-deprecation` or a focused branch targeting it. Never force-push shared migration history.
+- Keep tests, implementation, security notes, parity notes, and ledger updates together so the branch never loses its evidence trail.
+- Use Conventional Commit titles and never bypass hooks with `--no-verify`.
+- PR descriptions must list exact commands and results, test counts, security findings and intentional deviations, advisory sources checked, production cutover status, and remaining blockers.
+- Never use “1:1 parity”, “complete”, or “TypeScript deprecated” unless the evidence and repository ledger satisfy every gate above.
+
 ## Pull Request Guidelines
 
 ### Always run pre-commit/pre-push hooks
@@ -57,7 +137,7 @@ Format: `<type>: <Description>`
 
 Key rules:
 
-- Description must start with an uppercase letter
+- Description must start with uppercase letter
 - Scopes are not allowed
 
 Examples:
