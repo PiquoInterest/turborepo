@@ -3,6 +3,7 @@ mod git_ignore;
 mod git_init;
 mod package_manager_transform;
 mod readme_transform;
+mod transform_pipeline;
 
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use git_ignore::{
@@ -17,3 +18,8 @@ pub use package_manager_transform::{
     PackageManagerSelection, WorkspacePackageManager, transform_package_manager,
 };
 pub use readme_transform::*;
+pub use transform_pipeline::{
+    PipelineAbort, PipelineAbortReason, PipelineTransformResponse, TRANSFORM_PIPELINE,
+    TransformExecutor, TransformFailure, TransformInvocationError, TransformKind,
+    TransformPipelineReport, run_transform_pipeline,
+};
