@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::os::unix::{fs::PermissionsExt as _, process::CommandExt as _};
 use std::{
     env,
     ffi::OsString,
@@ -8,9 +10,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-
-#[cfg(unix)]
-use std::os::unix::{fs::PermissionsExt as _, process::CommandExt as _};
 
 pub const PACKAGE_MANAGER_EXEC_TIMEOUT: Duration = Duration::from_secs(5);
 pub const PACKAGE_MANAGER_MAX_OUTPUT_BYTES: usize = 1_024 * 1_024;
@@ -326,10 +325,7 @@ fn read_project_file(project_root: &Path, relative_path: &str) -> Option<String>
 fn read_package_manager(project_root: &Path) -> Option<String> {
     let raw = read_project_file(project_root, "package.json")?;
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    value
-        .get("packageManager")?
-        .as_str()
-        .map(ToOwned::to_owned)
+    value.get("packageManager")?.as_str().map(ToOwned::to_owned)
 }
 
 fn consume_digits(bytes: &[u8], mut index: usize) -> Option<usize> {
@@ -354,9 +350,10 @@ fn version_end(input: &str, start: usize) -> Option<usize> {
     if bytes.get(index) == Some(&b'-') {
         let prerelease_start = index + 1;
         index = prerelease_start;
-        while bytes.get(index).is_some_and(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(*byte, b'.' | b'-')
-        }) {
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'.' | b'-'))
+        {
             index += 1;
         }
         if index == prerelease_start {

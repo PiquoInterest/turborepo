@@ -42,10 +42,7 @@ impl FakeRunner {
 
 impl PackageManagerCommandRunner for FakeRunner {
     fn run(&self, request: &CommandRequest) -> Option<String> {
-        self.calls
-            .lock()
-            .expect("calls lock")
-            .push(request.clone());
+        self.calls.lock().expect("calls lock").push(request.clone());
         self.outputs
             .get(&command_key_owned(&request.program, &request.arguments))
             .cloned()
@@ -161,10 +158,7 @@ fn unavailable_package_managers_are_none() {
 
 #[test]
 fn infers_project_yarn_version_from_package_manager() {
-    let project = create_project(&[(
-        "package.json",
-        r#"{"packageManager":"yarn@4.5.1"}"#,
-    )]);
+    let project = create_project(&[("package.json", r#"{"packageManager":"yarn@4.5.1"}"#)]);
     let runner = FakeRunner::default()
         .with_output("npm", &["--version"], "9.5.0")
         .with_output("pnpm", &["--version"], "8.6.7")
@@ -172,18 +166,14 @@ fn infers_project_yarn_version_from_package_manager() {
         .with_output("nub", &["--version"], "0.1.0")
         .with_output("aube", &["--version"], "0.1.0");
 
-    let result =
-        get_available_package_managers_with(project.path(), command_cwd(), &runner);
+    let result = get_available_package_managers_with(project.path(), command_cwd(), &runner);
     assert_eq!(result.yarn.as_deref(), Some("4.5.1"));
     assert!(runner.calls().iter().all(|call| call.program != "yarnpkg"));
 }
 
 #[test]
 fn infers_project_yarn_version_from_conventional_yarn_path() {
-    let project = create_project(&[(
-        ".yarnrc.yml",
-        "yarnPath: .yarn/releases/yarn-3.2.1.cjs\n",
-    )]);
+    let project = create_project(&[(".yarnrc.yml", "yarnPath: .yarn/releases/yarn-3.2.1.cjs\n")]);
     let runner = FakeRunner::default()
         .with_output("npm", &["--version"], "9.5.0")
         .with_output("pnpm", &["--version"], "8.6.7")
@@ -191,8 +181,7 @@ fn infers_project_yarn_version_from_conventional_yarn_path() {
         .with_output("nub", &["--version"], "0.1.0")
         .with_output("aube", &["--version"], "0.1.0");
 
-    let result =
-        get_available_package_managers_with(project.path(), command_cwd(), &runner);
+    let result = get_available_package_managers_with(project.path(), command_cwd(), &runner);
     assert_eq!(result.yarn.as_deref(), Some("3.2.1"));
     assert!(runner.calls().iter().all(|call| call.program != "yarnpkg"));
 }
@@ -204,8 +193,7 @@ fn custom_yarn_path_disables_execution_and_fallback() {
         .with_output("yarnpkg", &["--version"], "4.5.1")
         .with_output("npm", &["--version"], "9.5.0");
 
-    let result =
-        get_available_package_managers_with(project.path(), command_cwd(), &runner);
+    let result = get_available_package_managers_with(project.path(), command_cwd(), &runner);
     assert_eq!(result.yarn, None);
     assert!(runner.calls().iter().all(|call| call.program != "yarnpkg"));
 }
@@ -258,8 +246,7 @@ fn yarn_v1_uses_global_bin_command() {
 
 #[test]
 fn failed_bin_path_checks_are_none() {
-    let runner = FakeRunner::default()
-        .with_output("pnpm", &["bin", "--global"], "/usr/local/pnpm");
+    let runner = FakeRunner::default().with_output("pnpm", &["bin", "--global"], "/usr/local/pnpm");
 
     assert_eq!(
         get_package_managers_bin_paths_with(
@@ -308,10 +295,7 @@ fn command_requests_preserve_typescript_execution_contract() {
 
 #[test]
 fn project_yarn_berry_bin_path_does_not_execute_yarn() {
-    let project = create_project(&[(
-        "package.json",
-        r#"{"packageManager":"yarn@4.5.1"}"#,
-    )]);
+    let project = create_project(&[("package.json", r#"{"packageManager":"yarn@4.5.1"}"#)]);
     let runner = FakeRunner::default()
         .with_output("npm", &["config", "get", "prefix"], "/usr/local/bin")
         .with_output("pnpm", &["bin", "--global"], "/usr/local/pnpm")
@@ -319,8 +303,7 @@ fn project_yarn_berry_bin_path_does_not_execute_yarn() {
         .with_resolution("nub", "/usr/local/bin/nub")
         .with_resolution("aube", "/usr/local/bin/aube");
 
-    let result =
-        get_package_managers_bin_paths_with(project.path(), command_cwd(), &runner);
+    let result = get_package_managers_bin_paths_with(project.path(), command_cwd(), &runner);
     assert_eq!(
         result.yarn.as_deref(),
         Some(".yarn/releases/yarn-4.5.1.cjs")
@@ -339,22 +322,14 @@ fn parses_quoted_yarn_paths_like_the_typescript_implementation() {
         ".yarnrc.yml",
         "yarnPath: \".yarn/releases/yarn-4.1.0.cjs\" # comment\n",
     )]);
-    let single_quoted = create_project(&[(
-        ".yarnrc.yml",
-        "yarnPath: '.yarn/releases/yarn-4.2.0.cjs'\n",
-    )]);
+    let single_quoted =
+        create_project(&[(".yarnrc.yml", "yarnPath: '.yarn/releases/yarn-4.2.0.cjs'\n")]);
     let runner = FakeRunner::default();
 
-    let double_result = get_available_package_managers_with(
-        double_quoted.path(),
-        command_cwd(),
-        &runner,
-    );
-    let single_result = get_available_package_managers_with(
-        single_quoted.path(),
-        command_cwd(),
-        &runner,
-    );
+    let double_result =
+        get_available_package_managers_with(double_quoted.path(), command_cwd(), &runner);
+    let single_result =
+        get_available_package_managers_with(single_quoted.path(), command_cwd(), &runner);
     assert_eq!(double_result.yarn.as_deref(), Some("4.1.0"));
     assert_eq!(single_result.yarn.as_deref(), Some("4.2.0"));
 }

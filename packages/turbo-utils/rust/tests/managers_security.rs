@@ -1,5 +1,12 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+#[cfg(unix)]
+use std::os::unix::fs::{PermissionsExt as _, symlink};
+#[cfg(unix)]
+use std::{
+    env,
+    time::{Duration, Instant},
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -7,20 +14,10 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::{
-    env,
-    time::{Duration, Instant},
-};
-
-#[cfg(unix)]
-use std::os::unix::fs::{PermissionsExt as _, symlink};
-
+use turbo_utils_rs::SystemPackageManagerCommandRunner;
 use turbo_utils_rs::{
     CommandRequest, PackageManagerCommandRunner, get_available_package_managers_with,
 };
-
-#[cfg(unix)]
-use turbo_utils_rs::SystemPackageManagerCommandRunner;
 
 #[derive(Debug, Default)]
 struct RecordingRunner {
@@ -29,10 +26,7 @@ struct RecordingRunner {
 
 impl PackageManagerCommandRunner for RecordingRunner {
     fn run(&self, request: &CommandRequest) -> Option<String> {
-        self.calls
-            .lock()
-            .expect("calls lock")
-            .push(request.clone());
+        self.calls.lock().expect("calls lock").push(request.clone());
         None
     }
 
