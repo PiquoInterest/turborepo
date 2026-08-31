@@ -1,11 +1,15 @@
 [package]
-name = "turbo-ignore"
+name = "turbo-ignore-rs"
 version = "2.10.13-canary.1"
 edition = "2024"
 rust-version = "1.90"
 license = "MIT"
 publish = false
 description = "Rust implementation of turbo-ignore with fail-open deployment semantics"
+
+[lib]
+name = "turbo_ignore"
+path = "src/lib.rs"
 
 [[bin]]
 name = "turbo-ignore"
