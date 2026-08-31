@@ -27,8 +27,257 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Prepare validated migration repair
+    if: github.event_name == 'push' && github.ref == 'refs/heads/rust/typescript-deprecation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache-key: rust-typescript-deprecation-prepare
+
+      - name: Apply deterministic parity and lint repairs
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_text: str, before: str, after: str) -> None:
+              path = Path(path_text)
+              content = path.read_text()
+              if after in content:
+                  return
+              if before not in content:
+                  raise SystemExit(f"expected repair context not found in {path}")
+              path.write_text(content.replace(before, after, 1))
+
+          replace_once(
+              "packages/turbo-utils/rust/src/config/workspace_configs.rs",
+              '''    let workspace_globs = get_workspace_globs(&root);
+              let paths = collect_matching_files(&root, &workspace_globs, "package.json");
+              let mut configs = Vec::new();
+          ''',
+              '''    let workspace_globs = get_workspace_globs(&root);
+              let mut paths = collect_matching_files(&root, &workspace_globs, "package.json");
+              if let Some(root_package) = canonical_inside_root(&root, &root.join("package.json")) {
+                  paths.retain(|path| path != &root_package);
+                  paths.insert(0, root_package);
+              }
+              let mut configs = Vec::new();
+          ''',
+          )
+
+          replace_once(
+              "packages/turbo-ignore/rust/src/engine.rs",
+              '''    if environment.vercel {
+                  if let Some(message) = environment.commit_message.as_ref() {
+                      if message.len() > MAX_COMMIT_MESSAGE_BYTES {
+                          reporter.error("Vercel commit message exceeds the 1 MiB safety limit");
+                          return None;
+                      }
+                      return Some(message.clone());
+                  }
+              }
+          ''',
+              '''    if environment.vercel
+                  && let Some(message) = environment.commit_message.as_ref()
+              {
+                  if message.len() > MAX_COMMIT_MESSAGE_BYTES {
+                      reporter.error("Vercel commit message exceeds the 1 MiB safety limit");
+                      return None;
+                  }
+                  return Some(message.clone());
+              }
+          ''',
+          )
+
+          replace_once(
+              "packages/turbo-ignore/rust/src/engine.rs",
+              '''    if let Some(reference) = fallback {
+                  if let Err(error) = validate_ref(reference) {
+                      reporter.error(&format!("Invalid fallback ref: {error}"));
+                      return false;
+                  }
+              }
+
+              if let Some(version) = turbo_version {
+                  if let Err(error) = validate_version_selector(version) {
+                      reporter.error(&format!(
+                          "Refusing unsafe or unsupported turbo version selector \\\"{}\\\": {error}",
+                          sanitize_for_log(version)
+                      ));
+                      return false;
+                  }
+              }
+          ''',
+              '''    if let Some(reference) = fallback
+                  && let Err(error) = validate_ref(reference)
+              {
+                  reporter.error(&format!("Invalid fallback ref: {error}"));
+                  return false;
+              }
+
+              if let Some(version) = turbo_version
+                  && let Err(error) = validate_version_selector(version)
+              {
+                  reporter.error(&format!(
+                      "Refusing unsafe or unsupported turbo version selector \\\"{}\\\": {error}",
+                      sanitize_for_log(version)
+                  ));
+                  return false;
+              }
+          ''',
+          )
+
+          replace_once(
+              "packages/turbo-ignore/rust/src/json5.rs",
+              "    let mut exponent_parts = unsigned.split(|character| matches!(character, 'e' | 'E'));\n",
+              "    let mut exponent_parts = unsigned.split(['e', 'E']);\n",
+          )
+
+          replace_once(
+              "packages/turbo-ignore/rust/src/process.rs",
+              '''            loop {
+                          match receive_stream(&receiver, &mut stdout_result, &mut stderr_result) {
+                              Ok(()) => {}
+                              Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
+                          }
+                      }
+
+                      if let Some(result) = stdout_result.as_ref() {
+                          if let Some(error) = stream_error(
+                              &spec.program,
+                              StreamKind::Stdout,
+                              result,
+                              maximum,
+                          ) {
+                              stop_child(&mut child);
+                              let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                              let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                              return Err(error);
+                          }
+                      }
+                      if let Some(result) = stderr_result.as_ref() {
+                          if let Some(error) = stream_error(
+                              &spec.program,
+                              StreamKind::Stderr,
+                              result,
+                              maximum,
+                          ) {
+                              stop_child(&mut child);
+                              let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                              let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                              return Err(error);
+                          }
+                      }
+          ''',
+              '''            while let Ok(()) =
+                          receive_stream(&receiver, &mut stdout_result, &mut stderr_result)
+                      {}
+
+                      if let Some(result) = stdout_result.as_ref()
+                          && let Some(error) =
+                              stream_error(&spec.program, StreamKind::Stdout, result, maximum)
+                      {
+                          stop_child(&mut child);
+                          let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                          let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                          return Err(error);
+                      }
+                      if let Some(result) = stderr_result.as_ref()
+                          && let Some(error) =
+                              stream_error(&spec.program, StreamKind::Stderr, result, maximum)
+                      {
+                          stop_child(&mut child);
+                          let _stdout_join_result = join_reader(stdout_handle, &spec.program);
+                          let _stderr_join_result = join_reader(stderr_handle, &spec.program);
+                          return Err(error);
+                      }
+          ''',
+          )
+
+          replace_once(
+              "packages/turbo-ignore/rust/src/tools.rs",
+              '''    if let Ok(current_executable) = env::current_exe() {
+                  if let Some(parent) = current_executable.parent() {
+                      candidates.push(parent.join(if cfg!(windows) {
+                          "turbo.exe"
+                      } else {
+                          "turbo"
+                      }));
+                  }
+              }
+          ''',
+              '''    if let Ok(current_executable) = env::current_exe()
+                  && let Some(parent) = current_executable.parent()
+              {
+                  candidates.push(parent.join(if cfg!(windows) {
+                      "turbo.exe"
+                  } else {
+                      "turbo"
+                  }));
+              }
+          ''',
+          )
+          PY
+
+      - name: Format migration crates and resolve lockfile
+        run: |
+          cargo fmt --all
+          cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
+
+      - name: Run migration parity and security tests
+        run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+
+      - name: Run migration Clippy gate
+        run: cargo clippy --locked -p turbo-ignore -p turbo-utils-rs --all-targets -- -D warnings
+
+      - name: Set up Node for repository push hooks
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Install global Turbo for repository push hooks
+        uses: ./.github/actions/install-global-turbo
+
+      - name: Commit validated generated tree to a staging branch
+        shell: bash
+        env:
+          TURBO_API: ""
+          TURBO_CACHE: local:rw
+          TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+        run: |
+          set -euo pipefail
+          git add Cargo.lock packages/turbo-ignore/rust packages/turbo-utils/rust
+          if git diff --cached --quiet; then
+            echo "No generated migration changes remain."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: Stabilize Rust migration parity gates"
+          generated_branch="automation/rust-migration-${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/${generated_branch}"
+          echo "Validated commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Generated branch: ${generated_branch}" >> "$GITHUB_STEP_SUMMARY"
+
   validate:
-    name: Validate Rust migration crates
+    name: Validate committed Rust migration crates
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -44,35 +293,14 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache-key: rust-typescript-deprecation
 
-      - name: Format Rust workspace
-        run: cargo fmt --all
-
-      - name: Resolve workspace lock entries and compile tests
-        run: cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
-
-      - name: Verify formatting is stable
+      - name: Verify committed formatting
         run: cargo fmt --all --check
+
+      - name: Compile committed migration crates
+        run: cargo check --locked -p turbo-ignore -p turbo-utils-rs --all-targets
 
       - name: Run migration parity and security tests
         run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
 
       - name: Run migration Clippy gate
         run: cargo clippy --locked -p turbo-ignore -p turbo-utils-rs --all-targets -- -D warnings
-
-      - name: Record generated-tree status
-        if: always()
-        run: |
-          git status --short
-          git diff --check
-
-      - name: Upload generated lockfile and formatted migration tree
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: rust-migration-generated-tree
-          if-no-files-found: error
-          retention-days: 7
-          path: |
-            Cargo.lock
-            packages/turbo-ignore/rust
-            packages/turbo-utils/rust
