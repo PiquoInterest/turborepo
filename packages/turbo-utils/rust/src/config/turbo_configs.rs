@@ -27,7 +27,7 @@ pub fn get_turbo_configs(
         let Some(object) = config.as_object() else {
             continue;
         };
-        let Some(workspace_path) = config_path.parent() else {
+        let Some(workspace_path) = config_path.parent().map(Path::to_path_buf) else {
             continue;
         };
         let is_root_config = workspace_path == root;
@@ -39,7 +39,7 @@ pub fn get_turbo_configs(
         configs.push(TurboConfig {
             config,
             turbo_config_path: config_path,
-            workspace_path: workspace_path.to_path_buf(),
+            workspace_path,
             is_root_config,
         });
     }
@@ -53,4 +53,3 @@ pub fn get_turbo_configs(
     }
     Ok(configs)
 }
-
