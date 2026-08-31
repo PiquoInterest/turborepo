@@ -52,7 +52,9 @@ fn workspace_output_bounds_lines_and_entry_count() {
         lines.len()
     );
     assert!(
-        lines.iter().any(|line| line == CREATE_OUTPUT_TRUNCATION_LINE),
+        lines
+            .iter()
+            .any(|line| line == CREATE_OUTPUT_TRUNCATION_LINE),
         "bounded output must make truncation visible"
     );
     for line in &lines {
@@ -98,15 +100,14 @@ fn get_started_output_sanitizes_and_bounds_the_relative_path() {
 #[test]
 fn repeated_script_output_is_bounded() {
     let scripts = vec![CreateDisplayScript::Build; CREATE_OUTPUT_SCRIPT_LIMIT + 100];
-    let lines = render_create_get_started(
-        true,
-        true,
-        "",
-        Some(&PNPM_INSTALL_PROFILES[1]),
-        &scripts,
-    );
+    let lines =
+        render_create_get_started(true, true, "", Some(&PNPM_INSTALL_PROFILES[1]), &scripts);
 
-    assert!(lines.iter().any(|line| line == CREATE_OUTPUT_TRUNCATION_LINE));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line == CREATE_OUTPUT_TRUNCATION_LINE)
+    );
     assert!(
         lines
             .iter()

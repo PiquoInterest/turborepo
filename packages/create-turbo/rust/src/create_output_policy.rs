@@ -84,10 +84,7 @@ pub fn render_create_workspace_summary(
 }
 
 #[must_use]
-pub fn render_create_success(
-    project_dir_is_current: bool,
-    relative_project_dir: &str,
-) -> String {
+pub fn render_create_success(project_dir_is_current: bool, relative_project_dir: &str) -> String {
     if project_dir_is_current {
         ">>> Success! Your new Turborepo is ready.".to_owned()
     } else {

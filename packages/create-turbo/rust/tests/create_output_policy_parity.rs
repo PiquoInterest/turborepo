@@ -1,6 +1,6 @@
 use create_turbo_rs::{
-    CreateDisplayScript, CreateWorkspaceDisplay, PNPM_INSTALL_PROFILES,
-    render_create_get_started, render_create_success, render_create_workspace_summary,
+    CreateDisplayScript, CreateWorkspaceDisplay, PNPM_INSTALL_PROFILES, render_create_get_started,
+    render_create_success, render_create_workspace_summary,
 };
 
 #[test]
@@ -99,13 +99,7 @@ fn get_started_output_is_absent_without_package_json_or_manager_metadata() {
         .is_empty()
     );
     assert!(
-        render_create_get_started(
-            true,
-            false,
-            "example",
-            None,
-            &[CreateDisplayScript::Build],
-        )
-        .is_empty()
+        render_create_get_started(true, false, "example", None, &[CreateDisplayScript::Build],)
+            .is_empty()
     );
 }
