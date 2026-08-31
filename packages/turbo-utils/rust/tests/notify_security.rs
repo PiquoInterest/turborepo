@@ -29,10 +29,24 @@ impl UpgradeCommandProvider for Command {
     }
 }
 
+fn is_directional_format_control(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}'
+    )
+}
+
 fn assert_no_terminal_controls(values: &[String]) {
     for value in values {
         assert!(
-            !value.chars().any(char::is_control),
+            !value
+                .chars()
+                .any(|character| character.is_control() || is_directional_format_control(character)),
             "terminal control leaked in {value:?}"
         );
     }
@@ -60,6 +74,30 @@ fn terminal_controls_are_escaped_in_package_name_and_command() {
     assert_no_terminal_controls(&outcome.stdout);
     assert!(outcome.stdout[1].contains("pkg\\n\\x1b[31mspoof"));
     assert!(outcome.stdout[2].contains("pkg\\r\\nrm -rf /\\x1b[0m"));
+}
+
+#[test]
+fn unicode_directionality_controls_are_escaped_before_rendering() {
+    let checker = Checker(Ok(Some(UpdateInfo {
+        latest: "2.11.0".into(),
+    })));
+    let notification = PreparedUpdateNotification::prepare(
+        PackageInfo {
+            name: "pkg\u{202e}txt".into(),
+            version: "1.0.0".into(),
+        },
+        &checker,
+    );
+
+    let outcome = notification.notify(
+        ExitCode::Success,
+        UpgradeCommand::Static("pnpm add safe\u{2066}suffix"),
+        false,
+    );
+
+    assert_no_terminal_controls(&outcome.stdout);
+    assert!(outcome.stdout[1].contains("pkg\\u{202e}txt"));
+    assert!(outcome.stdout[2].contains("safe\\u{2066}suffix"));
 }
 
 #[test]
