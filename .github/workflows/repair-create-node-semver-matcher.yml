@@ -183,7 +183,7 @@ jobs:
           set -euo pipefail
           pnpm exec oxfmt --check \
             packages/turbo-workspaces/__tests__/install-meta.test.ts
-          pnpm --filter @turbo/workspaces exec jest --runInBand \
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
             __tests__/install-meta.test.ts \
             __tests__/install-security.test.ts
 
