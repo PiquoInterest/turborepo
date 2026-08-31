@@ -165,9 +165,15 @@ fn javascript_array_index_boundaries_are_ordered_without_coercion() {
 
     assert_eq!(
         plan.package_json_contents.as_deref(),
-        Some(
-            "{\n  \"0\": \"zero\",\n  \"4294967294\": \"last-index\",\n  \"4294967295\": \"not-index\",\n  \"00\": \"double-zero\",\n  \"-0\": \"negative-zero\"\n}\n"
-        )
+        Some(concat!(
+            "{\n",
+            "  \"0\": \"zero\",\n",
+            "  \"4294967294\": \"last-index\",\n",
+            "  \"4294967295\": \"not-index\",\n",
+            "  \"00\": \"double-zero\",\n",
+            "  \"-0\": \"negative-zero\"\n",
+            "}\n",
+        ))
     );
 }
 
