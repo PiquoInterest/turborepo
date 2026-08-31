@@ -2,6 +2,7 @@ mod default_example;
 mod git_ignore;
 mod git_init;
 mod official_starter;
+mod package_manager_prompt;
 mod package_manager_transform;
 mod readme_transform;
 mod transform_pipeline;
@@ -18,6 +19,10 @@ pub use official_starter::{
     ExampleRepository, OFFICIAL_REPOSITORIES, OFFICIAL_STARTER_TRANSFORM_NAME,
     OfficialStarterError, OfficialStarterInput, OfficialStarterPackageJson,
     OfficialStarterResponse, OfficialStarterStore, is_official_starter, transform_official_starter,
+};
+pub use package_manager_prompt::{
+    PACKAGE_MANAGER_PROMPT_ORDER, PackageManagerAvailability, PackageManagerPromptChoice,
+    PackageManagerPromptError, PackageManagerSelector, resolve_package_manager_prompt,
 };
 pub use package_manager_transform::{
     PACKAGE_MANAGER_TRANSFORM_NAME, PackageManagerConversion, PackageManagerConverter,
