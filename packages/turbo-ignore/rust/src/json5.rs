@@ -26,7 +26,7 @@ pub enum Json5ScanError {
     UnterminatedObject,
     #[error("unterminated array")]
     UnterminatedArray,
-    #[error("JSON5 nesting exceeds {MAX_NESTING_DEPTH} levels")]
+    #[error("JSON5 nesting exceeds 128 levels")]
     NestingTooDeep,
     #[error("unexpected trailing content at byte {0}")]
     TrailingContent(usize),
