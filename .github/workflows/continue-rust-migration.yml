@@ -41,6 +41,19 @@ jobs:
           cargo test --locked -p create-turbo-rs --all-targets
           cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 
+      - name: Repair reviewed documentation anchor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("tools/migration/apply_package_manager_prompt_docs.py")
+          text = path.read_text(encoding="utf-8")
+          old = '"- interactive prompts;"'
+          new = '"- CLI argument parsing, help/version output, and prompts;"'
+          if text.count(old) != 1:
+              raise SystemExit("package-manager prompt README anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
       - name: Record parity, security, and divergences
         run: python tools/migration/apply_package_manager_prompt_docs.py
 
