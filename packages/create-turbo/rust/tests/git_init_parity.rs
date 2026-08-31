@@ -60,10 +60,7 @@ fn root() -> PathBuf {
 fn invocation(program: VcsProgram, arguments: &[&str], cwd: Option<&Path>) -> VcsInvocation {
     VcsInvocation {
         program,
-        arguments: arguments
-            .iter()
-            .map(|value| (*value).to_string())
-            .collect(),
+        arguments: arguments.iter().map(|value| (*value).to_string()).collect(),
         cwd: cwd.map(Path::to_path_buf),
     }
 }
@@ -106,11 +103,7 @@ fn returns_false_when_inside_mercurial_repository() {
                 &["rev-parse", "--is-inside-work-tree"],
                 Some(&root),
             ),
-            invocation(
-                VcsProgram::Mercurial,
-                &["--cwd", ".", "root"],
-                Some(&root),
-            ),
+            invocation(VcsProgram::Mercurial, &["--cwd", ".", "root"], Some(&root),),
         ]
     );
     assert!(cleaner.roots.is_empty());
@@ -131,11 +124,7 @@ fn returns_false_when_git_init_is_unavailable_or_fails() {
                 &["rev-parse", "--is-inside-work-tree"],
                 Some(&root),
             ),
-            invocation(
-                VcsProgram::Mercurial,
-                &["--cwd", ".", "root"],
-                Some(&root),
-            ),
+            invocation(VcsProgram::Mercurial, &["--cwd", ".", "root"], Some(&root),),
             invocation(VcsProgram::Git, &["init"], Some(&root)),
         ]
     );
@@ -157,17 +146,9 @@ fn runs_the_exact_typescript_command_sequence_on_success() {
                 &["rev-parse", "--is-inside-work-tree"],
                 Some(&root),
             ),
-            invocation(
-                VcsProgram::Mercurial,
-                &["--cwd", ".", "root"],
-                Some(&root),
-            ),
+            invocation(VcsProgram::Mercurial, &["--cwd", ".", "root"], Some(&root),),
             invocation(VcsProgram::Git, &["init"], Some(&root)),
-            invocation(
-                VcsProgram::Git,
-                &["checkout", "-b", "main"],
-                Some(&root),
-            ),
+            invocation(VcsProgram::Git, &["checkout", "-b", "main"], Some(&root),),
             invocation(VcsProgram::Git, &["add", "-A"], Some(&root)),
             invocation(
                 VcsProgram::Git,

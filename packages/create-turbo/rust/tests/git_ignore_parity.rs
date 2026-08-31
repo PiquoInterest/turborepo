@@ -45,7 +45,33 @@ impl Drop for TestDirectory {
 fn default_ignore_matches_the_typescript_constant() {
     assert_eq!(
         DEFAULT_IGNORE,
-        "\n# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.\n\n# dependencies\nnode_modules\n.pnp\n.pnp.js\n\n# testing\ncoverage\n\n# misc\n.DS_Store\n*.pem\n\n# debug\nnpm-debug.log*\nyarn-debug.log*\nyarn-error.log*\n\n# turbo\n.turbo\n\n# vercel\n.vercel\n"
+        concat!(
+            "\n",
+            "# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.\n",
+            "\n",
+            "# dependencies\n",
+            "node_modules\n",
+            ".pnp\n",
+            ".pnp.js\n",
+            "\n",
+            "# testing\n",
+            "coverage\n",
+            "\n",
+            "# misc\n",
+            ".DS_Store\n",
+            "*.pem\n",
+            "\n",
+            "# debug\n",
+            "npm-debug.log*\n",
+            "yarn-debug.log*\n",
+            "yarn-error.log*\n",
+            "\n",
+            "# turbo\n",
+            ".turbo\n",
+            "\n",
+            "# vercel\n",
+            ".vercel\n",
+        )
     );
     assert!(DEFAULT_IGNORE.contains(".turbo"));
 }
@@ -66,8 +92,8 @@ fn creates_missing_gitignore_with_exact_content() -> Result<(), Box<dyn std::err
 }
 
 #[test]
-fn existing_gitignore_is_not_applicable_and_is_unchanged(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn existing_gitignore_is_not_applicable_and_is_unchanged() -> Result<(), Box<dyn std::error::Error>>
+{
     let directory = TestDirectory::new("existing")?;
     let path = directory.path().join(".gitignore");
     fs::write(&path, "custom\n")?;
@@ -81,8 +107,8 @@ fn existing_gitignore_is_not_applicable_and_is_unchanged(
 }
 
 #[test]
-fn existing_directory_at_gitignore_path_is_not_applicable(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn existing_directory_at_gitignore_path_is_not_applicable() -> Result<(), Box<dyn std::error::Error>>
+{
     let directory = TestDirectory::new("existing-directory")?;
     fs::create_dir(directory.path().join(".gitignore"))?;
 

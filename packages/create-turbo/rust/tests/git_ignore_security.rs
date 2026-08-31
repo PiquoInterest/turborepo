@@ -54,8 +54,8 @@ fn regular_existing_file_is_never_overwritten() -> Result<(), Box<dyn std::error
 
 #[cfg(unix)]
 #[test]
-fn broken_symlink_is_rejected_without_creating_its_external_target(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn broken_symlink_is_rejected_without_creating_its_external_target()
+-> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::symlink;
 
     let directory = TestDirectory::new("broken-link")?;
@@ -73,8 +73,8 @@ fn broken_symlink_is_rejected_without_creating_its_external_target(
 
 #[cfg(unix)]
 #[test]
-fn existing_symlink_is_rejected_without_modifying_its_target(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn existing_symlink_is_rejected_without_modifying_its_target()
+-> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::symlink;
 
     let directory = TestDirectory::new("existing-link")?;
@@ -93,8 +93,8 @@ fn existing_symlink_is_rejected_without_modifying_its_target(
 
 #[cfg(unix)]
 #[test]
-fn symlinked_project_root_is_rejected_without_writing_through_it(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn symlinked_project_root_is_rejected_without_writing_through_it()
+-> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::symlink;
 
     let parent = TestDirectory::new("root-link-parent")?;

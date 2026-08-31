@@ -59,11 +59,7 @@ pub fn try_git_init_with<R: VcsRunner, C: GitDirectoryCleaner>(
     }
 
     for command in [
-        invocation(
-            VcsProgram::Git,
-            &["checkout", "-b", "main"],
-            Some(root),
-        ),
+        invocation(VcsProgram::Git, &["checkout", "-b", "main"], Some(root)),
         invocation(VcsProgram::Git, &["add", "-A"], Some(root)),
         invocation(
             VcsProgram::Git,
@@ -111,18 +107,20 @@ fn root_is_safe(root: &Path) -> bool {
 fn component_has_unsafe_characters(value: &OsStr) -> bool {
     use std::os::unix::ffi::OsStrExt;
 
-    value.as_bytes().iter().copied().any(|byte| {
-        byte < b' ' || matches!(byte, b'"' | b'*' | b'<' | b'>' | b'?' | b'|')
-    })
+    value
+        .as_bytes()
+        .iter()
+        .copied()
+        .any(|byte| byte < b' ' || matches!(byte, b'"' | b'*' | b'<' | b'>' | b'?' | b'|'))
 }
 
 #[cfg(windows)]
 fn component_has_unsafe_characters(value: &OsStr) -> bool {
     use std::os::windows::ffi::OsStrExt;
 
-    value.encode_wide().any(|unit| {
-        unit < 0x20 || matches!(unit, 0x22 | 0x2a | 0x3a | 0x3c | 0x3e | 0x3f | 0x7c)
-    })
+    value
+        .encode_wide()
+        .any(|unit| unit < 0x20 || matches!(unit, 0x22 | 0x2a | 0x3a | 0x3c | 0x3e | 0x3f | 0x7c))
 }
 
 #[cfg(not(any(unix, windows)))]

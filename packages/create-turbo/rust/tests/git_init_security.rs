@@ -100,7 +100,12 @@ fn shell_metacharacters_are_not_treated_as_injection_without_a_shell() {
 
     assert!(try_git_init_with(&root, &mut runner, &mut cleaner));
     assert_eq!(runner.calls.len(), 6);
-    assert!(runner.calls.iter().all(|call| call.cwd.as_deref() == Some(&root)));
+    assert!(
+        runner
+            .calls
+            .iter()
+            .all(|call| call.cwd.as_deref() == Some(&root))
+    );
     assert!(cleaner.roots.is_empty());
 }
 
@@ -127,6 +132,11 @@ fn non_utf8_roots_do_not_require_lossy_argument_conversion() {
 
     assert!(try_git_init_with(&root, &mut runner, &mut cleaner));
     assert_eq!(runner.calls.len(), 6);
-    assert!(runner.calls.iter().all(|call| call.cwd.as_deref() == Some(&root)));
+    assert!(
+        runner
+            .calls
+            .iter()
+            .all(|call| call.cwd.as_deref() == Some(&root))
+    );
     assert!(cleaner.roots.is_empty());
 }
