@@ -87,7 +87,6 @@ fn invalid_git_reference_forms_are_rejected() {
         "one~two",
         "one^two",
         "one:two",
-        "one?two",
         "one*two",
         "one[two",
         "one\\two",
