@@ -12,6 +12,10 @@ on:
       - Cargo.toml
       - Cargo.lock
 
+concurrency:
+  group: validate-create-turbo-official-starter-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
