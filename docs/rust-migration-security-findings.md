@@ -168,6 +168,26 @@ Required closure is a production `PackageManagerConverter` with translated manag
 
 Regression coverage is in `packages/create-turbo/rust/tests/package_manager_transform_parity.rs` and `package_manager_transform_security.rs`.
 
+### RF-015: Official-starter can return success after partial filesystem mutation
+
+**Status:** Planner fixed; production filesystem adapter blocked.
+
+The TypeScript `official-starter` transform reads and deletes `meta.json` inside one swallowed `try/catch`, then separately writes `package.json` in place. A successful metadata read followed by deletion failure returns the parsed metadata and ultimately reports success while the stale file remains. Conversely, successful metadata deletion followed by package-write failure leaves the project partially transformed. Its JSON reads and writes also lack explicit byte, depth, symlink, identity, and atomic-replacement policies.
+
+The Rust core now provides a pure planner that:
+
+- classifies only absent repository metadata and exact `vercel/turbo` or `vercel/turborepo` as official;
+- clones package and metadata JSON before mutation;
+- emits metadata payload and removal intent separately;
+- serializes project names and requested versions as JSON data;
+- preserves recursive JavaScript array-index property ordering;
+- rejects truthy non-object package roots deterministically;
+- performs no filesystem operation and therefore cannot report a partially committed write as success.
+
+Required closure is a bounded transactional adapter with regular-file/no-follow rules, root/file identity checks, parser limits, staged synchronized package replacement, verified metadata deletion, rollback or transaction ordering, exact nonfatal error mapping, cleanup, and Linux/macOS/Windows failure-injection and differential tests.
+
+Regression coverage is in `packages/create-turbo/rust/tests/official_starter_parity.rs` and `official_starter_security.rs`. Package-level details are CT-RS-019 through CT-RS-022.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
@@ -175,6 +195,7 @@ Before declaring repository-wide TypeScript deprecation complete:
 - keep lockfile-wide RustSec auditing enabled and remove every temporary exception after remediation;
 - resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
 - close the package-manager conversion transaction, rollback, and supported-platform contract;
+- close the official-starter metadata/package transaction and bounded filesystem contract;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;
