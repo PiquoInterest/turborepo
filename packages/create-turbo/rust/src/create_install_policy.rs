@@ -3,8 +3,7 @@ use crate::{
     WorkspacePackageManager, sanitize_terminal_text,
 };
 
-pub const CREATE_INSTALL_WARNING_EXAMPLE_LIMIT: usize =
-    CREATE_COMMAND_ERROR_MESSAGE_LIMIT / 2;
+pub const CREATE_INSTALL_WARNING_EXAMPLE_LIMIT: usize = CREATE_COMMAND_ERROR_MESSAGE_LIMIT / 2;
 pub const CREATE_INSTALL_WARNING_LINE_LIMIT: usize = CREATE_COMMAND_ERROR_MESSAGE_LIMIT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,10 +53,7 @@ where
     // TypeScript chooses the source manager whenever transforms are skipped
     // or the prompt returned no selection. Snapshot availability once so a
     // mutable provider cannot change the install decision between checks.
-    let project_package_manager = match (
-        input.skip_transforms,
-        input.selected_package_manager,
-    ) {
+    let project_package_manager = match (input.skip_transforms, input.selected_package_manager) {
         (false, Some(selection)) => selection,
         _ => PackageManagerSelection {
             name: input.source_package_manager,
@@ -103,27 +99,24 @@ where
 pub fn render_unavailable_package_manager_warning(
     warning: UnavailablePackageManagerWarning<'_>,
 ) -> [String; 2] {
-    let example_name = sanitize_terminal_text(
-        warning.example_name,
-        CREATE_INSTALL_WARNING_EXAMPLE_LIMIT,
-    );
+    let example_name =
+        sanitize_terminal_text(warning.example_name, CREATE_INSTALL_WARNING_EXAMPLE_LIMIT);
     let package_manager = warning.package_manager.as_str();
 
     [
         format!(
-            "Unable to install dependencies - \"{example_name}\" uses \"{package_manager}\" which could not be found."
+            "Unable to install dependencies - \"{example_name}\" uses \"{package_manager}\" which \
+             could not be found."
         ),
         format!(
-            "Try running without \"--skip-transforms\" to convert \"{example_name}\" to a package manager that is available on your system."
+            "Try running without \"--skip-transforms\" to convert \"{example_name}\" to a package \
+             manager that is available on your system."
         ),
     ]
     .map(|line| sanitize_terminal_text(&line, CREATE_INSTALL_WARNING_LINE_LIMIT))
 }
 
-fn available_version<A>(
-    availability: &A,
-    manager: WorkspacePackageManager,
-) -> Option<&str>
+fn available_version<A>(availability: &A, manager: WorkspacePackageManager) -> Option<&str>
 where
     A: PackageManagerAvailability + ?Sized,
 {

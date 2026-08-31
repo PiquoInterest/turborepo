@@ -126,7 +126,10 @@ where
     M: PackageManagerVersionMatcher + ?Sized,
 {
     let profiles = package_manager_install_profiles(package_manager.name);
-    let Some(version) = package_manager.version.filter(|version| !version.is_empty()) else {
+    let Some(version) = package_manager
+        .version
+        .filter(|version| !version.is_empty())
+    else {
         return Ok(profiles.iter().find(|profile| profile.is_default));
     };
 

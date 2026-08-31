@@ -199,8 +199,7 @@ fn missing_selection_falls_back_to_the_source_manager() {
 
 #[test]
 fn missing_package_json_skips_after_resolving_the_source_manager() {
-    let availability =
-        FakeAvailability::with_version(WorkspacePackageManager::Bun, Some("1.2.3"));
+    let availability = FakeAvailability::with_version(WorkspacePackageManager::Bun, Some("1.2.3"));
     let mut installer = FakeInstaller::default();
     let mut install_input = input(WorkspacePackageManager::Bun, None);
     install_input.has_package_json = false;
@@ -220,8 +219,7 @@ fn missing_package_json_skips_after_resolving_the_source_manager() {
 
 #[test]
 fn skip_install_skips_after_resolving_the_source_manager() {
-    let availability =
-        FakeAvailability::with_version(WorkspacePackageManager::Nub, Some("0.1.0"));
+    let availability = FakeAvailability::with_version(WorkspacePackageManager::Nub, Some("0.1.0"));
     let mut installer = FakeInstaller::default();
     let mut install_input = input(WorkspacePackageManager::Nub, None);
     install_input.skip_install = true;

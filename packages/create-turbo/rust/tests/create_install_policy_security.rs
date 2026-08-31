@@ -48,11 +48,7 @@ impl PackageManagerAvailability for FlippingAvailability {
     fn version(&self, _manager: WorkspacePackageManager) -> Option<&str> {
         let calls = self.calls.get();
         self.calls.set(calls + 1);
-        if calls == 0 {
-            Some("9.15.4")
-        } else {
-            None
-        }
+        if calls == 0 { Some("9.15.4") } else { None }
     }
 }
 
@@ -160,10 +156,7 @@ fn unavailable_source_manager_never_reaches_the_installer() {
         panic!("unavailability must be represented without invoking install");
     };
 
-    assert!(matches!(
-        outcome,
-        CreateInstallOutcome::WarnUnavailable(_)
-    ));
+    assert!(matches!(outcome, CreateInstallOutcome::WarnUnavailable(_)));
     assert_eq!(installer.calls, 0);
     assert_eq!(
         availability.last_manager.get(),

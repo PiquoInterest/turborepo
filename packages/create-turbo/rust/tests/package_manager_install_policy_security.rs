@@ -125,9 +125,7 @@ fn programs_and_arguments_come_only_from_closed_static_profiles() {
 #[cfg(unix)]
 #[test]
 fn non_utf8_project_roots_are_forwarded_without_lossy_conversion() {
-    use std::ffi::OsString;
-    use std::os::unix::ffi::OsStringExt;
-    use std::path::PathBuf;
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
 
     let root = PathBuf::from(OsString::from_vec(b"/tmp/project-\xff".to_vec()));
     let profile = &package_manager_install_profiles(WorkspacePackageManager::Bun)[0];
