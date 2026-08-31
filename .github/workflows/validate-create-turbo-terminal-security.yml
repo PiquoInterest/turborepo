@@ -70,13 +70,19 @@ jobs:
       - name: Install workspace dependencies without lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Check focused TypeScript formatting
-        run: >-
-          pnpm exec oxfmt --check
-          packages/create-turbo/src/commands/create/index.ts
-          packages/create-turbo/src/transforms/errors.ts
-          packages/create-turbo/src/transforms/terminal.ts
-          packages/create-turbo/__tests__/transform-error-security.test.ts
+      - name: Print the exact Oxfmt rewrite
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/src/transforms/errors.ts \
+            packages/create-turbo/src/transforms/terminal.ts \
+            packages/create-turbo/__tests__/transform-error-security.test.ts
+          git diff --exit-code -- \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/src/transforms/errors.ts \
+            packages/create-turbo/src/transforms/terminal.ts \
+            packages/create-turbo/__tests__/transform-error-security.test.ts
 
       - name: Type-check create-turbo
         run: >-
