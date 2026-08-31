@@ -81,6 +81,12 @@ jobs:
           )
 
           replace_once(
+              "packages/turbo-utils/rust/tests/root_config_parity.rs",
+              "use std::{fs, path::Path};\n",
+              "#![allow(clippy::expect_used, clippy::unwrap_used)]\n\nuse std::{fs, path::Path};\n",
+          )
+
+          replace_once(
               "packages/turbo-ignore/rust/src/engine.rs",
               '''    if environment.vercel {
                   if let Some(message) = environment.commit_message.as_ref() {
