@@ -5,6 +5,7 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/update-commands-in-readme.ts`
 - `packages/create-turbo/src/transforms/git-ignore.ts`
 - `packages/create-turbo/src/transforms/package-manager.ts`
+- `packages/create-turbo/src/transforms/official-starter.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
@@ -13,11 +14,13 @@ It is a tranche review, not a claim that the full `create-turbo` package has bee
 
 ## Trust boundaries
 
-Repository-controlled or attacker-influenced inputs include the selected package manager, package-manager version text, project-root path, example name, `README.md`, `.gitignore`, Markdown bytes, package and lockfile contents, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
+Repository-controlled or attacker-influenced inputs include the selected package manager, package-manager version text, project-root path, example name, repository owner/name metadata, requested and invocation Turbo versions, `README.md`, `.gitignore`, `package.json`, `meta.json`, Markdown and JSON bytes, package and lockfile contents, file types, links, permissions, concurrent path replacement, and pre-created temporary filenames.
 
 The example name determines whether acquisition is classified as a built-in default path. That routing decision must use exact membership so prefixes, paths, Unicode lookalikes, whitespace, controls, or normalization do not silently broaden trust.
 
 The package-manager transform decides whether broad workspace mutation is invoked and which manager adapter receives control. The reviewed Rust core carries only a closed manager enum, a borrowed root path, and `skip_install: true`. Actual package metadata, lockfile, configuration, and process effects remain behind `PackageManagerConverter` and are not yet production-approved.
+
+The official-starter transform decides whether repository metadata denotes a trusted official example, whether the root package is renamed, which Turbo dependency string is written, whether metadata is returned, and whether `meta.json` should be removed. The reviewed Rust planner performs these decisions over cloned JSON values and emits a plan. It does not open, delete, or replace a path. A production adapter must close the filesystem transaction and public-error contracts separately.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -219,11 +222,51 @@ Required production closure: differential tests must prove whether version is pu
 
 Regression tests: `prompt_version_is_not_forwarded_to_the_converter`, `a_large_untrusted_version_is_borrowed_and_not_forwarded`, and `no_mutating_provider_call_occurs_when_the_selection_is_absent_or_unchanged`.
 
+### CT-RS-019: Metadata deletion failure can be reported as success
+
+**Severity:** Medium
+
+The TypeScript official-starter transform reads `meta.json` and removes it inside one `try/catch` that swallows every error. When reading succeeds but deletion fails, the function retains the parsed metadata, continues package mutation, and returns `success` even though the stale metadata file remains. This is a partial-success state and can leave generated-project metadata that the transform claims to have removed.
+
+The Rust core deliberately separates the cloned metadata payload from `remove_meta_json` intent and performs no deletion. A production adapter must verify that the same file identity was actually removed before returning success, or roll back the package update. It must not translate deletion failure into success merely because parsing succeeded.
+
+Planner regression: `parsed_meta_json_is_returned_and_scheduled_for_removal`. Filesystem failure-injection tests remain required before cutover.
+
+### CT-RS-020: Official-starter JSON I/O is unbounded, follows paths, and writes in place
+
+**Severity:** High until the adapter contract is closed
+
+The TypeScript transform uses path-based `existsSync`, `readJsonSync`, `rmSync`, and `writeJsonSync` without explicit byte, nesting-depth, symlink, file-identity, or atomic-replacement policies. A generated tree can therefore redirect reads or writes through links, consume excessive parser resources, race path replacement, expose a truncated package file, or leave `meta.json` removed while the later package write fails.
+
+The current Rust tranche supplies no filesystem adapter and therefore cannot accidentally normalize these operations as reviewed. Required closure includes bounded byte and nesting limits, regular-file and no-follow rules, root and file identity checks, staged synchronized package writes, transaction ordering or rollback across metadata deletion and package replacement, exact public error mapping, cleanup, and Linux/macOS/Windows failure injection.
+
+### CT-RS-021: Truthy non-object package roots have unstable mutation behavior
+
+**Severity:** Low
+
+Valid JSON can be a string, number, boolean, or array. The TypeScript code treats every truthy parsed value as a mutable package object. In strict module execution, assigning `name` to a primitive may throw an unclassified `TypeError`; arrays can accept side properties that JSON serialization later discards. Neither outcome matches the transform's explicit read/write error contract.
+
+The Rust planner accepts JavaScript-falsy roots as the source no-write cases but rejects every truthy non-object root with `PackageJsonMustBeObject`. This is an intentional compatibility hardening that produces a deterministic typed failure and avoids silent array-property loss.
+
+Regression test: `truthy_nonobject_package_json_is_rejected`.
+
+### CT-RS-022: JSON ordering and untrusted string handling can drift during a port
+
+**Severity:** Low
+
+JavaScript enumerates canonical array-index object keys numerically before insertion-ordered string keys. A direct Rust map serialization can emit a different order, while string concatenation could let project names or requested versions escape their intended JSON field.
+
+The Rust planner recursively normalizes canonical indices from `0` through `4294967294`, preserves non-index insertion order through the workspace `serde_json` `preserve_order` feature, and serializes every untrusted string as data. Prototype-shaped keys remain ordinary JSON properties and the caller's input value is cloned before mutation.
+
+Regression tests: `serialization_uses_javascript_property_enumeration_order_recursively`, `javascript_array_index_boundaries_are_ordered_without_coercion`, `project_name_control_characters_and_quotes_round_trip_as_json_data`, `hostile_version_text_is_serialized_as_a_dependency_value_only`, `prototype_named_properties_remain_plain_json_data`, and `planning_does_not_mutate_the_callers_package_json`.
+
 ## Security invariants
 
 - No new `unsafe` or shell command construction is introduced by these tranches.
-- README, `.gitignore`, default-example, and package-manager orchestration add no network or credential behavior.
-- The default-example route uses exact borrowed ASCII literals only.
+- README, `.gitignore`, default-example, package-manager orchestration, and the official-starter planner add no network or credential behavior.
+- The default-example route and official repository classification use exact borrowed ASCII literals only.
+- The official-starter planner clones caller JSON, serializes untrusted values through `serde_json`, and performs no filesystem mutation.
+- A future official-starter adapter must never report success after an uncommitted package update or failed metadata deletion.
 - The package-manager core accepts a closed enum, preserves the root as a path, does not forward version text, and cannot mutate files or execute a process directly.
 - The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
 - Untrusted README size is bounded before allocation and writing.
@@ -246,9 +289,12 @@ Authoritative sources checked:
 - GitHub Advisory Database, Rust ecosystem: <https://github.com/advisories?query=ecosystem%3Arust>
 - Rust Project security policy and advisories: <https://www.rust-lang.org/policies/security> and <https://github.com/rust-lang/rust/security>
 - Git command, initialization, and hook documentation: <https://git-scm.com/docs/git-init>, <https://git-scm.com/docs/git-commit>, and <https://git-scm.com/docs/githooks>
+- Serde JSON repository and release history: <https://github.com/serde-rs/json>
 
 Disposition:
 
+- The official-starter planner uses the existing workspace-managed `serde_json` dependency with `preserve_order`; it adds no new resolved package, network call, filesystem operation, subprocess, or `unsafe` code.
+- An exact 2026-08-31 search of the RustSec advisory repository found no advisory whose package field is `serde_json`. Lockfile-wide `cargo audit` remains authoritative, and this result is not a substitute for repeating the lookup when the resolved version changes.
 - The package-manager orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
 - A production converter cannot be approved until its manager adapters, executable versions, filesystem/process policies, transaction or rollback model, and supported platforms are reviewed.
 - The default-example tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
@@ -264,6 +310,7 @@ Repeat the lookup before merge when dependencies, subprocess providers, network 
 - map typed failures to the existing JavaScript public contracts;
 - bind `is_default_example` into acquisition orchestration and compare TypeScript/Rust routing over shared fixtures;
 - implement the production `PackageManagerConverter` with complete six-manager parity, rollback or atomic promotion, and failure injection;
+- implement the official-starter bounded transactional filesystem adapter and prove metadata deletion/package replacement rollback;
 - prove the shared README target behavior for `nub` and `aube` without broadening the source's four scanned command spellings;
 - run TypeScript-versus-Rust differential host fixtures on Linux, macOS, and Windows;
 - implement handle-relative publication and atomic Windows replacement with an explicit metadata/ACL policy;
