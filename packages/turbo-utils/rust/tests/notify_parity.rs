@@ -86,8 +86,8 @@ fn checker_starts_when_notification_is_prepared_and_only_runs_once() {
     let notification = PreparedUpdateNotification::prepare(package_info(), &checker);
     assert_eq!(checker.calls(), 1);
 
-    notification.notify(ExitCode::Success, UpgradeCommand::None, false);
-    notification.notify(ExitCode::Failure, UpgradeCommand::None, false);
+    let _ = notification.notify(ExitCode::Success, UpgradeCommand::None, false);
+    let _ = notification.notify(ExitCode::Failure, UpgradeCommand::None, false);
     assert_eq!(checker.calls(), 1);
 }
 
