@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use create_turbo_rs::{
     ExampleRepository, OFFICIAL_REPOSITORIES, OFFICIAL_STARTER_TRANSFORM_NAME,
-    OfficialStarterError, OfficialStarterInput, OfficialStarterPackageJson,
-    OfficialStarterStore, TransformStatus, is_official_starter, transform_official_starter,
+    OfficialStarterError, OfficialStarterInput, OfficialStarterPackageJson, OfficialStarterStore,
+    TransformStatus, is_official_starter, transform_official_starter,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,10 +92,7 @@ impl OfficialStarterStore for FakeStore {
         self.remove_meta_result
     }
 
-    fn read_package_json(
-        &mut self,
-        root: &Path,
-    ) -> Result<Option<Self::PackageJson>, Self::Error> {
+    fn read_package_json(&mut self, root: &Path) -> Result<Option<Self::PackageJson>, Self::Error> {
         self.calls.push(Call::ReadPackage(root.to_path_buf()));
         self.package_result.clone()
     }
@@ -105,10 +102,8 @@ impl OfficialStarterStore for FakeStore {
         root: &Path,
         package_json: &Self::PackageJson,
     ) -> Result<(), Self::Error> {
-        self.calls.push(Call::WritePackage(
-            root.to_path_buf(),
-            package_json.clone(),
-        ));
+        self.calls
+            .push(Call::WritePackage(root.to_path_buf(), package_json.clone()));
         self.write_result
     }
 }
@@ -144,14 +139,14 @@ fn package(name: &str, turbo: Option<&str>, turbo_truthy: bool) -> FakePackage {
 }
 
 fn written_package(store: &FakeStore) -> &FakePackage {
-    store
-        .calls
-        .iter()
-        .find_map(|call| match call {
-            Call::WritePackage(_, package_json) => Some(package_json),
-            _ => None,
-        })
-        .expect("the test expects one package.json write")
+    let package_json = store.calls.iter().find_map(|call| match call {
+        Call::WritePackage(_, package_json) => Some(package_json),
+        _ => None,
+    });
+    let Some(package_json) = package_json else {
+        panic!("the test expects one package.json write");
+    };
+    package_json
 }
 
 #[test]
@@ -164,10 +159,7 @@ fn official_repository_constants_match_the_typescript_source() {
 fn repository_classification_matches_the_source_contract() {
     assert!(is_official_starter(None));
     assert!(is_official_starter(Some(repository("vercel", "turbo"))));
-    assert!(is_official_starter(Some(repository(
-        "vercel",
-        "turborepo"
-    ))));
+    assert!(is_official_starter(Some(repository("vercel", "turborepo"))));
     assert!(!is_official_starter(Some(repository("acme", "turbo"))));
     assert!(!is_official_starter(Some(repository("vercel", "other"))));
 }
@@ -206,11 +198,9 @@ fn package_existence_is_observed_before_meta_processing() {
         ..FakeStore::default()
     };
 
-    let response = transform_official_starter(
-        input(root, "example", None, "project", None),
-        &mut store,
-    )
-    .expect("the successful fake store must return a response");
+    let response =
+        transform_official_starter(input(root, "example", None, "project", None), &mut store)
+            .expect("the successful fake store must return a response");
 
     assert_eq!(response.result, TransformStatus::Success);
     assert_eq!(response.meta_json, Some(meta));
@@ -229,11 +219,9 @@ fn meta_read_failure_is_swallowed_without_a_remove_attempt() {
     let root = Path::new("project-root");
     let mut store = FakeStore::default();
 
-    let response = transform_official_starter(
-        input(root, "example", None, "project", None),
-        &mut store,
-    )
-    .expect("the source swallows meta.json read failures");
+    let response =
+        transform_official_starter(input(root, "example", None, "project", None), &mut store)
+            .expect("the source swallows meta.json read failures");
 
     assert_eq!(response.result, TransformStatus::Success);
     assert_eq!(response.meta_json, None);
@@ -258,11 +246,9 @@ fn meta_remove_failure_is_swallowed_and_the_parsed_value_is_returned() {
         ..FakeStore::default()
     };
 
-    let response = transform_official_starter(
-        input(root, "example", None, "project", None),
-        &mut store,
-    )
-    .expect("the source swallows meta.json removal failures");
+    let response =
+        transform_official_starter(input(root, "example", None, "project", None), &mut store)
+            .expect("the source swallows meta.json removal failures");
 
     assert_eq!(response.result, TransformStatus::Success);
     assert_eq!(response.meta_json, Some(meta));
@@ -281,8 +267,18 @@ fn missing_package_json_still_returns_success() {
     .expect("a missing package.json is a successful source branch");
 
     assert_eq!(response.result, TransformStatus::Success);
-    assert!(!store.calls.iter().any(|call| matches!(call, Call::ReadPackage(_))));
-    assert!(!store.calls.iter().any(|call| matches!(call, Call::WritePackage(_, _))));
+    assert!(
+        !store
+            .calls
+            .iter()
+            .any(|call| matches!(call, Call::ReadPackage(_)))
+    );
+    assert!(
+        !store
+            .calls
+            .iter()
+            .any(|call| matches!(call, Call::WritePackage(_, _)))
+    );
 }
 
 #[test]
@@ -294,11 +290,9 @@ fn package_read_failure_maps_to_nonfatal_transform_error() {
         ..FakeStore::default()
     };
 
-    let error = transform_official_starter(
-        input(root, "example", None, "project", None),
-        &mut store,
-    )
-    .expect_err("a package.json read failure must not become success");
+    let error =
+        transform_official_starter(input(root, "example", None, "project", None), &mut store)
+            .expect_err("a package.json read failure must not become success");
 
     assert_eq!(
         error,
@@ -318,14 +312,17 @@ fn falsey_package_json_content_is_not_written() {
         ..FakeStore::default()
     };
 
-    let response = transform_official_starter(
-        input(root, "basic", None, "project", None),
-        &mut store,
-    )
-    .expect("falsey parsed package content follows the source no-write branch");
+    let response =
+        transform_official_starter(input(root, "basic", None, "project", None), &mut store)
+            .expect("falsey parsed package content follows the source no-write branch");
 
     assert_eq!(response.result, TransformStatus::Success);
-    assert!(!store.calls.iter().any(|call| matches!(call, Call::WritePackage(_, _))));
+    assert!(
+        !store
+            .calls
+            .iter()
+            .any(|call| matches!(call, Call::WritePackage(_, _)))
+    );
 }
 
 #[test]
@@ -358,11 +355,8 @@ fn default_example_renames_package_and_uses_invocation_version() {
         ..FakeStore::default()
     };
 
-    transform_official_starter(
-        input(root, "default", None, "new-name", None),
-        &mut store,
-    )
-    .expect("the fake package write must succeed");
+    transform_official_starter(input(root, "default", None, "new-name", None), &mut store)
+        .expect("the fake package write must succeed");
 
     assert_eq!(written_package(&store).name.as_deref(), Some("new-name"));
     assert_eq!(
@@ -442,11 +436,8 @@ fn truthy_package_is_written_even_when_no_field_changes() {
         ..FakeStore::default()
     };
 
-    transform_official_starter(
-        input(root, "example", None, "ignored", None),
-        &mut store,
-    )
-    .expect("the fake package write must succeed");
+    transform_official_starter(input(root, "example", None, "ignored", None), &mut store)
+        .expect("the fake package write must succeed");
 
     assert_eq!(written_package(&store), &original);
 }
@@ -461,11 +452,9 @@ fn package_write_failure_maps_to_nonfatal_transform_error() {
         ..FakeStore::default()
     };
 
-    let error = transform_official_starter(
-        input(root, "example", None, "project", None),
-        &mut store,
-    )
-    .expect_err("a package.json write failure must not become success");
+    let error =
+        transform_official_starter(input(root, "example", None, "project", None), &mut store)
+            .expect_err("a package.json write failure must not become success");
 
     assert_eq!(
         error,

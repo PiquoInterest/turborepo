@@ -35,10 +35,7 @@ pub trait OfficialStarterStore {
     fn package_json_exists(&mut self, root: &Path) -> bool;
     fn read_meta_json(&mut self, root: &Path) -> Result<Self::MetaJson, Self::Error>;
     fn remove_meta_json(&mut self, root: &Path) -> Result<(), Self::Error>;
-    fn read_package_json(
-        &mut self,
-        root: &Path,
-    ) -> Result<Option<Self::PackageJson>, Self::Error>;
+    fn read_package_json(&mut self, root: &Path) -> Result<Option<Self::PackageJson>, Self::Error>;
     fn write_package_json(
         &mut self,
         root: &Path,
@@ -87,8 +84,7 @@ pub fn is_official_starter(repository: Option<ExampleRepository<'_>>) -> bool {
     match repository {
         None => true,
         Some(repository) => {
-            repository.username == "vercel"
-                && OFFICIAL_REPOSITORIES.contains(&repository.name)
+            repository.username == "vercel" && OFFICIAL_REPOSITORIES.contains(&repository.name)
         }
     }
 }

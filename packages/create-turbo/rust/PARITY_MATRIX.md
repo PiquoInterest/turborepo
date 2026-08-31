@@ -83,6 +83,27 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | `@turbo/workspaces.convert` cleanup/create/package metadata/lockfile mutation | production `PackageManagerConverter` | blocked | Requires translated manager-specific tests, atomicity or rollback, no-follow filesystem handling, bounded process execution, and platform closure. See CT-RS-017. |
 | TypeScript transform's untyped broad side effects | explicit mutation provider boundary | intentional-hardening | The reviewed core cannot execute a process or mutate a file directly. |
 
+## Official-starter transform tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| no `example.repo` | `is_official_starter(None)` | implemented core | Preserves the source's built-in official route. |
+| repository exactly `vercel/turbo` or `vercel/turborepo` | `ExampleRepository` plus exact borrowed-string matching | implemented core | Case, whitespace, prefixes, suffixes, paths, controls, and Unicode confusables do not broaden the route. |
+| non-official repository returns before filesystem access | early `NotApplicable` response | implemented core | An exploding provider test proves no store method can run. |
+| `existsSync(package.json)` before metadata handling | `package_json_exists` before `read_meta_json` | implemented core | Provider-call order is translated exactly. |
+| `readJsonSync(meta.json)` followed by best-effort forced removal | `read_meta_json` then ignored `remove_meta_json` result | implemented core | Read failure returns no metadata and skips removal; removal failure still returns the parsed metadata. |
+| missing `package.json` | source existence snapshot | implemented core | Returns success after metadata handling without package read/write. |
+| package read error | `OfficialStarterError::ReadPackageJson` | implemented core | Exact public message, transform name, and nonfatal metadata are covered. |
+| falsey parsed package value | `read_package_json` returns `None` | implemented core | Returns success without writing, matching the source guard. |
+| `basic`/`default` package rename | `is_default_example` plus `set_name` | implemented core | Exact project name is forwarded as data. |
+| truthy existing `devDependencies.turbo` | typed truthiness query plus setter | implemented core | Non-empty explicit version wins; absent or empty option becomes `^<invocation version>`. |
+| truthy package object with no relevant field changes | unconditional provider write after successful read | implemented core | Preserves the source's write side effect and ordering. |
+| package write error | `OfficialStarterError::WritePackageJson` | implemented core | Cannot become a false success. |
+| `fs-extra` JSON parsing, ordering, deletion, and write behavior | production `OfficialStarterStore` | blocked | Requires bounded strict parsing, unknown-field/order preservation, JavaScript truthiness, no-follow paths, atomic publication, metadata policy, and supported-platform differentials. |
+| public JavaScript `TransformError` instance | typed Rust error metadata | partial | Native/host binding must construct the exact public error class and stack-facing behavior. |
+
+Detailed representation and security differences are in `OFFICIAL_STARTER_DIVERGENCES.md`.
+
 ## Existing TypeScript test mapping
 
 | TypeScript test or source contract | Rust test coverage | Status |
@@ -98,6 +119,8 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | default-route confusable/prefix/control/large-input regressions | five robustness/security tests | intentional-hardening evidence |
 | package-manager transform source contract without focused direct Jest coverage | seven translated parity tests | implemented core |
 | package-manager version/path/provider-boundary regressions | four security tests | intentional-hardening evidence |
+| `official-starter` source contract without focused Jest coverage | sixteen translated parity tests | implemented core |
+| official-route confusable/large-input/provider-boundary regressions | nine security tests | intentional-hardening evidence |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -110,7 +133,7 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |
-| `official-starter` transform | not-implemented | Translate package/workspace mutations with deterministic JSON ordering. |
+| `official-starter` transform | implemented orchestration core, provider blocked | Add bounded no-follow JSON/filesystem provider, deterministic order-preserving serialization, atomic package publication, native binding, platform differentials, and removal proof. |
 | package-manager transform | implemented orchestration core, provider blocked | Port and prove manager-specific conversion, package/lockfile mutation, rollback, process, and platform behavior. |
 | README target behavior for `nub`/`aube` | partial | Preserve the source's four-spelling scan while proving the wider target type through differential fixtures. |
 | telemetry integration | partial | The package telemetry Rust core is consolidated; bind it without retaining business logic in TypeScript. |

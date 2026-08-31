@@ -165,14 +165,14 @@ fn input<'a>(
 }
 
 fn written_package(store: &SecurityStore) -> &SecurityPackage {
-    store
-        .calls
-        .iter()
-        .find_map(|call| match call {
-            SecurityCall::WritePackage(_, package_json) => Some(package_json),
-            _ => None,
-        })
-        .expect("the test expects one package.json write")
+    let package_json = store.calls.iter().find_map(|call| match call {
+        SecurityCall::WritePackage(_, package_json) => Some(package_json),
+        _ => None,
+    });
+    let Some(package_json) = package_json else {
+        panic!("the test expects one package.json write");
+    };
+    package_json
 }
 
 #[test]

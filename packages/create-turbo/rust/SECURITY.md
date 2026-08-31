@@ -5,6 +5,7 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/update-commands-in-readme.ts`
 - `packages/create-turbo/src/transforms/git-ignore.ts`
 - `packages/create-turbo/src/transforms/package-manager.ts`
+- `packages/create-turbo/src/transforms/official-starter.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
@@ -18,6 +19,8 @@ Repository-controlled or attacker-influenced inputs include the selected package
 The example name determines whether acquisition is classified as a built-in default path. That routing decision must use exact membership so prefixes, paths, Unicode lookalikes, whitespace, controls, or normalization do not silently broaden trust.
 
 The package-manager transform decides whether broad workspace mutation is invoked and which manager adapter receives control. The reviewed Rust core carries only a closed manager enum, a borrowed root path, and `skip_install: true`. Actual package metadata, lockfile, configuration, and process effects remain behind `PackageManagerConverter` and are not yet production-approved.
+
+The official-starter tranche adds trust boundaries for exact repository classification, the pre-metadata `package.json` existence snapshot, best-effort `meta.json` read/removal, project-name and version data, JavaScript truthiness, unknown package fields, JSON ordering, parser limits, links, concurrent replacement, and atomic publication. The reviewed core performs only ordering and mutation decisions; all filesystem and JSON effects remain behind typed providers.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -219,10 +222,43 @@ Required production closure: differential tests must prove whether version is pu
 
 Regression tests: `prompt_version_is_not_forwarded_to_the_converter`, `a_large_untrusted_version_is_borrowed_and_not_forwarded`, and `no_mutating_provider_call_occurs_when_the_selection_is_absent_or_unchanged`.
 
+### CT-RS-019: Official-starter repository classification must remain exact
+
+**Severity:** Medium
+
+The transform treats a missing repository and only the exact repositories `vercel/turbo` and `vercel/turborepo` as official. Trimming, case folding, Unicode normalization, prefix/path matching, or fuzzy matching would broaden a trusted transformation route.
+
+The Rust core uses borrowed exact strings and returns `not-applicable` before any provider access for every other repository. Tests cover case, whitespace, prefixes, suffixes, paths, controls, Unicode confusables, and a multi-megabyte nonmatching name.
+
+Residual risk: production routing still invokes the TypeScript transform until the Rust binding and differential fixtures are complete.
+
+### CT-RS-020: Metadata removal is intentionally best-effort and can leave stale metadata
+
+**Severity:** Low compatibility contract
+
+The TypeScript source reads `meta.json`, then attempts forced removal inside one `try` block. A read failure is ignored and prevents removal. A removal failure is also ignored, while the parsed metadata remains in the successful response. This can leave a stale `meta.json` beside a returned copy.
+
+The Rust orchestration preserves that exact ordering and result contract rather than silently changing observable behavior. The production provider must bound and strictly parse the file, reject links and special files, and make the remaining stale-file possibility explicit in diagnostics or a deliberate compatibility change with its own RED contract.
+
+Regression tests: `package_existence_is_observed_before_meta_processing`, `meta_read_failure_is_swallowed_without_a_remove_attempt`, and `meta_remove_failure_is_swallowed_and_the_parsed_value_is_returned`.
+
+### CT-RS-021: Package JSON mutation lacks a reviewed bounded, no-follow, atomic provider
+
+**Severity:** High until the provider contract is closed
+
+The TypeScript transform uses broad synchronous `fs-extra` operations. It does not establish explicit byte limits, no-follow path handling, file identity checks, atomic replacement, or complete metadata preservation. It also relies on JavaScript truthiness and JSON serialization order. Because metadata removal happens before package read/write, a later package failure can leave `meta.json` removed while `package.json` remains unchanged, with no shared rollback contract.
+
+The Rust tranche deliberately keeps these effects behind `OfficialStarterStore` and `OfficialStarterPackageJson`. The core proves exact classification, call order, rename/version decisions, nonfatal public errors, and provider-failure propagation, but it cannot touch a path or parser directly.
+
+A production provider must prove bounded strict JSON parsing, unknown-field and insertion-order preservation, JavaScript-compatible truthiness for the existing Turbo dependency, safe root/file identity, no-follow behavior, synchronized same-directory staging, atomic package replacement, a transaction or rollback journal covering metadata removal plus package publication, approved mode/ACL/ownership handling, concurrent-path behavior, deterministic output, and Linux/macOS/Windows differential parity.
+
+Regression tests prove that non-official input cannot reach a provider, metadata failures alone are swallowed, package failures remain fatal to the transform result, large fallback text is not copied when the dependency is falsey, and data strings are never interpreted as commands by the core.
+
 ## Security invariants
 
 - No new `unsafe` or shell command construction is introduced by these tranches.
-- README, `.gitignore`, default-example, and package-manager orchestration add no network or credential behavior.
+- README, `.gitignore`, default-example, official-starter, and package-manager orchestration add no network or credential behavior.
+- The official-starter core performs no filesystem access, JSON parsing, serialization, deletion, process execution, or logging; those effects remain behind typed providers.
 - The default-example route uses exact borrowed ASCII literals only.
 - The package-manager core accepts a closed enum, preserves the root as a path, does not forward version text, and cannot mutate files or execute a process directly.
 - The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
@@ -249,6 +285,8 @@ Authoritative sources checked:
 
 Disposition:
 
+- The official-starter orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, logging operation, or mutable global state.
+- A production official-starter store remains blocked until its JSON truthiness, ordering, resource bounds, no-follow identity, atomic write, metadata, and supported-platform contracts are proven.
 - The package-manager orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
 - A production converter cannot be approved until its manager adapters, executable versions, filesystem/process policies, transaction or rollback model, and supported platforms are reviewed.
 - The default-example tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.

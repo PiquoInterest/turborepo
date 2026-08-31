@@ -168,6 +168,18 @@ Required closure is a production `PackageManagerConverter` with translated manag
 
 Regression coverage is in `packages/create-turbo/rust/tests/package_manager_transform_parity.rs` and `package_manager_transform_security.rs`.
 
+### RF-015: Official-starter JSON mutation lacks a bounded atomic production provider
+
+**Status:** Orchestration core implemented; production cutover blocked.
+
+The TypeScript `official-starter` transform trusts only a missing repository or the exact repositories `vercel/turbo` and `vercel/turborepo`, reads and best-effort removes `meta.json`, then may rewrite `package.json`. Broadening repository matching would widen a trusted route, while directly reproducing `fs-extra` would retain unbounded parsing, link following, in-place write, metadata, ordering, and concurrent-path uncertainty.
+
+The Rust core now proves exact borrowed-string classification, source call order, metadata failure behavior, package rename/version decisions, public nonfatal errors, and failure propagation. It cannot access a filesystem, parser, serializer, process, network, or logger directly.
+
+Required closure is a production `OfficialStarterStore` with bounded strict parsing, JavaScript-compatible truthiness, unknown-field and insertion-order preservation, no-follow root/file identity, synchronized atomic package publication, transaction or rollback coverage for metadata removal plus package mutation, approved metadata/ACL behavior, deterministic serialization, public binding, and Linux/macOS/Windows differential fixtures.
+
+Regression coverage is in `packages/create-turbo/rust/tests/official_starter_parity.rs` and `official_starter_security.rs`. The complete representation and intentional-divergence ledger is `packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md`.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
@@ -175,6 +187,7 @@ Before declaring repository-wide TypeScript deprecation complete:
 - keep lockfile-wide RustSec auditing enabled and remove every temporary exception after remediation;
 - resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
 - close the package-manager conversion transaction, rollback, and supported-platform contract;
+- close the official-starter bounded JSON, truthiness, no-follow identity, deterministic ordering, atomic publication, and supported-platform provider contract;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;
