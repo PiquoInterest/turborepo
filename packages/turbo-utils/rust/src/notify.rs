@@ -161,14 +161,12 @@ fn is_directional_format_control(character: char) -> bool {
 
 fn escape_untrusted(value: &str) -> String {
     let mut escaped = String::new();
-    let mut consumed = 0_usize;
     let mut truncated = false;
-    for character in value.chars() {
+    for (consumed, character) in value.chars().enumerate() {
         if consumed == NOTIFY_MAX_UNTRUSTED_CHARS {
             truncated = true;
             break;
         }
-        consumed += 1;
         match character {
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
