@@ -12,6 +12,8 @@ pub const PROXY_URL_MAX_CHARS: usize = 2_048;
 pub const NO_PROXY_MAX_CHARS: usize = 4_096;
 /// Maximum number of comma-separated `NO_PROXY` rules.
 pub const NO_PROXY_MAX_ENTRIES: usize = 256;
+/// Maximum number of redirects that can be evaluated for one request chain.
+pub const REDIRECT_MAX_HOPS: usize = 10;
 
 /// Snapshot of the environment values consumed by the TypeScript networking
 /// helpers. It intentionally has no `Debug` implementation so tokens are not
@@ -36,6 +38,16 @@ pub enum NetworkPolicyError {
     InvalidProxyUrl,
     #[error("selected NO_PROXY value is invalid or unsupported")]
     InvalidNoProxy,
+    #[error("redirect hop is outside the allowed range")]
+    RedirectLimitExceeded,
+    #[error("redirect from HTTPS to HTTP is not allowed")]
+    InsecureRedirect,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedirectRequestPolicy {
+    pub authorization_header: Option<String>,
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -384,4 +396,16 @@ pub fn proxy_for_url(
         return Err(NetworkPolicyError::InvalidProxyUrl);
     }
     Ok(Some(proxy.to_owned()))
+}
+
+/// Returns the authorization and proxy policy for a redirect destination.
+/// `redirect_hop` is one-based and must not exceed `REDIRECT_MAX_HOPS`.
+pub fn redirect_request_policy(
+    source_url: &str,
+    target_url: &str,
+    redirect_hop: usize,
+    environment: &NetworkEnvironment,
+) -> Result<RedirectRequestPolicy, NetworkPolicyError> {
+    let _ = (source_url, target_url, redirect_hop, environment);
+    Err(NetworkPolicyError::InvalidRequestUrl)
 }

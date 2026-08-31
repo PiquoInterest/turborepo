@@ -30,7 +30,8 @@ pub use managers::{
 };
 pub use network::{
     GITHUB_TOKEN_MAX_CHARS, NO_PROXY_MAX_CHARS, NO_PROXY_MAX_ENTRIES, NetworkEnvironment,
-    NetworkPolicyError, PROXY_URL_MAX_CHARS, github_authorization_header, proxy_for_url,
+    NetworkPolicyError, PROXY_URL_MAX_CHARS, REDIRECT_MAX_HOPS, RedirectRequestPolicy,
+    github_authorization_header, proxy_for_url, redirect_request_policy,
 };
 pub use notify::{
     ExitCode, NOTIFY_MAX_UNTRUSTED_CHARS, NotifyUpdateOutcome, PackageInfo,
