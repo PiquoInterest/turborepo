@@ -398,6 +398,32 @@ pub fn proxy_for_url(
     Ok(Some(proxy.to_owned()))
 }
 
+fn is_http_request_scheme(scheme: &str) -> bool {
+    scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+}
+
+fn request_hosts_equal(left: RequestHost<'_>, right: RequestHost<'_>) -> bool {
+    match (left, right) {
+        (RequestHost::Domain(left), RequestHost::Domain(right)) => {
+            left.eq_ignore_ascii_case(right)
+        }
+        (RequestHost::Ipv4(left), RequestHost::Ipv4(right)) => left == right,
+        (RequestHost::Ipv6(left), RequestHost::Ipv6(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn same_request_origin(
+    source: ParsedUrl<'_>,
+    source_endpoint: RequestEndpoint<'_>,
+    target: ParsedUrl<'_>,
+    target_endpoint: RequestEndpoint<'_>,
+) -> bool {
+    source.scheme.eq_ignore_ascii_case(target.scheme)
+        && source_endpoint.port == target_endpoint.port
+        && request_hosts_equal(source_endpoint.host, target_endpoint.host)
+}
+
 /// Returns the authorization and proxy policy for a redirect destination.
 /// `redirect_hop` is one-based and must not exceed `REDIRECT_MAX_HOPS`.
 pub fn redirect_request_policy(
@@ -406,6 +432,39 @@ pub fn redirect_request_policy(
     redirect_hop: usize,
     environment: &NetworkEnvironment,
 ) -> Result<RedirectRequestPolicy, NetworkPolicyError> {
-    let _ = (source_url, target_url, redirect_hop, environment);
-    Err(NetworkPolicyError::InvalidRequestUrl)
+    if redirect_hop == 0 || redirect_hop > REDIRECT_MAX_HOPS {
+        return Err(NetworkPolicyError::RedirectLimitExceeded);
+    }
+
+    let source = parse_absolute_url(source_url).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+    let target = parse_absolute_url(target_url).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+    if !is_http_request_scheme(source.scheme) || !is_http_request_scheme(target.scheme) {
+        return Err(NetworkPolicyError::InvalidRequestUrl);
+    }
+
+    let source_endpoint =
+        parse_request_endpoint(source).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+    let target_endpoint =
+        parse_request_endpoint(target).ok_or(NetworkPolicyError::InvalidRequestUrl)?;
+
+    if source.scheme.eq_ignore_ascii_case("https")
+        && target.scheme.eq_ignore_ascii_case("http")
+    {
+        return Err(NetworkPolicyError::InsecureRedirect);
+    }
+
+    let source_was_authorized = github_authorization_header(source_url, environment).is_some();
+    let authorization_header = if source_was_authorized
+        && same_request_origin(source, source_endpoint, target, target_endpoint)
+    {
+        github_authorization_header(target_url, environment)
+    } else {
+        None
+    };
+    let proxy_url = proxy_for_url(target_url, environment)?;
+
+    Ok(RedirectRequestPolicy {
+        authorization_header,
+        proxy_url,
+    })
 }
