@@ -38,7 +38,6 @@ jobs:
       - name: Validate focused Rust crate
         run: |
           set -euo pipefail
-          cargo fmt --all
           cargo fmt --all --check
           cargo check --locked -p create-turbo-rs --all-targets
           cargo test --locked -p create-turbo-rs --all-targets
