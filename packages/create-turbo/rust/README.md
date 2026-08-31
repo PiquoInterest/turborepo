@@ -10,6 +10,7 @@ Current Rust tranches cover:
 4. exact `isDefaultExample` routing for the exported `basic` and `default` examples.
 5. the dependency-injected `package-manager` transform decision and conversion-request contract.
 6. the dependency-injected `official-starter` transform orchestration contract.
+7. the fixed-order transform-pipeline and fatal/nonfatal error-control contract.
 
 The TypeScript package remains the production entry point and differential-test oracle until CLI, prompt, acquisition, process-provider, packaging, and downstream cutover work is complete.
 
@@ -86,6 +87,18 @@ A production store is deliberately absent. It must preserve unknown JSON fields 
 
 The exact type conversions and intentional security divergences are recorded in [`OFFICIAL_STARTER_DIVERGENCES.md`](./OFFICIAL_STARTER_DIVERGENCES.md).
 
+### Transform-pipeline core
+
+- exports the exact four-transform source order as a closed enum array;
+- skips every invocation when transforms are disabled;
+- executes each step sequentially and at most once;
+- preserves JavaScript string truthiness for `maintainedByCoreTeam`;
+- continues after nonfatal transform errors, but stops on fatal and unknown errors;
+- preserves the source error defaults and explicit false/empty values;
+- returns a typed partial report instead of logging, exiting, or rethrowing inside the core.
+
+Logging, telemetry, async adaptation, `process.exit(1)` mapping, and public JavaScript error construction remain binding work. The binding must sanitize terminal control characters for display and must flush telemetry and cleanup before a fatal exit. Exact differences are recorded in [`TRANSFORM_PIPELINE_DIVERGENCES.md`](./TRANSFORM_PIPELINE_DIVERGENCES.md).
+
 ## Not yet implemented in Rust
 
 - CLI argument parsing, help/version output, and prompts;
@@ -93,7 +106,7 @@ The exact type conversions and intentional security divergences are recorded in 
 - production package-manager workspace conversion and installation orchestration;
 - production Git/Hg process execution and `.git` cleanup providers;
 - production filesystem/JSON provider for the `official-starter` transform, including deterministic JSON ordering and atomic no-follow writes;
-- transform dispatcher binding and public `TransformError` mapping;
+- transform-pipeline async binding, terminal-safe logging, telemetry, fatal-exit handling, and public `TransformError` mapping;
 - the remaining source transforms;
 - telemetry binding into the production command path;
 - native/JavaScript host boundary and npm packaging;
@@ -101,7 +114,7 @@ The exact type conversions and intentional security divergences are recorded in 
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and transform ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -129,6 +142,8 @@ Package manager RED:     9f9b33f889d92e5b61a484ac445b4e297110f6f0
 Package manager GREEN:   c7a1776c5f6fa53db4e30d418a9897b56c6263cd
 Official starter RED:   2ca25bd457cbe216f345b5f67cf9ac32f43a2c7a
 Official starter GREEN: cd2ba74b3040e654a63c9799e42c35a12f2c4dbc
+Pipeline RED:            9d6426ae91f810e093466817ff581f7bc7a5d9cc
+Pipeline GREEN:          7b208824412f008a942567faa5e37740948a541e
 ```
 
 Focused validation:
@@ -141,7 +156,7 @@ cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
 pnpm --filter create-turbo test
 ```
 
-The crate contains 55 translated parity tests and 39 security regression tests, for 94 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
+The crate contains 65 translated parity tests and 46 security regression tests, for 111 authored focused Rust tests. The latest tranche is not treated as validated until its merge-head workflow passes the commands above.
 
 ## Production status
 

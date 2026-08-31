@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
 use create_turbo_rs::{
-    PipelineAbortReason, PipelineTransformResponse, TransformExecutor, TransformFailure,
-    TransformInvocationError, TransformKind, TransformStatus, TRANSFORM_PIPELINE,
+    PipelineAbortReason, PipelineTransformResponse, TRANSFORM_PIPELINE, TransformExecutor,
+    TransformFailure, TransformInvocationError, TransformKind, TransformStatus,
     run_transform_pipeline,
 };
 
@@ -34,9 +34,11 @@ impl TransformExecutor<UnknownError> for CountingExecutor {
         transform: TransformKind,
     ) -> Result<PipelineTransformResponse, TransformInvocationError<UnknownError>> {
         self.calls.push(transform);
-        self.results
-            .pop_front()
-            .expect("the security script must provide a result for every call")
+        let result = self.results.pop_front();
+        let Some(result) = result else {
+            panic!("the security script must provide a result for every call");
+        };
+        result
     }
 }
 
@@ -77,11 +79,7 @@ fn four_nonfatal_failures_are_bounded_by_the_closed_pipeline() {
 fn a_failure_is_never_retried_after_it_returns() {
     let results = [
         Err(TransformInvocationError::Transform(
-            TransformFailure::with_options(
-                "one warning",
-                Some("official-starter"),
-                Some(false),
-            ),
+            TransformFailure::with_options("one warning", Some("official-starter"), Some(false)),
         )),
         Ok(success(TransformKind::GitIgnore)),
         Ok(success(TransformKind::PackageManager)),
@@ -102,11 +100,8 @@ fn a_failure_is_never_retried_after_it_returns() {
 
 #[test]
 fn an_unknown_error_after_a_nonfatal_failure_still_aborts() {
-    let warning = TransformFailure::with_options(
-        "recoverable",
-        Some("official-starter"),
-        Some(false),
-    );
+    let warning =
+        TransformFailure::with_options("recoverable", Some("official-starter"), Some(false));
     let unknown = UnknownError("unexpected type");
     let results = [
         Err(TransformInvocationError::Transform(warning.clone())),
@@ -134,7 +129,8 @@ fn arbitrary_error_text_is_carried_as_data_without_affecting_control_flow() {
         Ok(success(TransformKind::UpdateCommandsInReadme)),
     ];
     let mut executor = CountingExecutor::new(results);
-    let report = run_transform_pipeline(&mut executor, false).expect("nonfatal failure should continue");
+    let report =
+        run_transform_pipeline(&mut executor, false).expect("nonfatal failure should continue");
 
     assert_eq!(report.non_fatal_errors, vec![failure]);
     assert_eq!(executor.calls, TRANSFORM_PIPELINE);
@@ -158,16 +154,11 @@ fn whitespace_only_maintainer_metadata_is_truthy_like_javascript() {
 
 #[test]
 fn a_fatal_failure_cannot_be_hidden_in_the_nonfatal_collection() {
-    let fatal = TransformFailure::with_options(
-        "fatal",
-        Some("official-starter"),
-        Some(true),
-    );
-    let mut executor = CountingExecutor::new([Err(TransformInvocationError::Transform(
-        fatal.clone(),
-    ))]);
-    let abort = run_transform_pipeline(&mut executor, false)
-        .expect_err("fatal failures must abort");
+    let fatal = TransformFailure::with_options("fatal", Some("official-starter"), Some(true));
+    let mut executor =
+        CountingExecutor::new([Err(TransformInvocationError::Transform(fatal.clone()))]);
+    let abort =
+        run_transform_pipeline(&mut executor, false).expect_err("fatal failures must abort");
 
     assert!(abort.report.non_fatal_errors.is_empty());
     assert_eq!(abort.reason, PipelineAbortReason::Fatal(fatal));

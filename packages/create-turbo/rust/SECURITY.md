@@ -6,6 +6,7 @@ This review covers the current Rust ports of:
 - `packages/create-turbo/src/transforms/git-ignore.ts`
 - `packages/create-turbo/src/transforms/package-manager.ts`
 - `packages/create-turbo/src/transforms/official-starter.ts`
+- the transform loop and `handleErrors` in `packages/create-turbo/src/commands/create/index.ts`
 - the shared `DEFAULT_IGNORE` constant in `src/utils/git.ts`
 - the dependency-injected orchestration core for `tryGitInit` in `src/utils/git.ts`
 - `packages/create-turbo/src/utils/is-default-example.ts`
@@ -21,6 +22,8 @@ The example name determines whether acquisition is classified as a built-in defa
 The package-manager transform decides whether broad workspace mutation is invoked and which manager adapter receives control. The reviewed Rust core carries only a closed manager enum, a borrowed root path, and `skip_install: true`. Actual package metadata, lockfile, configuration, and process effects remain behind `PackageManagerConverter` and are not yet production-approved.
 
 The official-starter tranche adds trust boundaries for exact repository classification, the pre-metadata `package.json` existence snapshot, best-effort `meta.json` read/removal, project-name and version data, JavaScript truthiness, unknown package fields, JSON ordering, parser limits, links, concurrent replacement, and atomic publication. The reviewed core performs only ordering and mutation decisions; all filesystem and JSON effects remain behind typed providers.
+
+The transform pipeline decides which mutation stages run, whether later stages continue, and whether a failure terminates the command. The Rust core uses a closed four-step enum and typed error classes. It performs no logging, telemetry, process exit, filesystem access, or transform side effect directly.
 
 The Git initialization tranche adds decision boundaries for the project-root path, Git and Mercurial executable selection, process working directory, arguments, inherited environment and VCS configuration, template directories, hooks, timeouts, output, child-process cleanup, `.git` ownership, and recursive deletion.
 
@@ -253,6 +256,26 @@ The Rust tranche deliberately keeps these effects behind `OfficialStarterStore` 
 A production provider must prove bounded strict JSON parsing, unknown-field and insertion-order preservation, JavaScript-compatible truthiness for the existing Turbo dependency, safe root/file identity, no-follow behavior, synchronized same-directory staging, atomic package replacement, a transaction or rollback journal covering metadata removal plus package publication, approved mode/ACL/ownership handling, concurrent-path behavior, deterministic output, and Linux/macOS/Windows differential parity.
 
 Regression tests prove that non-official input cannot reach a provider, metadata failures alone are swallowed, package failures remain fatal to the transform result, large fallback text is not copied when the dependency is falsey, and data strings are never interpreted as commands by the core.
+
+### CT-RS-022: Mutable or extensible transform routing can broaden trusted execution
+
+**Severity:** Medium
+
+The source exports a fixed array, but a loose port could accept arbitrary names, duplicate stages, or retries. The Rust core uses a closed four-variant enum and fixed array. Tests prove exact order, no calls when skipped, at-most-once invocation, and a four-failure upper bound.
+
+### CT-RS-023: Fatal `process.exit` can bypass cleanup and telemetry flush
+
+**Severity:** Medium
+
+The TypeScript handler logs and calls `process.exit(1)` for fatal transform errors. Immediate process termination can bypass caller cleanup or buffered telemetry. Rust returns a typed fatal abort. The production binding must emit the exact user-visible failure and telemetry once, flush and clean up, then return exit code 1. This is an intentional security and reliability divergence.
+
+### CT-RS-024: Raw error text can inject terminal controls
+
+**Severity:** Medium
+
+The TypeScript handler sends error text through terminal coloring without a control-character policy. The Rust core never logs. The future binding must sanitize controls and directionality characters for terminal display while preserving raw structured diagnostics. Unknown errors must remain unknown and must not inherit nonfatal handling.
+
+The core adds no dependencies or side-effect capability, so it introduces no new advisory surface.
 
 ## Security invariants
 

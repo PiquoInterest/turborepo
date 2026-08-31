@@ -104,6 +104,23 @@ Status values are `implemented`, `intentional-deviation`, `intentional-hardening
 
 Detailed representation and security differences are in `OFFICIAL_STARTER_DIVERGENCES.md`.
 
+## Transform-pipeline tranche
+
+| TypeScript boundary | Rust boundary | Status | Evidence and notes |
+| --- | --- | --- | --- |
+| exported transform array order | `TRANSFORM_PIPELINE` | implemented core | Exact four names and source order are translated. |
+| `skipTransforms` guard | early empty report | implemented core | No executor method can run. |
+| sequential `await` loop | one typed call per enum slot | implemented core | Async host bridge remains blocked. |
+| optional string maintainer truthiness | non-empty `Option<String>` | implemented core | Empty is falsey; all non-empty strings are truthy. |
+| nonfatal `TransformError` | recorded failure then continue | implemented core | Later steps still execute once. |
+| fatal `TransformError` | typed fatal abort | implemented core | Later transforms are not invoked. |
+| unknown error rethrow | typed unknown abort | implemented core | Unknown errors cannot be downgraded. |
+| default and explicit error options | `TransformFailure` constructors | implemented core | `unknown`/true defaults and explicit empty/false values match nullish semantics. |
+| logging, telemetry, exit and async adaptation | production host binding | blocked | Requires exact side effects, cleanup-before-exit, terminal-safe display, and platform differentials. |
+| internal partial report | `TransformPipelineReport` | intentional-hardening | Bounded internal observability, not a new public API contract. |
+
+Detailed differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
+
 ## Existing TypeScript test mapping
 
 | TypeScript test or source contract | Rust test coverage | Status |
@@ -121,6 +138,8 @@ Detailed representation and security differences are in `OFFICIAL_STARTER_DIVERG
 | package-manager version/path/provider-boundary regressions | four security tests | intentional-hardening evidence |
 | `official-starter` source contract without focused Jest coverage | sixteen translated parity tests | implemented core |
 | official-route confusable/large-input/provider-boundary regressions | nine security tests | intentional-hardening evidence |
+| create command transform-loop source contract | ten translated parity tests | implemented core |
+| fixed-pipeline/error-boundary regressions | seven security tests | intentional-hardening evidence |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 
 ## Remaining `create-turbo` surfaces
@@ -133,6 +152,7 @@ Detailed representation and security differences are in `OFFICIAL_STARTER_DIVERG
 | project creation orchestration | partial | A coordinator exists in `turbo-utils-rs`; `create-turbo` integration and differential tests remain. |
 | Git initialization and commit | implemented core, providers blocked | Add secure Git/Hg runner and cleanup providers, TypeScript differential fixtures, Windows behavior, binding, and production routing. |
 | `git-ignore` transform | implemented core | Add native binding, differential host tests, production routing, and TypeScript removal proof. |
+| transform pipeline and error handling | implemented core, binding blocked | Add async host bridge, telemetry, terminal-safe logging, fatal-exit cleanup, JavaScript error mapping, platform differentials, and removal proof. |
 | `official-starter` transform | implemented orchestration core, provider blocked | Add bounded no-follow JSON/filesystem provider, deterministic order-preserving serialization, atomic package publication, native binding, platform differentials, and removal proof. |
 | package-manager transform | implemented orchestration core, provider blocked | Port and prove manager-specific conversion, package/lockfile mutation, rollback, process, and platform behavior. |
 | README target behavior for `nub`/`aube` | partial | Preserve the source's four-spelling scan while proving the wider target type through differential fixtures. |

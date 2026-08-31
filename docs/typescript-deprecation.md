@@ -10,10 +10,10 @@ The migration program currently contains these Rust migration cores on the singl
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 55 translated parity tests and 39 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, package-manager transform orchestration, and official-starter orchestration.
+- `packages/create-turbo/rust`: 65 translated parity tests and 46 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, package-manager and official-starter orchestration, and transform-pipeline control flow.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **254 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
+That is **271 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -34,7 +34,7 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The official-starter tranche advances create-turbo core and test evidence without completing a new production stage, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the evidence-weighted estimate is now about **72%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The official-starter tranche advances create-turbo core and test evidence without completing a new production stage, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the evidence-weighted estimate is now about **74%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
 
 This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
@@ -139,6 +139,12 @@ The Rust core preserves the source's exact official route and side-effect orderi
 
 The production provider remains blocked. It must implement bounded strict JSON parsing, exact JavaScript truthiness, unknown-field and insertion-order preservation, no-follow identity checks, synchronized atomic publication, approved metadata/ACL handling, deterministic output, and Linux/macOS/Windows differential fixtures before binding or TypeScript removal. Exact representation and intentional security differences are catalogued in `packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md`.
 
+### Transform-pipeline orchestration
+
+The Rust core ports the exact fixed transform order, skip behavior, JavaScript string truthiness, and fatal/nonfatal/unknown error control from the create command. It uses a closed enum and bounded internal report and cannot log, exit, execute a process, access the network, or mutate files.
+
+The async JavaScript binding remains blocked until it proves exact argument forwarding, exactly-once telemetry, terminal-safe error display, cleanup and flush before fatal exit code 1, strict runtime metadata typing, unknown-error propagation, supported-platform differentials, and removal proof. The full divergence ledger is `packages/create-turbo/rust/TRANSFORM_PIPELINE_DIVERGENCES.md`.
+
 ### Package-manager transform orchestration
 
 The Rust core preserves the source no-op and conversion-request behavior behind `PackageManagerConverter`:
@@ -168,6 +174,8 @@ TDD history:
 - package-manager transform implementation: `c7a1776c5f6fa53db4e30d418a9897b56c6263cd`.
 - official-starter transform RED: `2ca25bd457cbe216f345b5f67cf9ac32f43a2c7a`.
 - official-starter transform implementation: `cd2ba74b3040e654a63c9799e42c35a12f2c4dbc`.
+- transform-pipeline RED: `9d6426ae91f810e093466817ff581f7bc7a5d9cc`.
+- transform-pipeline implementation: `7b208824412f008a942567faa5e37740948a541e`.
 
 ## Current `turbo-utils` tranche
 

@@ -180,6 +180,16 @@ Required closure is a production `OfficialStarterStore` with bounded strict pars
 
 Regression coverage is in `packages/create-turbo/rust/tests/official_starter_parity.rs` and `official_starter_security.rs`. The complete representation and intentional-divergence ledger is `packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md`.
 
+### RF-016: Transform-loop termination and terminal output require a secure host boundary
+
+**Status:** Fixed-order Rust core implemented; production binding blocked.
+
+The TypeScript create command runs four transforms sequentially, treats nonfatal `TransformError` values as recoverable, exits immediately on fatal transform errors, and rethrows unknown errors. Raw error text is sent to terminal formatting, while telemetry is a separate side effect.
+
+The Rust core closes routing to four enum variants, bounds each to one invocation, preserves exact error defaults and string truthiness, and returns typed partial progress instead of logging or exiting. Production closure requires exact async forwarding, exactly-once telemetry, terminal-control-safe display, cleanup and flush before exit code 1, strict runtime metadata typing, unknown-error propagation, supported-platform differentials, and TypeScript removal proof.
+
+Regression evidence is in `packages/create-turbo/rust/tests/transform_pipeline_parity.rs` and `transform_pipeline_security.rs`; exact differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
@@ -188,6 +198,7 @@ Before declaring repository-wide TypeScript deprecation complete:
 - resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
 - close the package-manager conversion transaction, rollback, and supported-platform contract;
 - close the official-starter bounded JSON, truthiness, no-follow identity, deterministic ordering, atomic publication, and supported-platform provider contract;
+- close the transform-pipeline async binding, telemetry, terminal-safe logging, cleanup-before-exit, runtime typing, and supported-platform differential contract;
 - run npm advisory and provenance checks for retained host adapters;
 - execute differential fixtures on Linux, macOS, and Windows;
 - prove that published artifacts do not load executable TypeScript at runtime;

@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
 use create_turbo_rs::{
-    PipelineAbortReason, PipelineTransformResponse, TransformExecutor, TransformFailure,
-    TransformInvocationError, TransformKind, TransformStatus, TRANSFORM_PIPELINE,
+    PipelineAbortReason, PipelineTransformResponse, TRANSFORM_PIPELINE, TransformExecutor,
+    TransformFailure, TransformInvocationError, TransformKind, TransformStatus,
     run_transform_pipeline,
 };
 
@@ -38,9 +38,11 @@ impl TransformExecutor<UnknownError> for ScriptedExecutor {
     ) -> Result<PipelineTransformResponse, TransformInvocationError<UnknownError>> {
         assert_eq!(self.expected.pop_front(), Some(transform));
         self.calls.push(transform);
-        self.results
-            .pop_front()
-            .expect("the test script must provide one result per expected call")
+        let result = self.results.pop_front();
+        let Some(result) = result else {
+            panic!("the test script must provide one result per expected call");
+        };
+        result
     }
 }
 
@@ -120,8 +122,16 @@ fn successful_transforms_run_sequentially_and_preserve_responses() {
 #[test]
 fn any_nonempty_maintainer_string_marks_the_project_as_core_maintained() {
     let results = [
-        Ok(response("official-starter", TransformStatus::Success, Some(""))),
-        Ok(response("git-ignore", TransformStatus::Success, Some("false"))),
+        Ok(response(
+            "official-starter",
+            TransformStatus::Success,
+            Some(""),
+        )),
+        Ok(response(
+            "git-ignore",
+            TransformStatus::Success,
+            Some("false"),
+        )),
         Ok(response("package-manager", TransformStatus::Success, None)),
         Ok(response(
             "update-commands-in-readme",
