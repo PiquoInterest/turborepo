@@ -43,8 +43,8 @@ impl Drop for TestDirectory {
 }
 
 #[test]
-fn replaces_compound_run_commands_for_every_supported_manager(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn replaces_compound_run_commands_for_every_supported_manager()
+-> Result<(), Box<dyn std::error::Error>> {
     for source in ["pnpm", "npm", "yarn", "bun"] {
         let input = format!("Use `{source} run test` to run tests.");
         assert_eq!(
@@ -115,8 +115,7 @@ fn handles_fenced_blocks_and_language_identifiers() -> Result<(), Box<dyn std::e
 
 #[test]
 fn handles_multiple_inline_and_fenced_regions() -> Result<(), Box<dyn std::error::Error>> {
-    let input =
-        "Run `pnpm install` then:\n\n```sh\npnpm run build\n```\n\nOr use `yarn dev`.";
+    let input = "Run `pnpm install` then:\n\n```sh\npnpm run build\n```\n\nOr use `yarn dev`.";
     assert_eq!(
         replace_package_manager_references(PackageManager::Bun, input)?,
         "Run `bun install` then:\n\n```sh\nbun run build\n```\n\nOr use `bun dev`."
@@ -160,8 +159,7 @@ fn leaves_npx_untouched_in_realistic_readme_content() -> Result<(), Box<dyn std:
 }
 
 #[test]
-fn transform_is_not_applicable_without_package_manager(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn transform_is_not_applicable_without_package_manager() -> Result<(), Box<dyn std::error::Error>> {
     let directory = TestDirectory::new("no-manager")?;
     fs::write(directory.path().join("README.md"), "Run `pnpm build`.")?;
 

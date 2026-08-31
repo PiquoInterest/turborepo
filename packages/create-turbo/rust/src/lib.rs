@@ -184,9 +184,7 @@ fn next_code_region(text: &str, mut index: usize) -> Option<(usize, usize)> {
         let content_start = index + 1;
         if content_start < bytes.len()
             && bytes[content_start] != b'`'
-            && let Some(relative_end) = bytes[content_start..]
-                .iter()
-                .position(|byte| *byte == b'`')
+            && let Some(relative_end) = bytes[content_start..].iter().position(|byte| *byte == b'`')
         {
             return Some((index, content_start + relative_end + 1));
         }
