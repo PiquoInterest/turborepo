@@ -1,0 +1,78 @@
+name: Apply create-command error-policy migration documentation
+
+on:
+  push:
+    branches:
+      - rust/create-turbo-error-policy
+    paths:
+      - .github/workflows/apply-create-error-policy-docs.yml
+      - tools/migration/apply_create_error_policy_docs.py
+
+concurrency:
+  group: create-error-policy-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-document:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the focused branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/create-turbo-error-policy
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Validate the Rust error-policy tranche
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 22
+
+      - name: Validate the legacy expected-failure security evidence
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/workspaces exec tsdown
+          pnpm --filter create-turbo exec jest --runInBand __tests__/create-error-security.test.ts
+
+      - name: Record parity, security, and divergence evidence
+        run: python tools/migration/apply_create_error_policy_docs.py
+
+      - name: Commit the reviewed documentation
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A \
+            .github/workflows/apply-create-error-policy-docs.yml \
+            .github/workflows/validate-create-turbo-error-policy.yml \
+            tools/migration/apply_create_error_policy_docs.py \
+            packages/create-turbo/rust/CREATE_ERROR_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/README.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs: Record create error-policy security divergences"
+          git push origin HEAD:rust/create-turbo-error-policy
