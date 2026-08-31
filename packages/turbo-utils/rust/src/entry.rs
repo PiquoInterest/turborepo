@@ -29,8 +29,8 @@ pub use managers::{
     get_package_managers_bin_paths, get_package_managers_bin_paths_with,
 };
 pub use network::{
-    GITHUB_TOKEN_MAX_CHARS, NetworkEnvironment, NetworkPolicyError, PROXY_URL_MAX_CHARS,
-    github_authorization_header, proxy_for_url,
+    GITHUB_TOKEN_MAX_CHARS, NO_PROXY_MAX_CHARS, NO_PROXY_MAX_ENTRIES, NetworkEnvironment,
+    NetworkPolicyError, PROXY_URL_MAX_CHARS, github_authorization_header, proxy_for_url,
 };
 pub use notify::{
     ExitCode, NOTIFY_MAX_UNTRUSTED_CHARS, NotifyUpdateOutcome, PackageInfo,

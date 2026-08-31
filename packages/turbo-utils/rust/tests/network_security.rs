@@ -1,5 +1,6 @@
 use turbo_utils_rs::{
-    GITHUB_TOKEN_MAX_CHARS, NetworkEnvironment, github_authorization_header, proxy_for_url,
+    GITHUB_TOKEN_MAX_CHARS, NO_PROXY_MAX_CHARS, NO_PROXY_MAX_ENTRIES, NetworkEnvironment,
+    NetworkPolicyError, github_authorization_header, proxy_for_url,
 };
 
 #[test]
@@ -127,4 +128,120 @@ fn malformed_request_url_is_an_error_before_proxy_selection() {
         ..Default::default()
     };
     assert!(proxy_for_url("not a URL", &env).is_err());
+}
+
+#[test]
+fn no_proxy_domain_matching_uses_label_boundaries_not_substrings() {
+    let env = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some(".example.com".into()),
+        ..Default::default()
+    };
+
+    for url in [
+        "https://notexample.com/archive",
+        "https://example.com.attacker.invalid/archive",
+    ] {
+        assert_eq!(
+            proxy_for_url(url, &env),
+            Ok(Some("http://proxy.example:8080".into())),
+            "{url}"
+        );
+    }
+}
+
+#[test]
+fn invalid_winning_no_proxy_value_is_an_error_without_uppercase_fallback() {
+    let env = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some("https://example.com/path".into()),
+        no_proxy_upper: Some("*".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        proxy_for_url("https://example.com/archive", &env),
+        Err(NetworkPolicyError::InvalidNoProxy)
+    );
+}
+
+#[test]
+fn no_proxy_rejects_ambiguous_wildcards_unicode_and_cidr_rules() {
+    for rule in ["*.example.com", "exаmple.com", "10.0.0.0/8"] {
+        let env = NetworkEnvironment {
+            https_proxy: Some("http://proxy.example:8080".into()),
+            no_proxy: Some(rule.into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            proxy_for_url("https://example.com/archive", &env),
+            Err(NetworkPolicyError::InvalidNoProxy),
+            "{rule:?}"
+        );
+    }
+}
+
+#[test]
+fn no_proxy_values_are_bounded_by_length_and_entry_count() {
+    let oversized = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some("a".repeat(NO_PROXY_MAX_CHARS + 1)),
+        ..Default::default()
+    };
+    assert_eq!(
+        proxy_for_url("https://example.com/archive", &oversized),
+        Err(NetworkPolicyError::InvalidNoProxy)
+    );
+
+    let too_many_entries = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some(
+            (0..=NO_PROXY_MAX_ENTRIES)
+                .map(|index| format!("host{index}.example"))
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        ..Default::default()
+    };
+    assert_eq!(
+        proxy_for_url("https://example.com/archive", &too_many_entries),
+        Err(NetworkPolicyError::InvalidNoProxy)
+    );
+}
+
+#[test]
+fn no_proxy_supports_exact_ipv4_and_bracketed_ipv6_without_cross_matching() {
+    let mut env = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some("127.0.0.1,[::1]".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(proxy_for_url("http://127.0.0.1/status", &env), Ok(None));
+    assert_eq!(proxy_for_url("http://[::1]/status", &env), Ok(None));
+    assert_eq!(
+        proxy_for_url("http://127.0.0.2/status", &env),
+        Ok(Some("http://proxy.example:8080".into()))
+    );
+
+    env.no_proxy = Some("[::1]:8080".into());
+    assert_eq!(proxy_for_url("http://[::1]:8080/status", &env), Ok(None));
+    assert_eq!(
+        proxy_for_url("http://[::1]:8081/status", &env),
+        Ok(Some("http://proxy.example:8080".into()))
+    );
+}
+
+#[test]
+fn no_proxy_rejects_request_authority_ambiguity_before_bypass() {
+    let env = NetworkEnvironment {
+        https_proxy: Some("http://proxy.example:8080".into()),
+        no_proxy: Some("api.github.com".into()),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        proxy_for_url("https://user@api.github.com/repos/user/repo", &env),
+        Err(NetworkPolicyError::InvalidRequestUrl)
+    );
 }

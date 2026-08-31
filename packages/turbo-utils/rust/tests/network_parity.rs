@@ -106,3 +106,56 @@ fn non_https_urls_use_only_http_proxy_precedence() {
         Ok(Some("http://upper-http.example:8080".into()))
     );
 }
+
+#[test]
+fn no_proxy_exact_suffix_and_star_rules_bypass_configured_proxy() {
+    let mut env = environment();
+    env.https_proxy = Some("http://proxy.example:8080".into());
+
+    env.no_proxy = Some("api.github.com".into());
+    assert_eq!(
+        proxy_for_url("https://api.github.com/repos/user/repo", &env),
+        Ok(None)
+    );
+
+    env.no_proxy = Some(".example.com".into());
+    assert_eq!(
+        proxy_for_url("https://downloads.example.com/archive", &env),
+        Ok(None)
+    );
+
+    env.no_proxy = Some("*".into());
+    assert_eq!(
+        proxy_for_url("https://unrelated.invalid/archive", &env),
+        Ok(None)
+    );
+}
+
+#[test]
+fn lowercase_no_proxy_takes_precedence_over_uppercase_no_proxy() {
+    let mut env = environment();
+    env.https_proxy = Some("http://proxy.example:8080".into());
+    env.no_proxy = Some("internal.example".into());
+    env.no_proxy_upper = Some("*".into());
+
+    assert_eq!(
+        proxy_for_url("https://api.github.com/repos/user/repo", &env),
+        Ok(Some("http://proxy.example:8080".into()))
+    );
+}
+
+#[test]
+fn no_proxy_port_rules_use_the_effective_request_port() {
+    let mut env = environment();
+    env.https_proxy = Some("http://proxy.example:8080".into());
+    env.no_proxy = Some("api.github.com:443".into());
+
+    assert_eq!(
+        proxy_for_url("https://api.github.com/repos/user/repo", &env),
+        Ok(None)
+    );
+    assert_eq!(
+        proxy_for_url("https://api.github.com:444/repos/user/repo", &env),
+        Ok(Some("http://proxy.example:8080".into()))
+    );
+}

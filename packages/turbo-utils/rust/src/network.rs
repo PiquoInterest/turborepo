@@ -6,6 +6,10 @@ use thiserror::Error;
 pub const GITHUB_TOKEN_MAX_CHARS: usize = 4_096;
 /// Maximum accepted proxy URL length.
 pub const PROXY_URL_MAX_CHARS: usize = 2_048;
+/// Maximum accepted `NO_PROXY`/`no_proxy` value length.
+pub const NO_PROXY_MAX_CHARS: usize = 4_096;
+/// Maximum number of comma-separated `NO_PROXY` rules.
+pub const NO_PROXY_MAX_ENTRIES: usize = 256;
 
 /// Snapshot of the environment values consumed by the TypeScript networking
 /// helpers. It intentionally has no `Debug` implementation so tokens are not
@@ -18,6 +22,8 @@ pub struct NetworkEnvironment {
     pub https_proxy_upper: Option<String>,
     pub http_proxy: Option<String>,
     pub http_proxy_upper: Option<String>,
+    pub no_proxy: Option<String>,
+    pub no_proxy_upper: Option<String>,
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -26,6 +32,8 @@ pub enum NetworkPolicyError {
     InvalidRequestUrl,
     #[error("selected proxy URL is invalid or unsupported")]
     InvalidProxyUrl,
+    #[error("selected NO_PROXY value is invalid or unsupported")]
+    InvalidNoProxy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
