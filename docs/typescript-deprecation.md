@@ -6,22 +6,22 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 
 ## Current progress
 
-The migration program currently contains these Rust migration cores on the single `rust/typescript-deprecation` integration branch:
+The migration program currently contains these Rust migration cores on the single `rust/typescript-deprecation` integration line:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 70 translated parity tests and 36 security regression tests.
-- `packages/create-turbo/rust`: 39 translated parity tests and 30 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, and package-manager transform orchestration.
+- `packages/create-turbo/rust`: 51 translated parity tests and 37 security regression tests across README rewriting, `.gitignore` creation, Git initialization orchestration, exact default-example routing, package-manager transform orchestration, and the official-starter planner.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **229 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The latest `create-turbo` tranches remain unvalidated until their merge-head workflow compiles, tests, formats, and lints them successfully.
+That is **248 authored Rust migration tests** after the official-starter branch is integrated. Test count is evidence coverage, not a completion percentage. The official-starter tranche remains pending until its exact-SHA workflow compiles, tests, formats, and lints the implementation and the required documentation is merged into pull request #1.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
-The mandatory workflow is in `AGENTS.md`. Every tranche must use RED-first translated tests, retain TypeScript as an oracle until cutover, perform current advisory review, and update `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, this ledger, and the repository security index in the same change.
+The mandatory workflow is in `AGENTS.md`. Every tranche must use RED-first translated tests, retain TypeScript as an oracle until cutover, perform current advisory review, and update `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, this ledger, and the repository security index in the same change. Completed work is delivered through the single draft integration pull request; focused branches exist only long enough to preserve auditable TDD history.
 
 ## Weighted progress estimate
 
-The repository-wide rewrite is currently estimated at **about 8% complete**, with a conservative credible range of **8% to 10%**. The estimate is deliberately not based on line count or raw test count.
+The repository-wide rewrite remains estimated at **about 8% complete**, with a conservative credible range of **8% to 10%**. The official-starter planner advances one core/test slice but does not complete any production cutover stage, so it does not justify rounding the repository estimate upward.
 
 The denominator is 12 tracked migration surfaces multiplied by eight equally weighted production stages:
 
@@ -34,9 +34,9 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. Across only the first three stages of those four active surfaces, the evidence-weighted estimate is about **70%**. Across the complete repository production program it remains about **8%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+Across the first three stages of the four active surfaces, the evidence-weighted estimate is now **about 72%**. Across the complete repository production program it remains about 8%, because stages 4 through 8 are almost entirely open. Production cutover is **0% complete** and executable-TypeScript removal is **0% complete**: no package yet meets every deletion gate.
 
-This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
+This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be derived from line count, commit count, or raw test count, and must never be rounded upward to imply production readiness.
 
 ## Completion rules
 
@@ -60,7 +60,7 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
 | `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
-| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, default-example routing, and package-manager decision/request cores are ported. CLI, prompts, discovery/acquisition, production VCS and converter providers, remaining transforms, telemetry binding, packaging, callers, and removal proof remain. |
+| `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README, `.gitignore`, Git orchestration, default-example routing, package-manager decision/request, and official-starter planner cores are ported. CLI, prompts, discovery/acquisition, production VCS/converter/filesystem providers, telemetry binding, packaging, callers, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
 | `packages/turbo-workspaces` | Rust CLI/library | Queued and partially exposed through provider boundary | Package-manager adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, and packaging. |
@@ -136,6 +136,19 @@ The Rust core preserves the source no-op and conversion-request behavior behind 
 
 The production converter remains blocked. The TypeScript `@turbo/workspaces.convert` path performs manager-specific cleanup, creation, package metadata, lockfile, and configuration mutation across multiple steps without a proven shared atomic transaction. Rust cutover requires a complete six-manager source/target matrix, failure injection, atomic promotion or rollback, no-follow filesystem handling, bounded process behavior, exact errors, and Linux/macOS/Windows differential tests.
 
+### Official-starter planner
+
+The Rust planner preserves the pure safe-input contract of `official-starter`:
+
+- exact official classification for absent repository metadata and `vercel/turbo` or `vercel/turborepo`;
+- exact default-example package renaming;
+- requested Turbo dependency version or invocation-version fallback;
+- JavaScript-falsy package no-write behavior;
+- two-space JSON formatting, final newline, escaped untrusted strings, and recursive JavaScript property ordering;
+- cloned inputs and explicit metadata-removal intent.
+
+The planner intentionally rejects truthy non-object package roots. It also does not copy the TypeScript partial-success bug in which `meta.json` can be read, fail deletion, and still be returned with a success result. A production adapter must bound JSON bytes and nesting, reject links, compare path identity, stage and synchronize the package write, remove metadata transactionally, map exact errors, and pass supported-platform failure injection before binding.
+
 TDD history:
 
 - README RED: `a0930bc5bd0eee5bc7c6edf09daf8caf38875781`.
@@ -149,6 +162,8 @@ TDD history:
 - default-example implementation: `57f19c56209312fb2d04423fdd86ad239150a753`.
 - package-manager transform RED: `9f9b33f889d92e5b61a484ac445b4e297110f6f0`.
 - package-manager transform implementation: `c7a1776c5f6fa53db4e30d418a9897b56c6263cd`.
+- official-starter RED: `7f6cd240172e4fda87825445865f15800e950456`.
+- official-starter implementation: `eb04368368a6bd7fdf49fdd9dc18ea0c29a867fe`.
 
 ## Current `turbo-utils` tranche
 
@@ -188,8 +203,8 @@ TDD history:
 
 Each tranche maintains a colocated `SECURITY.md` with attacker inputs, trust boundaries, filesystem/process/network behavior, resource limits, logging/redaction, advisory lookup, findings, fixes, regression names, and residual risks. Memory safety alone is not completion.
 
-The repository security index records unresolved `webbrowser`, `h2`, and `quick-xml` advisories. No tranche may suppress those findings to claim green. Exact reverse dependencies and remediation blockers are recorded in `docs/rust-migration-security-findings.md`.
+The repository security index records unresolved `webbrowser`, `h2`, and `quick-xml` advisories, the official-starter partial-success and JSON filesystem boundaries, and all other cross-package blockers. No tranche may suppress those findings to claim green. Exact reverse dependencies and remediation blockers are recorded in `docs/rust-migration-security-findings.md`.
 
 ## Branch and pull-request policy
 
-The integration branch is `rust/typescript-deprecation`, represented by pull request #1. Focused PR histories #2 through #5 are merged into it. PR #6 is closed with its exact integration merge recorded because GitHub refused to retarget a head already fully contained by the integration branch. Shared history is never force-pushed. Repository-wide parity is declared only when this ledger contains no executable TypeScript runtime entries and production packaging points to Rust for every supported target.
+The integration branch is `rust/typescript-deprecation`, represented by draft pull request #1. Focused PR histories #2 through #5 are merged into it. PR #6 is closed with its exact integration merge recorded because GitHub refused to retarget a head already fully contained by the integration branch. The official-starter work uses a focused branch without opening another pull request so RED/GREEN history can be retained and then folded directly into #1 after its exact-SHA checks pass. Shared history is never force-pushed. Repository-wide parity is declared only when this ledger contains no executable TypeScript runtime entries and production packaging points to Rust for every supported target.
