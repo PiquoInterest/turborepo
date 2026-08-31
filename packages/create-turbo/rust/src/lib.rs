@@ -16,8 +16,9 @@ pub use create_error_policy::{
     DOWNLOAD_ERROR_HEADING, classify_create_command_error, sanitize_terminal_text,
 };
 pub use create_install_policy::{
-    CreateInstallInput, CreateInstallOutcome, CreateInstallRequest, CreateInstaller,
-    UnavailablePackageManagerWarning, apply_create_install_policy,
+    CREATE_INSTALL_WARNING_EXAMPLE_LIMIT, CREATE_INSTALL_WARNING_LINE_LIMIT, CreateInstallInput,
+    CreateInstallOutcome, CreateInstallRequest, CreateInstaller, UnavailablePackageManagerWarning,
+    apply_create_install_policy, render_unavailable_package_manager_warning,
 };
 pub use default_example::{DEFAULT_EXAMPLES, is_default_example};
 pub use git_ignore::{

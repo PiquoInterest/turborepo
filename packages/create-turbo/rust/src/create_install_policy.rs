@@ -1,4 +1,11 @@
-use crate::{PackageManagerAvailability, PackageManagerSelection, WorkspacePackageManager};
+use crate::{
+    CREATE_COMMAND_ERROR_MESSAGE_LIMIT, PackageManagerAvailability, PackageManagerSelection,
+    WorkspacePackageManager,
+};
+
+pub const CREATE_INSTALL_WARNING_EXAMPLE_LIMIT: usize =
+    CREATE_COMMAND_ERROR_MESSAGE_LIMIT / 2;
+pub const CREATE_INSTALL_WARNING_LINE_LIMIT: usize = CREATE_COMMAND_ERROR_MESSAGE_LIMIT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CreateInstallInput<'a> {
@@ -90,6 +97,23 @@ where
     installer.install(request)?;
 
     Ok(CreateInstallOutcome::Installed(request))
+}
+
+#[must_use]
+pub fn render_unavailable_package_manager_warning(
+    warning: UnavailablePackageManagerWarning<'_>,
+) -> [String; 2] {
+    let example_name = warning.example_name;
+    let package_manager = warning.package_manager.as_str();
+
+    [
+        format!(
+            "Unable to install dependencies - \"{example_name}\" uses \"{package_manager}\" which could not be found."
+        ),
+        format!(
+            "Try running without \"--skip-transforms\" to convert \"{example_name}\" to a package manager that is available on your system."
+        ),
+    ]
 }
 
 fn available_version<A>(
