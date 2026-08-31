@@ -240,6 +240,26 @@ The Rust validator stops before building an unbounded conflict collection and co
 
 Rust rejects input over 4096 UTF-8 bytes and rejects C0/C1, line separators, bidi controls, zero-width and related format controls before terminal or filesystem providers. The production prompt must enforce the limit while reading and preserve cancellation, EOF, signals, and non-TTY behavior.
 
+### RF-025: Missing or permissive `NO_PROXY` handling can route sensitive destinations incorrectly
+
+**Status:** Fixed in the Rust network-policy core; TypeScript production request execution remains and the Rust provider is still blocked.
+
+The existing TypeScript helper selects HTTP/HTTPS proxy variables but does not model `NO_PROXY` or `no_proxy`. That can send loopback, internal, or explicitly exempt destinations through a proxy. A permissive port could also bypass a proxy too broadly through substring, partial-wildcard, Unicode/confusable, CIDR, or ambiguous authority matching.
+
+The Rust core now evaluates a bounded lowercase-first bypass policy before returning a selected proxy:
+
+- 4,096-byte and 256-entry limits;
+- global `*`;
+- exact domains and explicit leading-dot suffixes with DNS-label boundaries;
+- exact IPv4 and bracketed IPv6;
+- optional ports matched against explicit or HTTP/HTTPS default ports;
+- fail-closed rejection of partial wildcards, CIDR, Unicode, controls, invalid ports, unbracketed IPv6, userinfo-bearing authorities, empty-only lists, and excessive input;
+- no fallback from an invalid lowercase value to uppercase policy and no silent direct/proxied transport decision.
+
+This tranche adds no dependency, network call, credential access, parser crate, subprocess, or unsafe code. TDD evidence is RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094be133fcbba7fd5ffda12a288deee19`, formatting `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`, and corrected protocol fixture `94c14b4b530db457923ede6dfee906ef45cb07d9`.
+
+Required production closure is a request executor that consumes the decision exactly once across redirects, applies an explicit DNS/rebinding and TLS policy, bounds time and response size, redacts proxy credentials, passes Linux/macOS/Windows differentials, and removes the TypeScript request path only after binding and packaging proof.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:

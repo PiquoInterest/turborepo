@@ -49,8 +49,11 @@
 | HTTPS proxy precedence | Parity | lowercase `https_proxy`, uppercase `HTTPS_PROXY`, lowercase `http_proxy`, uppercase `HTTP_PROXY`. |
 | Non-HTTPS proxy precedence | Parity | lowercase then uppercase HTTP proxy only. |
 | Invalid selected proxy | Security-preserving behavior | Rust returns an error rather than bypassing the configured proxy with a direct connection. |
-| Proxy URL policy | Intentional deviation | Rust accepts only bounded absolute HTTP(S) proxy URLs. Production `NO_PROXY` semantics remain open. |
-| Network/archive acquisition and writes | Blocked | Request execution, redirect/TLS/proxy agents, GitHub lookup, Git fallback, tar streaming/writes, cleanup, and atomic promotion remain to be ported. |
+| Proxy URL policy | Intentional deviation | Rust accepts only bounded absolute HTTP(S) proxy URLs. |
+| `no_proxy` / `NO_PROXY` precedence | Intentional hardening | A non-empty lowercase value wins over uppercase. An invalid winning value is an error and cannot silently fall back. |
+| `NO_PROXY` rule language | Intentional hardening | Bounded comma-separated `*`, exact domains, explicit leading-dot suffixes, exact IPv4, bracketed IPv6, and optional effective-port rules are supported. |
+| `NO_PROXY` matching and malformed input | Intentional hardening | Domain matches require label boundaries; IP family and ports match exactly. Partial wildcards, CIDR, Unicode/confusables, controls, userinfo ambiguity, oversized values, and more than 256 rules are rejected. |
+| Network/archive acquisition and writes | Blocked | A production executor must apply the reviewed proxy/`NO_PROXY` decision exactly once and close redirect, DNS, TLS, proxy-credential redaction, timeout, response-size, GitHub lookup, Git fallback, tar streaming/writes, cleanup, and atomic-promotion behavior. |
 | `createNotifyUpdate` eager check | Parity core | Preparation invokes the checker exactly once and stores the result. |
 | No update or failed check | Parity | Produces no output and preserves exit code. Checker errors are swallowed. |
 | Available update announcement | Safe-input parity | Preserves unstyled message ordering and optional command. |

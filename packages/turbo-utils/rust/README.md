@@ -18,7 +18,7 @@ This crate belongs to the repository-wide TypeScript deprecation program tracked
 - Four-attempt retry behavior and post-download `package.json` script discovery.
 - Update-notification decisions/rendering, including static/dynamic commands and exit-code preservation.
 - Archive entry path validation and symbolic/hard-link classification.
-- GitHub token allow-listing and HTTP/HTTPS proxy precedence policy.
+- GitHub token allow-listing, HTTP/HTTPS proxy precedence, and bounded `NO_PROXY`/`no_proxy` bypass policy.
 
 The Rust core preserves existing safe-input results while hardening executable lookup, metadata reads, subprocess deadlines, output limits, process cleanup, URL classification, credentials, proxy failure behavior, repository subpaths, target symlinks, process-wide current-directory state, terminal rendering, archive paths, and project-directory inspection. See [`PARITY_MATRIX.md`](./PARITY_MATRIX.md) and [`SECURITY.md`](./SECURITY.md).
 
@@ -36,7 +36,7 @@ The directory-validation core resolves the requested root lexically, validates t
 
 `src/archive.rs` contains pure archive-entry policy. It normalizes mixed separators, resolves lexical parent components, rejects cross-platform absolute/prefix/alternate-stream forms, bounds path size/depth, and classifies tar symbolic/hard links. It deliberately performs no writes.
 
-`src/network.rs` snapshots GitHub token and proxy environment policy without performing network I/O. It preserves TypeScript precedence while ensuring credentials can be attached only to exact credential-free HTTPS GitHub API/codeload authorities. Invalid selected proxies are errors rather than silent direct-connection fallbacks.
+`src/network.rs` snapshots GitHub token, proxy, and `NO_PROXY`/`no_proxy` environment policy without performing network I/O. It preserves the established lower/uppercase proxy precedence while ensuring credentials can be attached only to exact credential-free HTTPS GitHub API/codeload authorities. Invalid selected proxies and invalid winning bypass values are typed errors rather than silent direct-connection fallbacks or overbroad bypasses.
 
 ## Security properties
 
@@ -58,7 +58,21 @@ The network policy:
 - rejects look-alike hosts and malformed URLs;
 - preserves lower/uppercase HTTPS/HTTP proxy precedence;
 - accepts only bounded HTTP(S) proxy URLs;
-- returns an error for an invalid winning proxy value instead of connecting directly.
+- returns an error for an invalid winning proxy value instead of connecting directly;
+- preserves lowercase `no_proxy` precedence over uppercase `NO_PROXY`;
+- accepts a deliberately narrow, bounded rule language: `*`, exact domains, explicit leading-dot domain suffixes, exact IPv4, bracketed IPv6, and optional ports matched against the effective request port;
+- requires DNS-label boundaries and exact address-family/port matches, so suffix text cannot match `notexample.com` or a neighboring IP;
+- rejects partial wildcards, CIDR notation, Unicode/confusable host rules, userinfo ambiguity, controls, oversized values, and more than 256 non-empty entries;
+- treats an invalid winning bypass value as a typed error rather than falling back to uppercase policy or silently choosing direct/proxied transport.
+
+## NO_PROXY policy TDD record
+
+- Behaviorally failing contract: `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`.
+- GREEN bounded policy implementation: `e8bdab4094be133fcbba7fd5ffda12a288deee19`.
+- Committed formatting proof: `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`.
+- Protocol-specific oracle fixture correction: `94c14b4b530db457923ede6dfee906ef45cb07d9`.
+
+The final fixture correction did not weaken any bypass assertion. The HTTP address tests now configure `http_proxy` as well as `https_proxy`, matching the pre-existing TypeScript rule that HTTP requests do not consume HTTPS-only proxy configuration. The integration workflow is authoritative for formatting, compilation, parity/security tests, Clippy, and the unchanged lockfile-wide advisory gate.
 
 ## Directory-provider TDD record
 
@@ -80,8 +94,8 @@ cargo clippy --locked -p turbo-utils-rs --all-targets -- -D warnings
 pnpm --filter @turbo/utils test
 ```
 
-This Rust migration core now has 70 parity tests and 41 security regression tests. The directory-provider tranche contributes five new security tests. The network-policy tranche contributes 7 parity and 7 security tests. TypeScript tests remain required until differential host bindings exercise both implementations through the same API.
+This Rust migration core now has 73 parity tests and 47 security regression tests. The directory-provider tranche contributes five new security tests. The network-policy surface now contributes 10 parity and 13 security tests, including the bounded `NO_PROXY` tranche. TypeScript tests remain required until differential host bindings exercise both implementations through the same API.
 
 ## Production cutover status
 
-Blocked. Remaining work includes stable handle-relative directory validation and mutation, request execution and response bounds, GitHub repository/default-branch resolution, the production archive provider and safe writes behind `ProjectSource`, a bounded registry update checker behind `UpdateChecker`, explicit `NO_PROXY` semantics, Windows-native process-tree/ACL/reparse-point parity, native/WASM or JavaScript bindings, npm packaging, downstream migration, supported-platform differential tests, and proof that executable TypeScript is no longer loaded or shipped.
+Blocked. Remaining work includes stable handle-relative directory validation and mutation, a production request executor that applies the reviewed proxy/`NO_PROXY` decision exactly once, redirect/DNS/TLS/proxy-auth redaction and response bounds, GitHub repository/default-branch resolution, the production archive provider and safe writes behind `ProjectSource`, a bounded registry update checker behind `UpdateChecker`, Windows-native process-tree/ACL/reparse-point parity, native/WASM or JavaScript bindings, npm packaging, downstream migration, supported-platform differential tests, and proof that executable TypeScript is no longer loaded or shipped.

@@ -9,11 +9,11 @@ Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e
 The migration program currently contains these Rust migration cores on the single `rust/typescript-deprecation` integration branch:
 
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
-- `packages/turbo-utils/rust`: 70 translated parity tests and 41 security regression tests.
+- `packages/turbo-utils/rust`: 73 translated parity tests and 47 security regression tests.
 - `packages/create-turbo/rust`: 116 translated parity tests and 92 security regression tests across README/`.gitignore`, Git, default/official routing, transform and prompt policy, error/install/output policy, installation profiles, and project-directory selection.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **373 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The consolidated directory and provider-hardening tranches are not treated as reviewable until their merge-head workflow formats, compiles, tests, lints, and audits them successfully.
+That is **382 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The consolidated directory and provider-hardening tranches are not treated as reviewable until their merge-head workflow formats, compiles, tests, lints, and audits them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -34,7 +34,7 @@ The denominator is 12 tracked migration surfaces multiplied by eight equally wei
 7. downstream caller cutover;
 8. artifact/removal proof and executable TypeScript deletion.
 
-The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The official-starter tranche advances create-turbo core and test evidence without completing a new production stage, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the recalculated evidence-weighted estimate is about **78%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
+The four active surfaces have strong inventory plus partial core/test credit, but stages 4 through 8 are almost entirely open. The bounded `NO_PROXY` tranche advances turbo-utils network-policy core and test evidence without completing the production request-execution, binding, packaging, caller, platform, or removal stages, so the recalculated rounded repository score remains about **8%**. Across only the first three stages of the four active surfaces, the recalculated evidence-weighted estimate is about **78%**. Final package cutover and executable-TypeScript removal remain **0%**, because no package yet meets every deletion gate.
 
 This estimate must be revised from the inventory as surfaces are split, added, or proven complete. It must never be rounded upward to imply production readiness.
 
@@ -59,7 +59,7 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | --- | --- | --- | --- |
 | Core `turbo` engine and CLI | existing Rust crates | Existing | Continue removing legacy wrappers and retain compatibility tests. |
 | `packages/turbo-ignore` | `packages/turbo-ignore/rust` | In progress | Differential CLI tests, Windows process-tree handling, telemetry integration, native npm packaging, caller cutover, removal proof. |
-| `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Stable handle-relative directory validation/mutation, production network/archive and registry providers, remaining utilities, Windows ACL/process/shim closure, bindings, callers, removal proof. |
+| `packages/turbo-utils` | `packages/turbo-utils/rust` plus bindings | In progress | Stable handle-relative directory validation/mutation; production network execution that applies the reviewed proxy/`NO_PROXY` decision exactly once and closes redirects, DNS, TLS, credentials, timeouts, and bounds; archive/registry providers; remaining utilities; Windows ACL/process/shim closure; bindings, callers, and removal proof. |
 | `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README/`.gitignore`, Git, default/official routing, transform/prompt, error/install/output, installation-profile, and directory-selection cores are ported. Production prompt/filesystem/VCS/converter/JSON/process providers, bindings, telemetry, packaging, callers, platform differentials, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
@@ -72,6 +72,29 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | npm/native wrappers | generated loaders and signed Rust binaries | Queued | Preserve package names, platform selection, provenance, install behavior, and rollback. |
 
 The weighted denominator groups test-only fixtures and npm/native wrappers as program stages rather than double-counting them as independent production applications; the ledger retains them as explicit work rows because they have distinct owners and removal gates.
+
+## Current `turbo-utils` network-policy tranche
+
+The Rust network decision core now covers both proxy selection and a deliberately bounded `NO_PROXY`/`no_proxy` bypass contract without opening sockets or adding dependency authority.
+
+Preserved behavior:
+
+- lowercase/uppercase HTTP and HTTPS proxy precedence remains unchanged;
+- HTTP requests still consult only HTTP proxy variables;
+- invalid winning proxy values remain typed errors rather than direct-connection fallback.
+
+Security closure added in this tranche:
+
+- lowercase `no_proxy` wins over uppercase `NO_PROXY`;
+- `*`, exact domains, explicit leading-dot suffixes, exact IPv4, bracketed IPv6, and optional effective ports are the only accepted rules;
+- domain matching requires label boundaries and IP/port matching is exact;
+- rule text is ASCII-only and bounded to 4,096 bytes and 256 non-empty entries;
+- partial wildcards, CIDR, Unicode/confusables, malformed ports, unbracketed IPv6, controls, userinfo-bearing request authorities, and empty-only lists fail closed;
+- an invalid winning bypass value cannot fall back to uppercase policy or silently choose direct/proxied transport.
+
+TDD history: RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094be133fcbba7fd5ffda12a288deee19`, formatting `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`, and the protocol-specific test-fixture correction `94c14b4b530db457923ede6dfee906ef45cb07d9`. The correction added the HTTP proxy expected by existing protocol precedence; it did not weaken bypass assertions.
+
+Production closure remains open. A request executor must apply this pure decision exactly once across redirects and define DNS/rebinding, TLS, proxy credentials and redaction, cancellation, timeout, response bounds, platform behavior, binding, packaging, callers, and TypeScript removal.
 
 ## Current `create-turbo` tranches
 

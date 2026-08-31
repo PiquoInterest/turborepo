@@ -146,11 +146,11 @@ Rust processes components instead. It permits `..` only while lexical depth rema
 
 **TypeScript behavior:** proxy precedence is defined, but validation is deferred to `ProxyAgent` construction. A future caller that catches that error and retries without the dispatcher could silently bypass an administrator-selected proxy. The helper also has no explicit URL-length or allowed-scheme policy and does not model `NO_PROXY`.
 
-**Rust fix:** preserve the existing lower/uppercase precedence, but return a typed error when the winning non-empty value is malformed or is not a bounded absolute HTTP(S) URL. Lower-precedence proxies are not consulted after a value wins, and direct connection is not treated as a fallback.
+**Rust fix:** preserve the existing lower/uppercase proxy precedence, but return a typed error when the winning non-empty value is malformed or is not a bounded absolute HTTP(S) URL. Lower-precedence proxies are not consulted after a value wins, and direct connection is not treated as a fallback. The Rust core also snapshots `no_proxy` before `NO_PROXY` and evaluates a bounded, explicit bypass rule set before returning the selected proxy.
 
-**Residual:** production request execution must define and test `NO_PROXY`/`no_proxy`, proxy authentication redaction, DNS behavior, certificate trust, redirects, and whether all GitHub endpoints are required to use the selected proxy.
+**Residual:** production request execution must consume this decision exactly once and define proxy authentication redaction, DNS/IP pinning or rebinding behavior, certificate trust, redirects, timeouts, response bounds, and whether every GitHub endpoint is required to use the selected proxy.
 
-**Regressions:** `https_proxy_precedence_matches_the_typescript_helper`, `invalid_selected_proxy_is_an_error_instead_of_direct_connection_fallback`, `proxy_urls_are_bounded_and_restricted_to_http_or_https`, and `malformed_request_url_is_an_error_before_proxy_selection`.
+**Regressions:** `https_proxy_precedence_matches_the_typescript_helper`, `invalid_selected_proxy_is_an_error_instead_of_direct_connection_fallback`, `proxy_urls_are_bounded_and_restricted_to_http_or_https`, `malformed_request_url_is_an_error_before_proxy_selection`, and the `NO_PROXY` parity/security suites.
 
 ## TU-025: Option-like project names bypass the TypeScript check
 
@@ -220,6 +220,22 @@ A Rust port that calls `to_string_lossy()` before applying the allow-list can re
 
 **Regression:** `folder_scan_is_bounded_before_collecting_untrusted_entries`.
 
+## TU-030: Missing or permissive `NO_PROXY` policy can misroute sensitive traffic
+
+**Severity:** High at the production request boundary
+
+**TypeScript behavior:** the current helper selects `HTTP_PROXY`/`HTTPS_PROXY` values but does not model `NO_PROXY` or `no_proxy`. Internal, loopback, or explicitly exempt destinations can therefore be sent through a configured proxy. A loose port could create the opposite problem by using substring, Unicode, partial-wildcard, or CIDR matching to bypass a proxy more broadly than intended.
+
+**Rust fix:** lowercase `no_proxy` wins over uppercase `NO_PROXY`, matching the established lowercase-first environment convention. Values are limited to 4,096 ASCII bytes and 256 non-empty comma-separated rules. The accepted language is deliberately narrow: global `*`, exact domains, explicit leading-dot domain suffixes, exact IPv4 addresses, bracketed IPv6 addresses, and optional ports compared with the explicit or scheme-default request port. Domain suffixes require a dot-label boundary. Invalid winning values fail closed with `InvalidNoProxy`; they do not fall back to uppercase policy or silently select direct/proxied transport.
+
+**Intentional incompatibility:** partial wildcards such as `*.example.com`, CIDR blocks, Unicode/confusable names, unbracketed IPv6, controls, empty-only lists, invalid ports, userinfo-bearing request authorities, oversized values, and excessive rule counts are rejected instead of being interpreted permissively.
+
+**Residual:** this is a pure decision core. The production HTTP provider must prove that redirects cannot bypass the decision, hostnames and resolved addresses follow an explicit DNS/rebinding policy, proxy credentials never enter diagnostics, and the selected transport is applied once with bounded time and response size.
+
+**Regressions:** `no_proxy_exact_suffix_and_star_rules_bypass_configured_proxy`, `lowercase_no_proxy_takes_precedence_over_uppercase_no_proxy`, `no_proxy_port_rules_use_the_effective_request_port`, `no_proxy_domain_matching_uses_label_boundaries_not_substrings`, `invalid_winning_no_proxy_value_is_an_error_without_uppercase_fallback`, `no_proxy_rejects_ambiguous_wildcards_unicode_and_cidr_rules`, `no_proxy_values_are_bounded_by_length_and_entry_count`, `no_proxy_supports_exact_ipv4_and_bracketed_ipv6_without_cross_matching`, and `no_proxy_rejects_request_authority_ambiguity_before_bypass`.
+
+TDD evidence: RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094be133fcbba7fd5ffda12a288deee19`, formatting `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`, and corrected protocol fixture `94c14b4b530db457923ede6dfee906ef45cb07d9`.
+
 ## Directory-provider TDD and validation record
 
 - Test-first contract: `53a55eefd92b919824374eb27159ff876e008147`.
@@ -241,7 +257,7 @@ Sources checked:
 
 The directory-provider tranche adds no dependency, network destination, subprocess, parser, credential, or unsafe block. Its advisory disposition is therefore unchanged from the resolved workspace graph.
 
-The project, notification, archive-policy, and network-policy tranches add no new Rust dependency. They use the standard library plus existing workspace-managed dependencies.
+The project, notification, archive-policy, network-policy, and bounded `NO_PROXY` tranches add no new Rust dependency. The bypass parser uses only the standard library's IP address types plus existing workspace-managed dependencies.
 
 The resolved `unsafe-libyaml` version is `0.2.11`, above the `0.2.10` patched floor for `RUSTSEC-2023-0075`. Long-term YAML maintenance/replacement policy remains open and is distinct from a vulnerability in this resolved version.
 
