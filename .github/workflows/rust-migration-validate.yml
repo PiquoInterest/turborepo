@@ -1,0 +1,67 @@
+name: Rust migration validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/rust-migration-validate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-migration-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Rust migration crates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact migration commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache-key: rust-typescript-deprecation
+
+      - name: Resolve workspace lock entries and compile tests
+        run: cargo check -p turbo-ignore -p turbo-utils-rs --all-targets
+
+      - name: Format Rust workspace
+        run: cargo fmt --all
+
+      - name: Verify formatting is stable
+        run: cargo fmt --all --check
+
+      - name: Run migration parity and security tests
+        run: cargo test --locked -p turbo-ignore -p turbo-utils-rs --all-targets
+
+      - name: Run migration Clippy gate
+        run: cargo clippy --locked -p turbo-ignore -p turbo-utils-rs --all-targets -- -D warnings
+
+      - name: Record generated-tree status
+        if: always()
+        run: |
+          git status --short
+          git diff --check
+
+      - name: Upload generated lockfile and formatted migration tree
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-migration-generated-tree
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            Cargo.lock
+            packages/turbo-ignore/rust
+            packages/turbo-utils/rust
