@@ -1,6 +1,6 @@
 use crate::{
     CREATE_COMMAND_ERROR_MESSAGE_LIMIT, PackageManagerAvailability, PackageManagerSelection,
-    WorkspacePackageManager,
+    WorkspacePackageManager, sanitize_terminal_text,
 };
 
 pub const CREATE_INSTALL_WARNING_EXAMPLE_LIMIT: usize =
@@ -103,7 +103,10 @@ where
 pub fn render_unavailable_package_manager_warning(
     warning: UnavailablePackageManagerWarning<'_>,
 ) -> [String; 2] {
-    let example_name = warning.example_name;
+    let example_name = sanitize_terminal_text(
+        warning.example_name,
+        CREATE_INSTALL_WARNING_EXAMPLE_LIMIT,
+    );
     let package_manager = warning.package_manager.as_str();
 
     [
@@ -114,6 +117,7 @@ pub fn render_unavailable_package_manager_warning(
             "Try running without \"--skip-transforms\" to convert \"{example_name}\" to a package manager that is available on your system."
         ),
     ]
+    .map(|line| sanitize_terminal_text(&line, CREATE_INSTALL_WARNING_LINE_LIMIT))
 }
 
 fn available_version<A>(
