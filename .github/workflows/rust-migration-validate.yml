@@ -7,6 +7,10 @@ on:
       - rust/typescript-deprecation
     paths:
       - .github/workflows/rust-migration-validate.yml
+      - Cargo.toml
+      - Cargo.lock
+      - packages/turbo-ignore/rust/**
+      - packages/turbo-utils/rust/**
 
 permissions:
   contents: read
