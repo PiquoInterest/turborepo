@@ -4,6 +4,15 @@ This document tracks the repository-wide migration of executable TypeScript logi
 
 Base revision for the first migration tranche: `813d54ae054923e85269979dfa98fe5e47331070`.
 
+## Current progress
+
+The integration branch currently contains two workspace-registered Rust migration cores:
+
+- `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
+- `packages/turbo-utils/rust`: 10 translated parity tests and 5 security regression tests for case conversion, upward search, folder-conflict detection, writability, and directory validation.
+
+That is 53 authored Rust tests. Neither TypeScript package is removed yet because compiled CI, differential execution, production bindings, packaging, and downstream cutover are still open.
+
 ## Completion rules
 
 A runtime component may leave TypeScript only when all of the following are true:
@@ -23,7 +32,7 @@ Tests, type declarations, build metadata, and host-specific adapters are tracked
 |---|---|---|---|---|
 | Core `turbo` engine and CLI | Predominantly Rust | Existing Rust crates | Existing | Continue removing legacy wrappers and keep compatibility tests. |
 | `packages/turbo-ignore` decision engine | TypeScript | `packages/turbo-ignore/rust` | In progress | Compile/lint, differential CLI tests, Windows process-tree handling, telemetry decision, native npm packaging, production cutover, then remove runtime TS. |
-| `packages/turbo-utils` | TypeScript utilities | New Rust utility crate plus JS/WASM bindings where needed | Queued | Inventory callers, port pure path/config logic first, preserve filesystem edge cases. |
+| `packages/turbo-utils` | TypeScript utilities | `packages/turbo-utils/rust` plus JS/WASM bindings where needed | In progress | Compile/lint the migrated pure core; port root/config, package-manager, network, template, update-notification, and project-creation behavior; add bindings and migrate callers. |
 | `packages/create-turbo` | TypeScript CLI | Rust CLI | Queued | Preserve templates, prompts, package-manager behavior, network and filesystem failure modes. |
 | `packages/turbo-gen` | TypeScript CLI | Rust CLI | Queued | Preserve generator discovery, prompts, template rendering, and workspace mutations. |
 | `packages/turbo-codemod` | TypeScript CLI | Rust CLI | Queued | Port transformations with golden fixtures and idempotence tests. |
