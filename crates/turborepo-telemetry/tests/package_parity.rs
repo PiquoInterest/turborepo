@@ -5,13 +5,10 @@ use std::{
 
 use tempfile::TempDir;
 use turbopath::AbsoluteSystemPathBuf;
-use turborepo_telemetry::{
-    config::TelemetryConfig,
-    package::{
-        CreateTurboTelemetry, PackageInfo, PackageKind, PackageRuntimeInfo, PackageSendFuture,
-        PackageTelemetryClient, PackageTelemetryOptions, PackageTelemetryRequest,
-        PackageTelemetryTransport, TurboIgnoreTelemetry,
-    },
+use turborepo_telemetry::events::package::{
+    CreateTurboTelemetry, PackageInfo, PackageKind, PackageRuntimeInfo, PackageSendFuture,
+    PackageTelemetryClient, PackageTelemetryConfig, PackageTelemetryOptions,
+    PackageTelemetryRequest, PackageTelemetryTransport, TurboIgnoreTelemetry,
 };
 
 #[derive(Clone, Default)]
@@ -32,7 +29,7 @@ impl PackageTelemetryTransport for RecordingTransport {
     }
 }
 
-fn config(enabled: bool, salt: &str) -> (TempDir, TelemetryConfig) {
+fn config(enabled: bool, salt: &str) -> (TempDir, PackageTelemetryConfig) {
     let temp = tempfile::tempdir().unwrap();
     let root = AbsoluteSystemPathBuf::try_from(temp.path()).unwrap();
     let path = root.join_component("telemetry.json");
@@ -47,7 +44,7 @@ fn config(enabled: bool, salt: &str) -> (TempDir, TelemetryConfig) {
         ),
     )
     .unwrap();
-    let config = TelemetryConfig::new(path).unwrap();
+    let config = PackageTelemetryConfig::new(path).unwrap();
     (temp, config)
 }
 
@@ -80,7 +77,8 @@ async fn batch_threshold_sends_exact_package_event_shape() {
 
     assert!(!client.has_pending_events());
     assert_eq!(transport.requests().len(), 1);
-    let request = &transport.requests()[0];
+    let requests = transport.requests();
+    let request = &requests[0];
     assert_eq!(request.endpoint.as_str(), "https://example.com/api/turborepo/v1/events");
     assert_eq!(request.telemetry_id, "telemetry-test-id");
     assert_eq!(request.user_agent, "create-turbo 1.0.0 v20.11.30 Linux x64");
