@@ -47,7 +47,8 @@ fn default_ignore_matches_the_typescript_constant() {
         DEFAULT_IGNORE,
         concat!(
             "\n",
-            "# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.\n",
+            "# See https://help.github.com/articles/ignoring-files/ for more about ignoring \
+             files.\n",
             "\n",
             "# dependencies\n",
             "node_modules\n",

@@ -99,13 +99,8 @@ fn no_mutating_provider_call_occurs_when_the_selection_is_absent_or_unchanged() 
     let root = Path::new("/tmp/project");
     let mut converter = FakeConverter::default();
 
-    let _ = transform_package_manager(
-        root,
-        WorkspacePackageManager::Npm,
-        None,
-        &mut converter,
-    )
-    .expect("the converter is infallible");
+    let _ = transform_package_manager(root, WorkspacePackageManager::Npm, None, &mut converter)
+        .expect("the converter is infallible");
     let _ = transform_package_manager(
         root,
         WorkspacePackageManager::Npm,

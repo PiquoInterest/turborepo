@@ -64,13 +64,9 @@ fn no_prompt_selection_is_not_applicable_without_conversion() {
     let root = Path::new("/tmp/project");
     let mut converter = FakeConverter::default();
 
-    let response = transform_package_manager(
-        root,
-        WorkspacePackageManager::Pnpm,
-        None,
-        &mut converter,
-    )
-    .expect("the fake converter cannot fail without a call");
+    let response =
+        transform_package_manager(root, WorkspacePackageManager::Pnpm, None, &mut converter)
+            .expect("the fake converter cannot fail without a call");
 
     assert_eq!(response.result, TransformStatus::NotApplicable);
     assert_eq!(response.name, PACKAGE_MANAGER_TRANSFORM_NAME);
@@ -131,13 +127,9 @@ fn every_typescript_package_manager_can_be_a_conversion_target() {
         let root = Path::new("/tmp/project");
         let mut converter = FakeConverter::default();
 
-        let response = transform_package_manager(
-            root,
-            current,
-            Some(selection(target, None)),
-            &mut converter,
-        )
-        .expect("successful fake conversion must produce a response");
+        let response =
+            transform_package_manager(root, current, Some(selection(target, None)), &mut converter)
+                .expect("successful fake conversion must produce a response");
 
         assert_eq!(response.result, TransformStatus::Success);
         assert_eq!(converter.calls.len(), 1);
