@@ -116,20 +116,32 @@ pub fn get_workspace_details<P>(
 where
     P: WorkspaceDetailsProvider,
 {
-    let directory = provider
+    let WorkspaceDirectoryInfo {
+        absolute: workspace_root,
+        exists,
+    } = provider
         .directory_info(root)
         .map_err(WorkspaceDetailsError::Provider)?;
 
-    if !directory.exists {
+    if !exists {
         return Err(WorkspaceDetailsError::Known(
             WorkspaceDetailsKnownError::InvalidDirectory {
-                absolute: directory.absolute,
+                absolute: workspace_root,
             },
         ));
     }
 
-    // Compiling behavioral RED: the final API and known directory error are
-    // present, but manager detection and reading are intentionally absent.
+    for manager in MANAGER_DETECTION_ORDER {
+        let detected = provider
+            .detect(manager, &workspace_root)
+            .map_err(WorkspaceDetailsError::Provider)?;
+        if detected {
+            return provider
+                .read(manager, &workspace_root)
+                .map_err(WorkspaceDetailsError::Provider);
+        }
+    }
+
     Err(WorkspaceDetailsError::Known(
         WorkspaceDetailsKnownError::UnableToDetect,
     ))
