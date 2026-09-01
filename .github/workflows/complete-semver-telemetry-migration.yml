@@ -92,7 +92,7 @@ jobs:
                   "EXPECTED_REMOVED",
                   "EXPECTED_ADDED",
                   "EXPECTED_SHARED_EDGE_DELTAS",
-                  "19 shared edge rewrites",
+                  "actual_shared_edge_deltas",
               },
           )
           extract_step(
