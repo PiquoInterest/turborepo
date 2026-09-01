@@ -79,6 +79,52 @@ jobs:
             exit 1
           fi
 
+      - name: Scope the duplicated repository inventory anchor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("tools/migration/document_bun_workspace_glob_tranche.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''def update_repository_test_inventory() -> None:
+              path = "docs/rust-migration-test-inventory.md"
+              replace_once(
+                  path,
+                  "The source package currently has seven executable Jest suites plus one support module.",
+                  "The source package currently has nine executable Jest suites plus one support module, including the workspace-details and Bun workspace-glob security suites added for this migration.",
+              )
+          '''
+          new = '''def update_repository_test_inventory() -> None:
+              path = "docs/rust-migration-test-inventory.md"
+              target = ROOT / path
+              text = target.read_text(encoding="utf-8")
+              heading = "## `packages/turbo-workspaces`"
+              section_start = text.find(heading)
+              if section_start < 0:
+                  raise SystemExit("turbo-workspaces test-inventory section is missing")
+              next_heading = text.find("\\n## ", section_start + len(heading))
+              section_end = len(text) if next_heading < 0 else next_heading
+              section = text[section_start:section_end]
+              old_sentence = "The source package currently has seven executable Jest suites plus one support module."
+              new_sentence = "The source package currently has nine executable Jest suites plus one support module, including the workspace-details and Bun workspace-glob security suites added for this migration."
+              if section.count(old_sentence) != 1:
+                  raise SystemExit(
+                      "expected one turbo-workspaces source-suite sentence, "
+                      f"found {section.count(old_sentence)}"
+                  )
+              section = section.replace(old_sentence, new_sentence, 1)
+              target.write_text(
+                  text[:section_start] + section + text[section_end:],
+                  encoding="utf-8",
+              )
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(
+                  "reviewed repository-inventory repair anchor changed: "
+                  f"found {text.count(old)}"
+              )
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
       - name: Update parity, inventory, and security evidence
         run: python3 tools/migration/document_bun_workspace_glob_tranche.py
 
