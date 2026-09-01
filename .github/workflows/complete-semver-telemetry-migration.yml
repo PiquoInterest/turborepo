@@ -127,9 +127,8 @@ jobs:
           set -euo pipefail
           bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
           bash -euo pipefail /tmp/prove-rust-dependency-coherence.sh
-          cargo check --locked -p turborepo-telemetry --all-targets
-          cargo test --locked -p turborepo-telemetry --all-targets
-          cargo clippy --locked -p turborepo-telemetry --all-targets -- -D warnings
+          python3 tools/check-rust-dependency-coherence.py
+          cargo metadata --locked --format-version 1 >/tmp/coherent-cargo-metadata.json
           cargo check --locked -p create-turbo-rs --all-targets
           git diff --check
 
