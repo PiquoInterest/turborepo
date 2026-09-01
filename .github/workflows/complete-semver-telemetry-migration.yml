@@ -321,6 +321,35 @@ jobs:
         run: |
           set -euo pipefail
           bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/turborepo-telemetry/src/events/package/config.rs")
+          text = path.read_text(encoding="utf-8")
+          old = "\n".join(
+              [
+                  "    if let Ok(metadata) = fs::symlink_metadata(path) {",
+                  "        if metadata.file_type().is_symlink() || !metadata.is_file() {",
+                  "            return Err(PackageTelemetryError::UnsafeConfigPath);",
+                  "        }",
+                  "    }",
+                  "",
+              ]
+          )
+          new = "\n".join(
+              [
+                  "    if let Ok(metadata) = fs::symlink_metadata(path)",
+                  "        && (metadata.file_type().is_symlink() || !metadata.is_file())",
+                  "    {",
+                  "        return Err(PackageTelemetryError::UnsafeConfigPath);",
+                  "    }",
+                  "",
+              ]
+          )
+          if text.count(old) != 1:
+              raise SystemExit("reviewed telemetry Clippy anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           cargo fmt --all
           cargo fmt --all --check
           python3 <<'PY'
