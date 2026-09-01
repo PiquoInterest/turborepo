@@ -1,0 +1,387 @@
+name: Repair Rust dependency coherence
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/repair-rust-dependency-coherence.yml
+
+concurrency:
+  group: repair-rust-dependency-coherence-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Pin compatible dependency families and add the permanent invariant check
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.lock /tmp/rust-dependency-coherence-Cargo.lock.original
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          manifest = Path("Cargo.toml")
+          text = manifest.read_text(encoding="utf-8")
+          replacements = {
+              'biome_deserialize = { version = "0.6.0", features = ["serde"] }': 'biome_deserialize = { version = "=0.6.0", features = ["serde"] }',
+              'biome_deserialize_macros = { version = "0.6.0" }': 'biome_deserialize_macros = { version = "=0.6.0" }',
+              'biome_diagnostics = { version = "0.5.7" }': 'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }': 'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"dependency pin anchor changed: {old}")
+              text = text.replace(old, new, 1)
+          manifest.write_text(text, encoding="utf-8")
+
+          workflow = Path(".github/workflows/rust-migration-validate.yml")
+          text = workflow.read_text(encoding="utf-8")
+          path_anchor = "      - packages/*/rust/**\n"
+          if text.count(path_anchor) != 2:
+              raise SystemExit("migration workflow path anchors changed")
+          text = text.replace(
+              path_anchor,
+              path_anchor + "      - tools/check-rust-dependency-coherence.py\n",
+          )
+          step_anchor = "      - name: Verify migration workflow and evidence documents\n"
+          if text.count(step_anchor) != 1:
+              raise SystemExit("migration workflow validation-step anchor changed")
+          text = text.replace(
+              step_anchor,
+              "      - name: Verify pinned Rust dependency families\n"
+              "        run: python3 tools/check-rust-dependency-coherence.py\n\n"
+              + step_anchor,
+              1,
+          )
+          workflow.write_text(text, encoding="utf-8")
+          PY
+
+          cat > tools/check-rust-dependency-coherence.py <<'PY'
+          #!/usr/bin/env python3
+          """Fail closed when patch-compatible Rust packages form incompatible families."""
+
+          from __future__ import annotations
+
+          from pathlib import Path
+          import tomllib
+
+          ROOT = Path(__file__).resolve().parents[1]
+          MANIFEST = ROOT / "Cargo.toml"
+          LOCKFILE = ROOT / "Cargo.lock"
+
+          EXPECTED_REQUIREMENTS = {
+              "biome_deserialize": "=0.6.0",
+              "biome_deserialize_macros": "=0.6.0",
+              "biome_diagnostics": "=0.5.7",
+              "biome_formatter": "=0.5.7",
+              "biome_json_formatter": "=0.5.7",
+              "biome_json_parser": "=0.5.7",
+              "biome_json_syntax": "=0.5.7",
+              "unrs_resolver": "=1.11.1",
+          }
+
+
+          def dependency_requirement(value: object) -> str | None:
+              if isinstance(value, str):
+                  return value
+              if isinstance(value, dict):
+                  version = value.get("version")
+                  return version if isinstance(version, str) else None
+              return None
+
+
+          def main() -> None:
+              manifest = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
+              dependencies = manifest.get("workspace", {}).get("dependencies", {})
+              for name, expected in EXPECTED_REQUIREMENTS.items():
+                  actual = dependency_requirement(dependencies.get(name))
+                  if actual != expected:
+                      raise SystemExit(
+                          f"workspace dependency {name} must be pinned to {expected}, found {actual!r}"
+                      )
+
+              lockfile = tomllib.loads(LOCKFILE.read_text(encoding="utf-8"))
+              packages = lockfile.get("package", [])
+
+              incompatible_biome = sorted(
+                  (package.get("name"), package.get("version"))
+                  for package in packages
+                  if isinstance(package.get("name"), str)
+                  and package["name"].startswith("biome_")
+                  and isinstance(package.get("version"), str)
+                  and package["version"].startswith("0.5.")
+                  and package["version"] != "0.5.7"
+              )
+              if incompatible_biome:
+                  raise SystemExit(
+                      "Biome 0.5 dependency family is not coherent at 0.5.7: "
+                      f"{incompatible_biome}"
+                  )
+
+              resolver_versions = sorted(
+                  package.get("version")
+                  for package in packages
+                  if package.get("name") == "unrs_resolver"
+              )
+              if resolver_versions != ["1.11.1"]:
+                  raise SystemExit(
+                      "unrs_resolver must resolve exactly once at 1.11.1, found "
+                      f"{resolver_versions}"
+                  )
+
+              print(
+                  "Rust dependency coherence verified: Biome 0.5.7 and "
+                  "unrs_resolver 1.11.1"
+              )
+
+
+          if __name__ == "__main__":
+              main()
+          PY
+          chmod +x tools/check-rust-dependency-coherence.py
+
+          package_is_locked() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lockfile = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          raise SystemExit(
+              0
+              if any(
+                  package.get("name") == name and package.get("version") == version
+                  for package in lockfile.get("package", [])
+              )
+              else 1
+          )
+          PY
+          }
+
+          downgrade_if_locked() {
+            if package_is_locked "$1" "$2"; then
+              cargo update -p "$1@$2" --precise "$3"
+            fi
+          }
+
+          # Downgrade dependants before their shared leaves so every precise
+          # update remains satisfiable throughout the transition.
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
+      - name: Constrain and validate the generated lockfile repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check-rust-dependency-coherence.py
+
+          python3 <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          def load(path: str) -> dict:
+              return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+          def key(package: dict) -> tuple[str, str, str]:
+              return (
+                  package["name"],
+                  package["version"],
+                  package.get("source", ""),
+              )
+
+          def permitted_name(name: str) -> bool:
+              return name.startswith("biome_") or name == "unrs_resolver"
+
+          def dependency_name(dependency: str) -> str:
+              return dependency.split(" ", 1)[0]
+
+          before = {
+              key(package): package
+              for package in load("/tmp/rust-dependency-coherence-Cargo.lock.original").get(
+                  "package", []
+              )
+          }
+          after = {
+              key(package): package
+              for package in load("Cargo.lock").get("package", [])
+          }
+
+          removed = set(before) - set(after)
+          added = set(after) - set(before)
+          unexpected_identity_changes = sorted(
+              package_key
+              for package_key in removed | added
+              if not permitted_name(package_key[0])
+          )
+          if unexpected_identity_changes:
+              raise SystemExit(
+                  "dependency coherence repair changed unrelated package identities: "
+                  f"{unexpected_identity_changes}"
+              )
+
+          if not removed or not added:
+              raise SystemExit("dependency coherence repair did not replace the incompatible graph")
+
+          for package_key in set(before) & set(after):
+              old = dict(before[package_key])
+              new = dict(after[package_key])
+              old_dependencies = set(old.pop("dependencies", []))
+              new_dependencies = set(new.pop("dependencies", []))
+              if old != new:
+                  raise SystemExit(
+                      f"lockfile metadata changed for unchanged package {package_key}"
+                  )
+
+              stable_old = {
+                  dependency
+                  for dependency in old_dependencies
+                  if not permitted_name(dependency_name(dependency))
+              }
+              stable_new = {
+                  dependency
+                  for dependency in new_dependencies
+                  if not permitted_name(dependency_name(dependency))
+              }
+              if stable_old != stable_new:
+                  raise SystemExit(
+                      "dependency coherence repair changed an unrelated dependency edge for "
+                      f"{package_key}: before={sorted(stable_old)}, after={sorted(stable_new)}"
+                  )
+
+          expected_old = {
+              ("biome_parser", "0.5.8"),
+              ("biome_diagnostics", "0.5.8"),
+              ("biome_console", "0.5.8"),
+              ("biome_rowan", "0.5.8"),
+              ("biome_text_edit", "0.5.8"),
+              ("biome_text_size", "0.5.8"),
+              ("biome_string_case", "0.5.8"),
+              ("biome_unicode_table", "0.5.9"),
+              ("unrs_resolver", "1.12.2"),
+          }
+          removed_name_versions = {(name, version) for name, version, _source in removed}
+          missing_replacements = sorted(expected_old - removed_name_versions)
+          if missing_replacements:
+              raise SystemExit(
+                  f"expected incompatible packages were not replaced: {missing_replacements}"
+              )
+          PY
+
+          cargo fmt --all --check
+          cargo check --locked -p turborepo-telemetry --all-targets
+          cargo test --locked -p turborepo-telemetry --all-targets
+          cargo clippy --locked -p turborepo-telemetry --all-targets -- -D warnings
+          cargo check --locked -p create-turbo-rs --all-targets
+          git diff --check
+
+      - name: Commit the coherent dependency graph
+        id: graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/repair-rust-dependency-coherence.yml
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            .github/workflows/rust-migration-validate.yml \
+            .github/workflows/repair-rust-dependency-coherence.yml \
+            tools/check-rust-dependency-coherence.py
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 5
+          git commit -m "fix(rust): Pin coherent parser dependency families"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Install source-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build the branch-compatible Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Preflight and push through the unchanged repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          command -v turbo
+          sh .husky/pre-push
+          test -z "$(git status --porcelain)"
+
+          git config --unset-all remote.origin.pushurl || true
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during validation: $remote_head" >&2
+            exit 1
+          fi
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation
