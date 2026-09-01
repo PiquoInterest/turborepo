@@ -16,23 +16,23 @@ SANITIZER_PATH = Path(
     "packages/create-turbo/src/utils/sanitize-terminal-text.ts"
 )
 
-HEX_LITERAL_REPLACEMENTS = {
-    "0x1f": "0x1F",
-    "0x7f": "0x7F",
-    "0x9f": "0x9F",
-    "0xd800": "0xD800",
-    "0xdfff": "0xDFFF",
-    "0x00ad": "0x00AD",
-    "0x034f": "0x034F",
-    "0x061c": "0x061C",
-    "0x180e": "0x180E",
-    "0x200b": "0x200B",
-    "0x200f": "0x200F",
-    "0x202e": "0x202E",
-    "0x206f": "0x206F",
-    "0xfeff": "0xFEFF",
-    "0xfff9": "0xFFF9",
-    "0xfffb": "0xFFFB",
+NUMERIC_LITERAL_REPLACEMENTS = {
+    "0x1f": "31",
+    "0x7f": "127",
+    "0x9f": "159",
+    "0xd800": "55296",
+    "0xdfff": "57343",
+    "0x00ad": "173",
+    "0x034f": "847",
+    "0x061c": "1564",
+    "0x180e": "6158",
+    "0x200b": "8203",
+    "0x200f": "8207",
+    "0x202e": "8238",
+    "0x206f": "8303",
+    "0xfeff": "65279",
+    "0xfff9": "65529",
+    "0xfffb": "65531",
 }
 
 
@@ -63,21 +63,21 @@ def run_reviewed_transformer(arguments: list[str]) -> None:
         )
 
 
-def normalize_hex_literals() -> None:
+def normalize_numeric_literals() -> None:
     text = SANITIZER_PATH.read_text(encoding="utf-8")
-    for old, new in HEX_LITERAL_REPLACEMENTS.items():
+    for old, new in NUMERIC_LITERAL_REPLACEMENTS.items():
         count = text.count(old)
         if count != 1:
             raise SystemExit(
-                f"sanitizer hexadecimal anchor changed: {old} occurred {count} times"
+                f"sanitizer numeric anchor changed: {old} occurred {count} times"
             )
         text = text.replace(old, new, 1)
 
-    lowercase_literal = re.search(r"0x[0-9A-F]*[a-f][0-9A-Fa-f]*", text)
-    if lowercase_literal:
+    hexadecimal_literal = re.search(r"0x[0-9A-Fa-f]+", text)
+    if hexadecimal_literal:
         raise SystemExit(
-            "lowercase hexadecimal literal remains in sanitizer: "
-            + lowercase_literal.group(0)
+            "hexadecimal literal remains in sanitizer: "
+            + hexadecimal_literal.group(0)
         )
 
     SANITIZER_PATH.write_text(text, encoding="utf-8")
@@ -90,7 +90,7 @@ def main() -> None:
 
     run_reviewed_transformer(arguments)
     if arguments[0] == "green":
-        normalize_hex_literals()
+        normalize_numeric_literals()
 
 
 if __name__ == "__main__":
