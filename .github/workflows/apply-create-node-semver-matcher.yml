@@ -78,21 +78,29 @@ jobs:
 
           path = Path("packages/create-turbo/rust/src/package_manager_install_policy.rs")
           text = path.read_text(encoding="utf-8")
-          old = '''        let Ok(version) = version.parse::<node_semver::Version>() else {
-              return Ok(false);
-          };
-
-          Ok(version.satisfies(&range))
-          '''
-          new = '''        let Ok(parsed_version) = version.parse::<node_semver::Version>() else {
-              return Ok(false);
-          };
-          if parsed_version.to_string() != version {
-              return Ok(false);
-          }
-
-          Ok(parsed_version.satisfies(&range))
-          '''
+          old = "\n".join(
+              [
+                  "        let Ok(version) = version.parse::<node_semver::Version>() else {",
+                  "            return Ok(false);",
+                  "        };",
+                  "",
+                  "        Ok(version.satisfies(&range))",
+                  "",
+              ]
+          )
+          new = "\n".join(
+              [
+                  "        let Ok(parsed_version) = version.parse::<node_semver::Version>() else {",
+                  "            return Ok(false);",
+                  "        };",
+                  "        if parsed_version.to_string() != version {",
+                  "            return Ok(false);",
+                  "        }",
+                  "",
+                  "        Ok(parsed_version.satisfies(&range))",
+                  "",
+              ]
+          )
           if text.count(old) != 1:
               raise SystemExit("reviewed Node-semver GREEN anchor changed")
           path.write_text(text.replace(old, new, 1), encoding="utf-8")
