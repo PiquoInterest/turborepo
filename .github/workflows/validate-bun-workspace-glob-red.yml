@@ -25,11 +25,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify the immutable RED parent
+      - name: Verify the immutable RED chain
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "7d3657eff34202f912aa0f78437f2dff833c19f3"
+          test "$(git rev-parse HEAD^)" = "f05d52f6254043fab656d16ba24311fe6d11b5b1"
+          git merge-base --is-ancestor \
+            7d3657eff34202f912aa0f78437f2dff833c19f3 \
+            HEAD
           grep -Fq 'RED stub: the source-compatible validator' \
             packages/turbo-workspaces/rust/src/lib.rs
 
