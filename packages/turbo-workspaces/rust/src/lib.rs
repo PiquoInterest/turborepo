@@ -12,6 +12,10 @@ pub const MANAGER_DETECTION_ORDER: [WorkspaceManager; 6] = [
     WorkspaceManager::Bun,
 ];
 
+pub const BUN_WORKSPACE_GLOB_INPUT_LIMIT: usize = 4_096;
+pub const BUN_WORKSPACE_GLOB_COUNT_LIMIT: usize = 256;
+pub const BUN_WORKSPACE_GLOB_TOTAL_INPUT_LIMIT: usize = 65_536;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceManager {
     Aube,
@@ -145,4 +149,12 @@ where
     Err(WorkspaceDetailsError::Known(
         WorkspaceDetailsKnownError::UnableToDetect,
     ))
+}
+
+#[must_use]
+pub fn is_compatible_with_bun_workspaces(_workspace_globs: &[&str]) -> bool {
+    // RED stub: the source-compatible validator is added in the following
+    // GREEN commit. Keeping the final API callable makes the translated tests
+    // fail for missing behavior rather than missing symbols.
+    false
 }
