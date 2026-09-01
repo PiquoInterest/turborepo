@@ -10,16 +10,24 @@ Rust target:
 - `packages/create-turbo/rust/tests/package_manager_install_policy_parity.rs`
 - `packages/create-turbo/rust/tests/package_manager_install_policy_security.rs`
 
-TypeScript security evidence:
+TypeScript oracle and security evidence:
 
+- `packages/turbo-workspaces/__tests__/install-meta.test.ts`
 - `packages/turbo-workspaces/__tests__/install-security.test.ts`
 
 ## TDD evidence
 
-- compiling behavioral RED: `b858e98565eb0415c6ab85bb120220529b9a981b`
-- GREEN security implementation: `a200c283e0cfb17bec0cb3422b44cdfaa3f7c60c`
+- profile and invocation RED: `b858e98565eb0415c6ab85bb120220529b9a981b`
+- profile and invocation GREEN: `a200c283e0cfb17bec0cb3422b44cdfaa3f7c60c`
+- concrete matcher RED: `816216a20b5620ab381842e26ed322d9409b3cec`
+- concrete matcher GREEN: `a47192630977ffec2a4208f67d01fbd948a8aa97`
+- exact Rustfmt output: `149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31`
 
-The RED commit intentionally preserved `preferLocal: true` and Windows shell execution so the new Rust security tests failed for the same reasons demonstrated by the TypeScript `it.failing` fixture.
+The concrete matcher RED commit exported the final callable API and bounds but deliberately returned `Ok(false)`. The translated source-profile, build-metadata, prerelease, malformed-input, and malformed-range tests therefore compiled and failed for missing matching behavior rather than missing symbols.
+
+The TypeScript oracle remains executable and green. It records current npm `semver` behavior for all repository profiles, malformed input, build metadata, prereleases, and edge whitespace. The stricter whitespace policy is represented by `it.failing` cases so the source suite remains green while retaining evidence of the intentional Rust hardening.
+
+GitHub Actions run `33547336164` compiled the committed migration crates, passed all migration parity and security tests, and passed Clippy with warnings denied for the exact formatted implementation. The lockfile-wide advisory audit remains an independent repository gate and is not treated as implementation failure or suppressed.
 
 ## Preserved behavior
 
@@ -40,12 +48,28 @@ Additional preserved contracts:
 
 - missing and empty versions use the first profile marked as default;
 - supplied versions are tested in source order and the first match wins;
+- build metadata does not change range satisfaction;
+- prereleases are excluded because none of the six repository-owned ranges opts into a prerelease tuple;
+- one leading `v` or `=` compatibility marker is accepted without trimming any other input;
+- malformed versions are unsupported non-matches;
+- malformed or unknown repository range literals are typed configuration errors;
 - unsupported versions return no profile;
-- matcher errors are propagated immediately without retry or default fallback;
-- the selected command, arguments, project root, and ignored-stdin policy are retained as typed data;
-- the version string is borrowed and never becomes a command or argument.
+- matcher errors propagate immediately without retry or default fallback;
+- the selected command, arguments, project root, and ignored-stdin policy remain typed data;
+- version text never becomes an executable name or argument.
 
-The JavaScript `semver.satisfies` call remains behind `PackageManagerVersionMatcher`. Production binding must differentially prove Node-semver behavior, including prereleases, build metadata, coercion boundaries, malformed text, and resource limits, rather than silently substituting different Rust-semver semantics.
+The matcher intentionally supports only the six range literals committed in the profile table: `*`, `6.x`, `>=7`, `<2`, `>=2`, and `^1.0.1`. This closed grammar is sufficient for the current source contract and prevents a future repository edit from silently expanding the accepted range language without tests and review.
+
+## Test inventory
+
+| Evidence set | Ported coverage | Status |
+| --- | ---: | --- |
+| Rust profile and matcher parity tests | 12 test functions | GREEN |
+| Rust install-policy security tests | 8 test functions | GREEN |
+| TypeScript semver oracle cases | 25 generated or direct cases | GREEN, including expected-failure security evidence |
+| TypeScript install execution security evidence | 1 expected-failure case | GREEN as evidence of the unresolved source behavior |
+
+This inventory counts executable test cases for this bounded tranche. It is not a repository completion percentage. Production process execution, host binding, platform differentials, packaging, caller cutover, and TypeScript removal remain open.
 
 ## Intentional security divergences
 
@@ -65,6 +89,32 @@ TypeScript sets `shell: true` on Windows. Shell mediation expands the interpreta
 
 The Rust invocation policy sets `shell: false` on every platform. A production Windows runner must resolve an approved package-manager executable or shim explicitly and execute it without constructing a shell command. If a manager cannot be launched safely without a shell, the provider must return a typed unsupported-platform error rather than weakening this policy.
 
+### CT-RS-036: Version matching was delegated to an unbounded provider
+
+**Severity:** Medium
+
+The first Rust profile tranche delegated `semver.satisfies` to an injected matcher. A permissive or incompatible provider could normalize hostile text, accept an unreviewed range grammar, or select the wrong installation profile.
+
+The committed Rust matcher now:
+
+- limits version and range text to 256 UTF-8 bytes before parsing;
+- rejects non-ASCII, whitespace-bearing, and control-bearing version text;
+- accepts only the six reviewed repository range literals;
+- rejects core components above JavaScript's maximum safe integer;
+- enforces strict three-component versions and leading-zero rules;
+- validates prerelease and build identifiers;
+- excludes prereleases for the current ranges;
+- performs no allocation proportional to attacker-controlled range grammar;
+- introduces no dependency, subprocess, filesystem, network, credential, logging, mutable-global, or `unsafe` authority.
+
+### CT-RS-037: npm edge-whitespace normalization is not preserved
+
+**Severity:** Low intentional hardening
+
+The TypeScript path uses npm `semver`, which accepts leading or trailing ASCII whitespace around an otherwise valid version. A package-manager version normally comes from executable discovery and has no reason to include hidden line or spacing characters. Normalizing that text can turn an ambiguous or terminal-derived value into a trusted installation profile.
+
+Rust rejects any ASCII whitespace or control character before parsing. The TypeScript oracle contains normal GREEN tests documenting current normalization and `it.failing` tests documenting the desired rejection. Rust security tests require the rejection. Safe canonical versions retain the same profile selection.
+
 ## Security invariants
 
 - No install invocation requests shell execution.
@@ -73,10 +123,32 @@ The Rust invocation policy sets `shell: false` on every platform. A production W
 - Arguments are static reviewed slices.
 - Project roots remain borrowed `Path` values, including non-UTF-8 Unix paths.
 - Standard input is always ignored to prevent interactive hangs.
-- Version text is only passed to the bounded matcher interface and cannot alter the command or argument vector.
+- Version and range text are bounded before parsing.
+- Version text is ASCII and control-free before it can select a profile.
+- Numeric core components cannot exceed JavaScript's maximum safe integer.
+- Unknown range syntax is a typed error rather than a permissive fallback.
 - Profile scans are bounded to one or two entries per manager.
-- The core introduces no dependency, process execution, filesystem mutation, network access, credential access, `unsafe` code, or mutable global state.
+- The core introduces no new dependency or direct side-effect authority.
+
+## Advisory lookup
+
+**Lookup date: 2026-09-01**
+
+Sources reviewed:
+
+- npm `node-semver` source documentation and version/range compatibility notes;
+- the RustSec Advisory Database and advisory repository;
+- the GitHub Advisory Database for npm and Rust ecosystems;
+- the repository-wide resolved-lockfile audit.
+
+Disposition:
+
+- This GREEN implementation adds no dependency and therefore no new transitive advisory surface.
+- The TypeScript package currently uses npm `semver` 7.6.2. The relevant historical regular-expression denial-of-service advisory is patched in versions later than 7.5.2, so the installed source oracle is outside that affected range.
+- The repository-wide `webbrowser`, `h2`, and `quick-xml` findings remain open. They are not ignored, downgraded, or coupled to this matcher tranche.
 
 ## Production blockers
 
-The production runner must prove canonical executable resolution, explicit environment and configuration policy, no shell, no project-local substitution, a strict working-directory identity contract, bounded output, deadlines, cancellation and descendant cleanup, signal semantics, Windows shim handling, deterministic error mapping, and Linux/macOS/Windows differential fixtures. The host must also supply a Node-semver-compatible matcher and removal proof showing the TypeScript `install.ts` execution path is no longer loaded or shipped.
+The production runner must still prove canonical executable resolution, explicit environment and configuration policy, no shell, no project-local substitution, a strict working-directory identity contract, bounded output, deadlines, cancellation and descendant cleanup, signal semantics, Windows shim handling, deterministic error mapping, and Linux/macOS/Windows differential fixtures.
+
+The host binding must run the TypeScript and Rust matchers over shared fixtures on every supported platform before cutover. Removal proof must show that the TypeScript `install.ts` execution path is no longer loaded or shipped.
