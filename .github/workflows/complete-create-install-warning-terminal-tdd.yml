@@ -22,7 +22,7 @@ jobs:
     env:
       FORCE_COLOR: "0"
       TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
-      EXPECTED_PARENT: e8677299a5e7ae6243da572f597f40f74777758f
+      EXPECTED_PARENT: 3076cf98c1114d85df27c656bf6e7b31725e8fd5
       WORKFLOW_PATH: .github/workflows/complete-create-install-warning-terminal-tdd.yml
       RUNNER_PATH: tools/migration/run_create_install_warning_terminal_tdd.sh
       TRANSFORM_SCRIPT: tools/migration/repair_create_install_warning_terminal_text.py
@@ -96,6 +96,23 @@ jobs:
         uses: ./.github/actions/setup-zig
         with:
           version: "0.15.2"
+
+      - name: Relocate Zig outside the source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$GITHUB_WORKSPACE/zig"
+          target_dir="$RUNNER_TEMP/repository-zig"
+
+          test -x "$source_dir/zig"
+          rm -rf "$target_dir"
+          mv "$source_dir" "$target_dir"
+          test -x "$target_dir/zig"
+
+          echo "$target_dir" >> "$GITHUB_PATH"
+          echo "ZIG_EXECUTABLE=$target_dir/zig" >> "$GITHUB_ENV"
+          echo "ZIG_GLOBAL_CACHE_DIR=$target_dir/global-cache" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
 
       - name: Run the ordered TypeScript RED, Rust GREEN, TypeScript GREEN chain
         shell: bash
