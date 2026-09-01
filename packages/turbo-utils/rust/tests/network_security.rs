@@ -4,7 +4,7 @@ use turbo_utils_rs::{
 };
 
 #[test]
-fn github_authorization_requires_https_without_credentials_or_ports() {
+fn github_authorization_requires_https_without_credentials_or_non_default_ports() {
     let env = NetworkEnvironment {
         github_token: Some("token".into()),
         ..Default::default()
@@ -12,7 +12,6 @@ fn github_authorization_requires_https_without_credentials_or_ports() {
 
     for url in [
         "http://api.github.com/repos/user/repo",
-        "https://api.github.com:443/repos/user/repo",
         "https://api.github.com:444/repos/user/repo",
         "https://user@api.github.com/repos/user/repo",
         "https://user:pass@api.github.com/repos/user/repo",

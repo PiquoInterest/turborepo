@@ -14,6 +14,8 @@ pub const NO_PROXY_MAX_CHARS: usize = 4_096;
 pub const NO_PROXY_MAX_ENTRIES: usize = 256;
 /// Maximum number of redirects that can be evaluated for one request chain.
 pub const REDIRECT_MAX_HOPS: usize = 10;
+/// Maximum accepted request URL length in UTF-8 bytes.
+pub const REQUEST_URL_MAX_BYTES: usize = 8 * 1_024;
 
 /// Snapshot of the environment values consumed by the TypeScript networking
 /// helpers. It intentionally has no `Debug` implementation so tokens are not
@@ -96,6 +98,7 @@ fn is_valid_scheme(scheme: &str) -> bool {
 
 fn parse_absolute_url(value: &str) -> Option<ParsedUrl<'_>> {
     if value.is_empty()
+        || value.len() > REQUEST_URL_MAX_BYTES
         || value
             .chars()
             .any(|character| character.is_control() || character.is_whitespace())
@@ -131,9 +134,17 @@ fn selected_token(environment: &NetworkEnvironment) -> Option<&str> {
 }
 
 fn is_github_api_endpoint(url: ParsedUrl<'_>) -> bool {
-    url.scheme.eq_ignore_ascii_case("https")
-        && (url.authority.eq_ignore_ascii_case("api.github.com")
-            || url.authority.eq_ignore_ascii_case("codeload.github.com"))
+    if !url.scheme.eq_ignore_ascii_case("https") {
+        return false;
+    }
+
+    let Some((host, port, bracketed)) = split_host_port(url.authority) else {
+        return false;
+    };
+    !bracketed
+        && matches!(port, None | Some(443))
+        && (host.eq_ignore_ascii_case("api.github.com")
+            || host.eq_ignore_ascii_case("codeload.github.com"))
 }
 
 /// Returns a bearer header only for credential-free HTTPS requests to the two

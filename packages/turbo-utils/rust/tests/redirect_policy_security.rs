@@ -156,7 +156,7 @@ fn github_lookalike_redirect_target_never_receives_authorization() {
 }
 
 #[test]
-fn explicit_port_redirect_target_does_not_receive_github_authorization() {
+fn non_default_port_redirect_target_does_not_receive_github_authorization() {
     let environment = NetworkEnvironment {
         github_token: Some("token".into()),
         ..Default::default()
@@ -165,7 +165,7 @@ fn explicit_port_redirect_target_does_not_receive_github_authorization() {
     assert_eq!(
         redirect_request_policy(
             "https://api.github.com/repos/user/repo",
-            "https://api.github.com:443/repositories/1",
+            "https://api.github.com:8443/repositories/1",
             1,
             &environment,
         ),
