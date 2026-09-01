@@ -171,10 +171,40 @@ jobs:
           test ! -e tools/migration/document_bun_workspace_glob_tranche.py
           git commit -m "docs(turbo-workspaces): Record Bun glob parity and security"
 
+      - name: Resolve the exact locked Turbo hook command
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved_version="$(
+            pnpm --filter eslint-plugin-turbo exec node -p \
+              'require("turbo/package.json").version'
+          )"
+          test "$resolved_version" = "2.8.3"
+
+          turbo_wrapper="$(
+            pnpm --filter eslint-plugin-turbo exec node -p \
+              'require.resolve("turbo")'
+          )"
+          case "$turbo_wrapper" in
+            "$GITHUB_WORKSPACE"/*) ;;
+            *)
+              echo "resolved Turbo wrapper escaped the workspace: $turbo_wrapper" >&2
+              exit 1
+              ;;
+          esac
+          test -x "$turbo_wrapper"
+
+          mkdir -p "$RUNNER_TEMP/repository-bin"
+          ln -s "$turbo_wrapper" "$RUNNER_TEMP/repository-bin/turbo"
+          echo "$RUNNER_TEMP/repository-bin" >> "$GITHUB_PATH"
+          "$turbo_wrapper" --version
+
       - name: Push through the unchanged repository hooks
         shell: bash
         run: |
           set -euo pipefail
+          command -v turbo
+          test "$(turbo --version)" = "2.8.3"
           git config core.hooksPath .husky
           sh .husky/pre-push
           test -z "$(git status --porcelain)"
