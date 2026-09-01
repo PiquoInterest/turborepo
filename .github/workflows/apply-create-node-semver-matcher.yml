@@ -282,6 +282,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git status --porcelain=v1 --untracked-files=all > \
+            /tmp/node-semver-status.before
           cp Cargo.toml /tmp/node-semver-Cargo.toml.original
           cp Cargo.lock /tmp/node-semver-Cargo.lock.original
 
@@ -346,7 +348,17 @@ jobs:
           cp /tmp/node-semver-Cargo.toml.original Cargo.toml
           cp /tmp/node-semver-Cargo.lock.original Cargo.lock
           git diff --exit-code -- Cargo.toml Cargo.lock
-          test -z "$(git status --porcelain)"
+          git status --porcelain=v1 --untracked-files=all > \
+            /tmp/node-semver-status.after
+          if ! cmp --silent \
+            /tmp/node-semver-status.before \
+            /tmp/node-semver-status.after; then
+            diff -u \
+              /tmp/node-semver-status.before \
+              /tmp/node-semver-status.after || true
+            echo "temporary hook build changed the reviewed source-tree status" >&2
+            exit 1
+          fi
           "$GITHUB_WORKSPACE/target/debug/turbo" --version
 
       - name: Commit and push documentation through repository hooks
