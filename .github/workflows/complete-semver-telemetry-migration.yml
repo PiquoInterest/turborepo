@@ -330,6 +330,7 @@ jobs:
               ".github/workflows/rust-migration-validate.yml",
               "crates/turborepo-telemetry/src/events/package/config.rs",
               "crates/turborepo-telemetry/tests/package_security.rs",
+              "tools/migration/apply_create_node_semver_matcher.py",
           }
           changed = set(
               subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
