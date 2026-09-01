@@ -18,7 +18,7 @@ jobs:
   format-and-verify:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout the single migration branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -93,6 +93,69 @@ jobs:
           pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
             __tests__/workspace-details.test.ts
 
+      - name: Prepare a temporary branch-compatible Rust graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.toml /tmp/oracle-hook-Cargo.toml
+          cp Cargo.lock /tmp/oracle-hook-Cargo.lock
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'biome_diagnostics = { version = "0.5.7" }':
+                  'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }':
+                  'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }':
+                  'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }':
+                  'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }':
+                  'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"':
+                  'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"source-build dependency anchor changed: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          package_is_locked() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          raise SystemExit(0 if any(
+              package.get("name") == name and package.get("version") == version
+              for package in lock.get("package", [])
+          ) else 1)
+          PY
+          }
+
+          downgrade_if_locked() {
+            if package_is_locked "$1" "$2"; then
+              cargo update -p "$1@$2" --precise "$3"
+            fi
+          }
+
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
       - name: Build the branch-compatible Turbo hook binary
         shell: bash
         run: |
@@ -102,6 +165,14 @@ jobs:
           test "$("$GITHUB_WORKSPACE/target/debug/turbo" --version)" = \
             "$(node -p 'require("./packages/turbo/package.json").version')"
           echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Restore the committed dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/oracle-hook-Cargo.toml Cargo.toml
+          cp /tmp/oracle-hook-Cargo.lock Cargo.lock
+          git diff --exit-code -- Cargo.toml Cargo.lock
 
       - name: Commit the exact formatter output and remove automation
         shell: bash
