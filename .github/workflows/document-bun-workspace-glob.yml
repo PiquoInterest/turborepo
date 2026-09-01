@@ -1,0 +1,143 @@
+name: Record Bun workspace glob migration evidence
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/document-bun-workspace-glob.yml
+      - tools/migration/document_bun_workspace_glob_tranche.py
+
+concurrency:
+  group: document-bun-workspace-glob-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  document:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify the reviewed GREEN ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor \
+            914fd359d5ee5cf86e3b6987e589192609cba957 \
+            HEAD
+          ! grep -Fq 'RED stub: the source-compatible validator' \
+            packages/turbo-workspaces/rust/src/lib.rs
+
+      - name: Set up Node and the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Revalidate the TypeScript oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/utils.test.ts \
+            __tests__/bun-workspace-glob-security.test.ts
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Revalidate the Rust crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="packages/turbo-workspaces/rust/Cargo.toml"
+          cargo fmt --manifest-path "$manifest" --check
+          cargo check --manifest-path "$manifest" --all-targets
+          cargo test --manifest-path "$manifest" --all-targets
+          cargo clippy --manifest-path "$manifest" --all-targets -- -D warnings
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-workspaces/rust/src/lib.rs \
+            packages/turbo-workspaces/rust/tests/bun_workspace_glob_*.rs; then
+            echo "Bun workspace-glob tranche introduced unsafe code" >&2
+            exit 1
+          fi
+
+      - name: Update parity, inventory, and security evidence
+        run: python3 tools/migration/document_bun_workspace_glob_tranche.py
+
+      - name: Validate and commit the exact evidence set
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              ".github/workflows/document-bun-workspace-glob.yml",
+              ".github/workflows/validate-bun-workspace-glob-red.yml",
+              "tools/migration/document_bun_workspace_glob_tranche.py",
+              "packages/turbo-workspaces/rust/README.md",
+              "packages/turbo-workspaces/rust/PARITY_MATRIX.md",
+              "packages/turbo-workspaces/rust/SECURITY.md",
+              "packages/turbo-workspaces/rust/security.txt",
+              "packages/turbo-workspaces/rust/TEST_INVENTORY.md",
+              "docs/typescript-deprecation.md",
+              "docs/rust-migration-test-inventory.md",
+              "docs/rust-migration-security-findings.md",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(
+                  f"unexpected Bun workspace-glob evidence paths: {sorted(changed)}"
+              )
+          PY
+          grep -Fq 'TW-RS-006' packages/turbo-workspaces/rust/security.txt
+          grep -Fq 'TW-RS-007' packages/turbo-workspaces/rust/SECURITY.md
+          grep -Fq '38 utility tests remain' packages/turbo-workspaces/rust/TEST_INVENTORY.md
+          grep -Fq '411 authored Rust migration tests' docs/typescript-deprecation.md
+          test ! -e .github/workflows/validate-bun-workspace-glob-red.yml
+          test ! -e .github/workflows/document-bun-workspace-glob.yml
+          test ! -e tools/migration/document_bun_workspace_glob_tranche.py
+          git commit -m "docs(turbo-workspaces): Record Bun glob parity and security"
+
+      - name: Push through the unchanged repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config core.hooksPath .husky
+          sh .husky/pre-push
+          test -z "$(git status --porcelain)"
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during documentation validation: $remote_head" >&2
+            exit 1
+          fi
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation
