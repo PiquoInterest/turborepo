@@ -22,7 +22,7 @@ jobs:
     env:
       FORCE_COLOR: "0"
       TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
-      EXPECTED_PARENT: 3076cf98c1114d85df27c656bf6e7b31725e8fd5
+      EXPECTED_PARENT: bc093fdcb83b6910d317feea59a495cf8b7a6441
       WORKFLOW_PATH: .github/workflows/complete-create-install-warning-terminal-tdd.yml
       RUNNER_PATH: tools/migration/run_create_install_warning_terminal_tdd.sh
       TRANSFORM_SCRIPT: tools/migration/repair_create_install_warning_terminal_text.py
@@ -81,6 +81,7 @@ jobs:
       - name: Set up the repository Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
+          github-token: ${{ github.token }}
           cache: false
           save-cache: false
 
