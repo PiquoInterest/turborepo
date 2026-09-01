@@ -38,6 +38,36 @@ jobs:
           cache: false
           save-cache: false
 
+      - name: Install Turbo hook prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Relocate Zig outside the source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$GITHUB_WORKSPACE/zig"
+          target_dir="$RUNNER_TEMP/repository-zig"
+
+          test -x "$source_dir/zig"
+          rm -rf "$target_dir"
+          mv "$source_dir" "$target_dir"
+          test -x "$target_dir/zig"
+
+          echo "$target_dir" >> "$GITHUB_PATH"
+          echo "ZIG_EXECUTABLE=$target_dir/zig" >> "$GITHUB_ENV"
+          echo "ZIG_GLOBAL_CACHE_DIR=$target_dir/global-cache" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+
       - name: Prove the compiling RED contract
         shell: bash
         run: |
@@ -168,9 +198,7 @@ jobs:
                           "create-turbo-rs lockfile metadata changed beyond dependencies"
                       )
               elif original_package != current_package:
-                  raise SystemExit(
-                      f"unreviewed lockfile record changed: {key}"
-                  )
+                  raise SystemExit(f"unreviewed lockfile record changed: {key}")
 
           node_semver_versions = [
               package["version"]
@@ -250,6 +278,14 @@ jobs:
           grep -Fq '${{ steps.green.outputs.sha }}' \
             packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md
 
+      - name: Build the branch-compatible Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
       - name: Commit and push documentation through repository hooks
         shell: bash
         run: |
@@ -265,4 +301,6 @@ jobs:
             docs/rust-migration-security-findings.md
           git diff --cached --check
           git commit -m "docs(create-turbo): Record Node semver matcher security"
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          command -v turbo
           git push origin HEAD:rust/typescript-deprecation
