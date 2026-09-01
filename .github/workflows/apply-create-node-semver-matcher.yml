@@ -69,7 +69,34 @@ jobs:
           git worktree remove --force /tmp/create-node-semver-red
 
       - name: Apply the GREEN implementation inputs
-        run: python tools/migration/apply_create_node_semver_matcher.py implement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/migration/apply_create_node_semver_matcher.py implement
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/create-turbo/rust/src/package_manager_install_policy.rs")
+          text = path.read_text(encoding="utf-8")
+          old = '''        let Ok(version) = version.parse::<node_semver::Version>() else {
+              return Ok(false);
+          };
+
+          Ok(version.satisfies(&range))
+          '''
+          new = '''        let Ok(parsed_version) = version.parse::<node_semver::Version>() else {
+              return Ok(false);
+          };
+          if parsed_version.to_string() != version {
+              return Ok(false);
+          }
+
+          Ok(parsed_version.satisfies(&range))
+          '''
+          if text.count(old) != 1:
+              raise SystemExit("reviewed Node-semver GREEN anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
 
       - name: Generate and constrain the lockfile change
         shell: bash
