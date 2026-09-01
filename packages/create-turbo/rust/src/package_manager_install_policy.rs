@@ -161,7 +161,7 @@ impl PackageManagerVersionMatcher for NodeSemverMatcher {
             "<2" => Ok(version.major < 2),
             ">=2" => Ok(version.major >= 2),
             "^1.0.1" => Ok(
-                version.major == 1 && (version.major, version.minor, version.patch) >= (1, 0, 1),
+                version.major == 1 && (version.major, version.minor, version.patch) >= (1, 0, 1)
             ),
             _ => Err(NodeSemverMatcherError::InvalidRange),
         }
