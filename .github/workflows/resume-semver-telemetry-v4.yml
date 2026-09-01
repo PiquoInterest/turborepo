@@ -1,4 +1,4 @@
-name: Materialize lint-clean telemetry migration tests
+name: Materialize lint-clean source-only telemetry migration
 
 on:
   push:
@@ -107,7 +107,7 @@ jobs:
             crates/turborepo-telemetry/tests/package_security.rs \
             crates/turborepo-telemetry/tests/package_parity.rs
 
-      - name: Materialize the completion-workflow follow-up
+      - name: Materialize the source-only completion workflow
         shell: bash
         run: |
           set -euo pipefail
@@ -117,11 +117,63 @@ jobs:
           source = Path(".github/workflows/complete-semver-telemetry-migration.yml")
           output = Path("tools/migration/generated-complete-semver-telemetry.yml")
           text = source.read_text(encoding="utf-8")
-          old = '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} anchor count changed: {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''          bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
+                    bash -euo pipefail /tmp/prove-rust-dependency-coherence.sh
+                    python3 tools/check-rust-dependency-coherence.py
+          ''',
+              '''          bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
+                    bash -euo pipefail /tmp/prove-rust-dependency-coherence.sh
+                    git checkout -- .github/workflows/rust-migration-validate.yml
+                    python3 tools/check-rust-dependency-coherence.py
+          ''',
+              "dependency workflow restoration",
+          )
+
+          replace_once(
+              r'''          rm \
+                      .github/workflows/repair-rust-dependency-coherence.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v2.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v3.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v4.yml \
+                      .github/workflows/complete-semver-telemetry-migration.yml
+                    git add \
+                      Cargo.toml \
+                      Cargo.lock \
+                      .github/workflows/rust-migration-validate.yml \
+                      .github/workflows/repair-rust-dependency-coherence.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v2.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v3.yml \
+                      .github/workflows/repair-rust-dependency-coherence-v4.yml \
+                      .github/workflows/complete-semver-telemetry-migration.yml \
+                      tools/check-rust-dependency-coherence.py
+                    git diff --cached --check
+                    test "$(git diff --cached --name-only | wc -l)" -eq 9
+          ''',
+              r'''          git add \
+                      Cargo.toml \
+                      Cargo.lock \
+                      tools/check-rust-dependency-coherence.py
+                    git diff --cached --check
+                    test "$(git diff --cached --name-only | wc -l)" -eq 3
+          ''',
+              "source-only dependency commit",
+          )
+
+          replace_once(
+              '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
                     PY
                     cargo fmt --all
-          '''
-          new = '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          ''',
+              '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
                     PY
                     python3 <<'PY'
                     from pathlib import Path
@@ -142,15 +194,99 @@ jobs:
                         raise SystemExit("panic shorthand remains in telemetry security tests")
                     path.write_text(text, encoding="utf-8")
                     PY
+                    git checkout -- .github/workflows/rust-migration-validate.yml
                     cargo fmt --all
-          '''
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f"completion workflow lint anchor count changed: {count}")
-          patched = text.replace(old, new, 1)
-          if patched.count("telemetry parent-symlink unwrap count changed") != 1:
+          ''',
+              "lint-clean telemetry follow-up",
+          )
+
+          replace_once(
+              '''          expected = {
+                        ".github/workflows/rust-migration-validate.yml",
+                        "crates/turborepo-telemetry/src/events/package/config.rs",
+                        "crates/turborepo-telemetry/tests/package_security.rs",
+                        "tools/migration/apply_create_node_semver_matcher.py",
+                    }
+          ''',
+              '''          expected = {
+                        "crates/turborepo-telemetry/src/events/package/config.rs",
+                        "crates/turborepo-telemetry/tests/package_security.rs",
+                        "tools/migration/apply_create_node_semver_matcher.py",
+                    }
+          ''',
+              "telemetry path authority set",
+          )
+
+          replace_once(
+              r'''          git add \
+                      .github/workflows/rust-migration-validate.yml \
+                      crates/turborepo-telemetry/src/events/package/config.rs \
+                      crates/turborepo-telemetry/tests/package_security.rs
+          ''',
+              r'''          git add \
+                      crates/turborepo-telemetry/src/events/package/config.rs \
+                      crates/turborepo-telemetry/tests/package_security.rs
+          ''',
+              "source-only telemetry commit",
+          )
+
+          replace_once(
+              r'''          rm -f \
+                      .github/workflows/repair-create-node-semver-matcher.yml \
+                      .github/workflows/finalize-create-node-semver-matcher.yml \
+                      .github/workflows/finalize-create-node-semver-v2.yml \
+                      .github/workflows/finalize-semver-telemetry-v3.yml \
+                      tools/migration/repair_create_node_semver_matcher.py
+
+                    test ! -e .github/workflows/apply-create-node-semver-matcher.yml
+                    test ! -e tools/migration/apply_create_node_semver_matcher.py
+                    test -z "$(find .github/workflows -maxdepth 1 -type f -name '*node-semver*' -print)"
+                    test -z "$(find .github/workflows -maxdepth 1 -type f -name '*semver-telemetry*' -print)"
+          ''',
+              '''          git checkout -- .github/workflows
+                    rm -f tools/migration/repair_create_node_semver_matcher.py
+
+                    test ! -e tools/migration/apply_create_node_semver_matcher.py
+          ''',
+              "workflow-authority evidence cleanup",
+          )
+
+          replace_once(
+              '''          allowed = {
+                        ".github/workflows/apply-create-node-semver-matcher.yml",
+                        ".github/workflows/repair-create-node-semver-matcher.yml",
+                        ".github/workflows/finalize-create-node-semver-matcher.yml",
+                        ".github/workflows/finalize-create-node-semver-v2.yml",
+                        ".github/workflows/finalize-semver-telemetry-v3.yml",
+                        "tools/migration/apply_create_node_semver_matcher.py",
+          ''',
+              '''          allowed = {
+                        "tools/migration/apply_create_node_semver_matcher.py",
+          ''',
+              "evidence allowlist workflow removal",
+          )
+
+          replace_once(
+              '''          required = {
+                        ".github/workflows/apply-create-node-semver-matcher.yml",
+                        "tools/migration/apply_create_node_semver_matcher.py",
+          ''',
+              '''          required = {
+                        "tools/migration/apply_create_node_semver_matcher.py",
+          ''',
+              "evidence required workflow removal",
+          )
+
+          if text.count("telemetry parent-symlink unwrap count changed") != 1:
               raise SystemExit("lint-clean telemetry follow-up was not installed exactly once")
-          output.write_text(patched, encoding="utf-8")
+          if text.count("git checkout -- .github/workflows/rust-migration-validate.yml") != 2:
+              raise SystemExit("validation workflow restoration was not installed twice")
+          if 'test "$(git diff --cached --name-only | wc -l)" -eq 3' not in text:
+              raise SystemExit("source-only dependency commit guard is missing")
+          if "git checkout -- .github/workflows\n" not in text:
+              raise SystemExit("evidence-stage workflow restoration is missing")
+
+          output.write_text(text, encoding="utf-8")
           PY
 
           git diff --no-index -- \
@@ -183,7 +319,7 @@ jobs:
               ).splitlines()
           )
           if changed != expected:
-              raise SystemExit(f"lint-clean handoff path set changed: {sorted(changed)}")
+              raise SystemExit(f"source-only handoff path set changed: {sorted(changed)}")
           PY
           git commit -m "test(telemetry): Remove denied panic shorthand"
           git push origin HEAD:rust/typescript-deprecation
