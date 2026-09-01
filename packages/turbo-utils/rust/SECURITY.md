@@ -124,15 +124,15 @@ Rust processes components instead. It permits `..` only while lexical depth rema
 
 ## TU-022: GitHub bearer credentials can cross an insecure transport boundary
 
-**TypeScript behavior:** `getGitHubAuthHeaders` parses the URL and checks only `hostname` against `api.github.com` and `codeload.github.com`. Because `URL.hostname` omits scheme, credentials, and port, the helper can attach a bearer token to plaintext `http://api.github.com/...` or to an explicitly redirected/custom port on an otherwise matching hostname.
+**TypeScript behavior:** `getGitHubAuthHeaders` parses the URL and checks only `hostname` against `api.github.com` and `codeload.github.com`. Because `URL.hostname` omits scheme, credentials, and port, the helper can attach a bearer token to plaintext `http://api.github.com/...` or to a custom port on an otherwise matching hostname.
 
 **Impact:** a token can be disclosed to an insecure transport or to a service reached through a nonstandard authority. The effect depends on network and redirect behavior, but the credential attachment decision itself is too broad.
 
-**Rust fix:** emit a bearer value only for syntactically valid, credential-free HTTPS URLs whose complete authority is exactly `api.github.com` or `codeload.github.com`, with no explicit port. Malformed URLs, look-alike domains, whitespace, controls, userinfo, HTTP, and custom ports receive no credential.
+**Rust fix:** emit a bearer value only for syntactically valid, credential-free HTTPS URLs whose normalized host is exactly `api.github.com` or `codeload.github.com` and whose effective port is 443. Explicit `:443` is equivalent to the implicit HTTPS default. Malformed URLs, look-alike domains, whitespace, controls, userinfo, HTTP, and non-default ports receive no credential.
 
-**Intentional incompatibility:** hostname-equivalent URLs that are not exact HTTPS authorities no longer receive tokens.
+**Intentional incompatibility:** hostname-equivalent URLs outside the credential-free HTTPS default-port origin no longer receive tokens.
 
-**Regressions:** `authorization_is_limited_to_exact_github_api_hosts`, `github_authorization_requires_https_without_credentials_or_ports`, and `malformed_and_control_bearing_urls_never_receive_credentials`.
+**Regressions:** `authorization_is_limited_to_exact_github_api_hosts`, `github_authorization_requires_https_without_credentials_or_non_default_ports`, `explicit_default_https_port_receives_github_authorization`, `non_default_port_redirect_target_does_not_receive_github_authorization`, and `malformed_and_control_bearing_urls_never_receive_credentials`.
 
 ## TU-023: Token validation, fallback, and diagnostic boundaries
 
@@ -244,6 +244,22 @@ TDD evidence: RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094b
 - Clippy lifetime correction: `e47b4994e0d97641c2f976231aa89833aa142913`.
 
 The first RED workflow stopped at formatting, so it is retained as chronological test-first evidence rather than a clean behavioral RED execution. At merge head, formatting, compilation, and all migration parity/security tests passed before Clippy exposed the unrelated explicit lifetime consolidated from the create-directory tranche. The lifetime was then removed without changing behavior.
+
+## TU-031: Unbounded request URLs expand parser and redirect state
+
+**Severity:** Medium
+
+**TypeScript behavior:** request URLs are accepted without a shared size boundary before parsing, proxy selection, credential routing, or redirect-state updates.
+
+**Impact:** a caller-controlled URL can force disproportionate scanning and allocation and can carry an oversized value into redirect-chain state. Credential and proxy decisions must not succeed on input that the bounded request layer would reject.
+
+**Rust fix:** the shared absolute-URL parser rejects values above 8,192 UTF-8 bytes. The boundary is applied before GitHub authorization, proxy selection, redirect-origin comparison, initial chain creation, and redirect mutation. A rejected target leaves the current URL, policy, and hop count unchanged.
+
+**Intentional incompatibility:** oversized URLs fail closed with no authorization header and a typed `InvalidRequestUrl` error instead of being interpreted or retained.
+
+**Regressions:** `request_url_boundary_preserves_safe_input`, `oversized_request_urls_fail_closed_across_policy_entrypoints`, and `oversized_redirect_target_does_not_mutate_chain_state`.
+
+TDD evidence: RED `4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c`, GREEN `19f91e5ca23fb547e06d727a628a1405033f5420`, formatting `538e2ddb259bb29dd2e973432f49d01e30985c1f`.
 
 ## Advisory lookup record
 

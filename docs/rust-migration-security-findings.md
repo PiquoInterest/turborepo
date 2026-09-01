@@ -260,6 +260,18 @@ This tranche adds no dependency, network call, credential access, parser crate, 
 
 Required production closure is a request executor that consumes the decision exactly once across redirects, applies an explicit DNS/rebinding and TLS policy, bounds time and response size, redacts proxy credentials, passes Linux/macOS/Windows differentials, and removes the TypeScript request path only after binding and packaging proof.
 
+### RF-026: Request authority normalization and URL bounds were incomplete
+
+**Status:** Fixed in the Rust network-policy core; production request execution remains blocked.
+
+The network core previously compared raw GitHub authorities, so an explicit default HTTPS port was treated as a different origin, while request URLs had no shared input-size boundary. The corrected policy normalizes the effective HTTPS port for exact GitHub API hosts, continues to reject userinfo and non-default ports, and rejects URLs above 8,192 UTF-8 bytes before authorization, proxy, or redirect-state decisions.
+
+Rejected redirect targets cannot mutate the chain URL, authorization/proxy policy, or hop count. The change adds no dependency, parser crate, network call, subprocess, credential source, or unsafe code.
+
+TDD evidence is RED `4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c`, GREEN `19f91e5ca23fb547e06d727a628a1405033f5420`, and formatting `538e2ddb259bb29dd2e973432f49d01e30985c1f`. Regression coverage is in `packages/turbo-utils/rust/tests/network_authority_bounds.rs` and `network_security.rs`.
+
+Production closure still requires one bounded request executor with explicit TLS, DNS/rebinding, proxy application, redirect, timeout, response-size, cancellation, and credential-redaction behavior across Linux, macOS, and Windows.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:
