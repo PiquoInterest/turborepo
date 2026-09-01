@@ -12,6 +12,31 @@ use turborepo_telemetry::events::package::{
     environment_value_is_truthy,
 };
 
+trait TestMust {
+    type Output;
+
+    fn test_must(self, context: &str) -> Self::Output;
+}
+
+impl<T, E> TestMust for Result<T, E>
+where
+    E: std::fmt::Debug,
+{
+    type Output = T;
+
+    fn test_must(self, context: &str) -> Self::Output {
+        self.unwrap_or_else(|error| panic!("{context}: {error:?}"))
+    }
+}
+
+impl<T> TestMust for Option<T> {
+    type Output = T;
+
+    fn test_must(self, context: &str) -> Self::Output {
+        self.unwrap_or_else(|| panic!("{context}"))
+    }
+}
+
 #[derive(Clone, Default)]
 struct RecordingTransport {
     requests: Arc<Mutex<Vec<PackageTelemetryRequest>>>,
@@ -19,20 +44,26 @@ struct RecordingTransport {
 
 impl RecordingTransport {
     fn requests(&self) -> Vec<PackageTelemetryRequest> {
-        self.requests.lock().unwrap().clone()
+        self.requests
+            .lock()
+            .test_must("telemetry test invariant")
+            .clone()
     }
 }
 
 impl PackageTelemetryTransport for RecordingTransport {
     fn send(&self, request: PackageTelemetryRequest) -> PackageSendFuture {
-        self.requests.lock().unwrap().push(request);
+        self.requests
+            .lock()
+            .test_must("telemetry test invariant")
+            .push(request);
         Box::pin(async {})
     }
 }
 
 fn config() -> (TempDir, PackageTelemetryConfig) {
-    let temp = tempfile::tempdir().unwrap();
-    let root = AbsoluteSystemPathBuf::try_from(temp.path()).unwrap();
+    let temp = tempfile::tempdir().test_must("telemetry test invariant");
+    let root = AbsoluteSystemPathBuf::try_from(temp.path()).test_must("telemetry test invariant");
     let path = root.join_component("telemetry.json");
     std::fs::write(
         path.as_path(),
@@ -42,8 +73,8 @@ fn config() -> (TempDir, PackageTelemetryConfig) {
   "telemetry_salt": "private-salt"
 }"#,
     )
-    .unwrap();
-    let config = PackageTelemetryConfig::new(path).unwrap();
+    .test_must("telemetry test invariant");
+    let config = PackageTelemetryConfig::new(path).test_must("telemetry test invariant");
     (temp, config)
 }
 
@@ -53,13 +84,14 @@ fn secure_client(
     let (temp, config) = config();
     let client = PackageTelemetryClient::new(
         "https://example.com",
-        PackageInfo::new(PackageKind::CreateTurbo, "1.0.0").unwrap(),
-        PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").unwrap(),
+        PackageInfo::new(PackageKind::CreateTurbo, "1.0.0").test_must("telemetry test invariant"),
+        PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").test_must("telemetry test invariant"),
         config,
-        PackageTelemetryOptions::new(20, Duration::from_millis(250)).unwrap(),
+        PackageTelemetryOptions::new(20, Duration::from_millis(250))
+            .test_must("telemetry test invariant"),
         transport,
     )
-    .unwrap();
+    .test_must("telemetry test invariant");
     (temp, client)
 }
 
@@ -74,8 +106,10 @@ fn endpoint_rejects_credentials_fragments_and_non_https_schemes() {
         let (_temp, config) = config();
         let result = PackageTelemetryClient::new(
             endpoint,
-            PackageInfo::new(PackageKind::CreateTurbo, "1.0.0").unwrap(),
-            PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").unwrap(),
+            PackageInfo::new(PackageKind::CreateTurbo, "1.0.0")
+                .test_must("telemetry test invariant"),
+            PackageRuntimeInfo::new("v20.11.30", "Linux", "x64")
+                .test_must("telemetry test invariant"),
             config,
             PackageTelemetryOptions::default(),
             RecordingTransport::default(),
@@ -92,8 +126,10 @@ fn metadata_rejects_header_and_terminal_control_injection() {
     assert!(
         PackageTelemetryClient::new(
             "https://example.com",
-            PackageInfo::new(PackageKind::CreateTurbo, "1.0.0").unwrap(),
-            PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").unwrap(),
+            PackageInfo::new(PackageKind::CreateTurbo, "1.0.0")
+                .test_must("telemetry test invariant"),
+            PackageRuntimeInfo::new("v20.11.30", "Linux", "x64")
+                .test_must("telemetry test invariant"),
             config,
             PackageTelemetryOptions::default(),
             RecordingTransport::default(),
@@ -123,7 +159,8 @@ async fn credential_bearing_example_never_enters_payload() {
     telemetry.close().await;
 
     let requests = transport.requests();
-    let serialized = serde_json::to_string(&requests[0].events).unwrap();
+    let serialized =
+        serde_json::to_string(&requests[0].events).test_must("telemetry test invariant");
     for secret in [
         "ghp_secret",
         "token=secret",
@@ -140,20 +177,21 @@ async fn warnings_errors_and_fallback_refs_are_not_sent_verbatim() {
     let (_temp, config) = config();
     let client = PackageTelemetryClient::new(
         "https://example.com",
-        PackageInfo::new(PackageKind::TurboIgnore, "1.0.0").unwrap(),
-        PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").unwrap(),
+        PackageInfo::new(PackageKind::TurboIgnore, "1.0.0").test_must("telemetry test invariant"),
+        PackageRuntimeInfo::new("v20.11.30", "Linux", "x64").test_must("telemetry test invariant"),
         config,
-        PackageTelemetryOptions::new(20, Duration::from_millis(250)).unwrap(),
+        PackageTelemetryOptions::new(20, Duration::from_millis(250))
+            .test_must("telemetry test invariant"),
         transport.clone(),
     )
-    .unwrap();
+    .test_must("telemetry test invariant");
     let mut telemetry = TurboIgnoreTelemetry::new(client);
 
     let warning = telemetry.track_command_warning("token=super-secret");
     let error = telemetry.track_command_error("Authorization: Bearer secret");
     let fallback = telemetry
         .track_option_fallback(Some("refs/heads/customer-private-branch"))
-        .unwrap();
+        .test_must("telemetry test invariant");
 
     assert_ne!(warning.value, "token=super-secret");
     assert_ne!(error.value, "Authorization: Bearer secret");
@@ -161,7 +199,8 @@ async fn warnings_errors_and_fallback_refs_are_not_sent_verbatim() {
 
     telemetry.close().await;
     let requests = transport.requests();
-    let serialized = serde_json::to_string(&requests[0].events).unwrap();
+    let serialized =
+        serde_json::to_string(&requests[0].events).test_must("telemetry test invariant");
     assert!(!serialized.contains("super-secret"));
     assert!(!serialized.contains("Bearer secret"));
     assert!(!serialized.contains("customer-private-branch"));
@@ -182,16 +221,16 @@ fn case_insensitive_opt_out_and_debug_values_match_typescript() {
 fn symlinked_config_is_rejected_without_following_the_link() {
     use std::os::unix::fs::symlink;
 
-    let temp = tempfile::tempdir().unwrap();
-    let root = AbsoluteSystemPathBuf::try_from(temp.path()).unwrap();
+    let temp = tempfile::tempdir().test_must("telemetry test invariant");
+    let root = AbsoluteSystemPathBuf::try_from(temp.path()).test_must("telemetry test invariant");
     let target = root.join_component("target.json");
     let link = root.join_component("telemetry.json");
     std::fs::write(
         target.as_path(),
         r#"{"telemetry_enabled":true,"telemetry_id":"id","telemetry_salt":"salt"}"#,
     )
-    .unwrap();
-    symlink(target.as_path(), link.as_path()).unwrap();
+    .test_must("telemetry test invariant");
+    symlink(target.as_path(), link.as_path()).test_must("telemetry test invariant");
 
     assert!(PackageTelemetryConfig::new(link).is_err());
     assert!(target.exists());
