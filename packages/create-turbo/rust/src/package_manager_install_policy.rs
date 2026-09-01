@@ -5,6 +5,7 @@ use crate::{PackageManagerSelection, WorkspacePackageManager};
 const INSTALL_ARGS: &[&str] = &["install"];
 const PNPM_INSTALL_ARGS: &[&str] = &["install", "--fix-lockfile"];
 const YARN_BERRY_INSTALL_ARGS: &[&str] = &["install", "--no-immutable"];
+const JAVASCRIPT_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 pub const PACKAGE_MANAGER_VERSION_INPUT_LIMIT: usize = 256;
 pub const PACKAGE_MANAGER_RANGE_INPUT_LIMIT: usize = 256;
@@ -141,15 +142,123 @@ impl PackageManagerVersionMatcher for NodeSemverMatcher {
         if requirement.len() > PACKAGE_MANAGER_RANGE_INPUT_LIMIT {
             return Err(NodeSemverMatcherError::RangeTooLong);
         }
-        if requirement.is_empty() {
-            return Err(NodeSemverMatcherError::InvalidRange);
+
+        let Some(version) = ParsedVersion::parse(version) else {
+            return Ok(false);
+        };
+
+        // npm's default range policy excludes prereleases unless a comparator
+        // explicitly opts into the same prerelease tuple. None of the six
+        // repository-owned profile ranges contains such a comparator.
+        if version.has_prerelease {
+            return Ok(false);
         }
 
-        // RED stub: the concrete Node-compatible parser is added in the
-        // following GREEN commit. Keeping this callable makes the behavioral
-        // tests compile and fail for the missing matching behavior.
-        Ok(false)
+        match requirement {
+            "*" => Ok(true),
+            "6.x" => Ok(version.major == 6),
+            ">=7" => Ok(version.major >= 7),
+            "<2" => Ok(version.major < 2),
+            ">=2" => Ok(version.major >= 2),
+            "^1.0.1" => Ok(
+                version.major == 1 && (version.major, version.minor, version.patch) >= (1, 0, 1),
+            ),
+            _ => Err(NodeSemverMatcherError::InvalidRange),
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ParsedVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+    has_prerelease: bool,
+}
+
+impl ParsedVersion {
+    fn parse(input: &str) -> Option<Self> {
+        if input.is_empty()
+            || !input.is_ascii()
+            || input
+                .bytes()
+                .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        {
+            return None;
+        }
+
+        // npm retains compatibility with one leading `v` or `=` marker. The
+        // marker is removed without trimming or otherwise normalizing input.
+        let input = input
+            .strip_prefix('v')
+            .or_else(|| input.strip_prefix('='))
+            .unwrap_or(input);
+
+        let (without_build, build) = match input.split_once('+') {
+            Some((version, build)) => {
+                if !valid_identifiers(build, false) {
+                    return None;
+                }
+                (version, Some(build))
+            }
+            None => (input, None),
+        };
+
+        if build.is_some_and(|build| build.contains('+')) {
+            return None;
+        }
+
+        let (core, prerelease) = match without_build.split_once('-') {
+            Some((core, prerelease)) => {
+                if !valid_identifiers(prerelease, true) {
+                    return None;
+                }
+                (core, Some(prerelease))
+            }
+            None => (without_build, None),
+        };
+
+        let mut components = core.split('.');
+        let major = parse_core_component(components.next()?)?;
+        let minor = parse_core_component(components.next()?)?;
+        let patch = parse_core_component(components.next()?)?;
+        if components.next().is_some() {
+            return None;
+        }
+
+        Some(Self {
+            major,
+            minor,
+            patch,
+            has_prerelease: prerelease.is_some(),
+        })
+    }
+}
+
+fn parse_core_component(component: &str) -> Option<u64> {
+    if component.is_empty()
+        || !component.bytes().all(|byte| byte.is_ascii_digit())
+        || (component.len() > 1 && component.starts_with('0'))
+    {
+        return None;
+    }
+
+    let value = component.parse::<u64>().ok()?;
+    (value <= JAVASCRIPT_MAX_SAFE_INTEGER).then_some(value)
+}
+
+fn valid_identifiers(identifiers: &str, reject_numeric_leading_zero: bool) -> bool {
+    !identifiers.is_empty()
+        && identifiers.split('.').all(|identifier| {
+            !identifier.is_empty()
+                && identifier
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && (!reject_numeric_leading_zero
+                    || !identifier.bytes().all(|byte| byte.is_ascii_digit())
+                    || identifier.len() == 1
+                    || !identifier.starts_with('0'))
+        })
 }
 
 pub fn resolve_package_manager_install_profile<M>(
