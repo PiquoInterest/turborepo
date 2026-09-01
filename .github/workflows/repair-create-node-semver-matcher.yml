@@ -198,10 +198,22 @@ jobs:
             Cargo.toml \
             Cargo.lock \
             packages/create-turbo/rust/Cargo.toml \
-            packages/create-turbo/rust/src/package_manager_install_policy.rs
+            packages/create-turbo/rust/src/lib.rs \
+            packages/create-turbo/rust/src/package_manager_install_policy.rs \
+            packages/create-turbo/rust/tests/package_manager_install_policy_parity.rs
           git diff --cached --check
           git commit -m "feat(create-turbo): Implement strict bounded Node semver matcher"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit pre-existing network-authority rustfmt repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add packages/turbo-utils/rust/tests/network_authority_bounds.rs
+          test "$(git diff --cached --name-only)" = \
+            "packages/turbo-utils/rust/tests/network_authority_bounds.rs"
+          git diff --cached --check
+          git commit -m "style(turbo-utils): Restore network authority rustfmt output"
 
       - name: Record parity, security, advisory, and progress evidence
         run: |
