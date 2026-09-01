@@ -153,9 +153,58 @@ where
 }
 
 #[must_use]
-pub fn is_compatible_with_bun_workspaces(_workspace_globs: &[&str]) -> bool {
-    // RED stub: the source-compatible validator is added in the following
-    // GREEN commit. Keeping the final API callable makes the translated tests
-    // fail for missing behavior rather than missing symbols.
-    false
+pub fn is_compatible_with_bun_workspaces(workspace_globs: &[&str]) -> bool {
+    if workspace_globs.len() > BUN_WORKSPACE_GLOB_COUNT_LIMIT {
+        return false;
+    }
+
+    let mut total_bytes = 0usize;
+    workspace_globs.iter().copied().all(|workspace_glob| {
+        let Some(next_total) = total_bytes.checked_add(workspace_glob.len()) else {
+            return false;
+        };
+        total_bytes = next_total;
+
+        if workspace_glob.len() > BUN_WORKSPACE_GLOB_INPUT_LIMIT
+            || total_bytes > BUN_WORKSPACE_GLOB_TOTAL_INPUT_LIMIT
+            || contains_unsafe_workspace_glob_text(workspace_glob)
+        {
+            return false;
+        }
+
+        if workspace_glob.contains('*') {
+            if workspace_glob.contains("**") {
+                return false;
+            }
+            if workspace_glob
+                .rsplit_once('/')
+                .is_some_and(|(prefix, _)| prefix.contains('*'))
+            {
+                return false;
+            }
+        }
+
+        !workspace_glob
+            .bytes()
+            .any(|byte| matches!(byte, b'!' | b'[' | b']' | b'{' | b'}'))
+    })
+}
+
+fn contains_unsafe_workspace_glob_text(value: &str) -> bool {
+    value.chars().any(|character| {
+        matches!(
+            character,
+            '\u{0000}'..='\u{001f}'
+                | '\u{007f}'..='\u{009f}'
+                | '\u{00ad}'
+                | '\u{034f}'
+                | '\u{061c}'
+                | '\u{180e}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{2028}'..='\u{202e}'
+                | '\u{2060}'..='\u{206f}'
+                | '\u{feff}'
+                | '\u{fff9}'..='\u{fffb}'
+        )
+    })
 }
