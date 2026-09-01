@@ -74,30 +74,44 @@ jobs:
           pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
             __tests__/workspace-details.test.ts
 
-      - name: Resolve the exact locked Turbo hook command
+      - name: Resolve the branch-matched locked Turbo binary
         shell: bash
         run: |
           set -euo pipefail
-          turbo_bin="$(
-            pnpm --filter eslint-plugin-turbo exec sh -c 'command -v turbo'
+          wrapper_version="$(
+            node -p 'require("./packages/turbo/package.json").version'
           )"
-          case "$turbo_bin" in
+          binary_version="$(
+            pnpm --filter turbo exec node -p \
+              'require("@turbo/linux-64/package.json").version'
+          )"
+          test "$binary_version" = "$wrapper_version"
+
+          turbo_binary="$(
+            pnpm --filter turbo exec node -p \
+              'require.resolve("@turbo/linux-64/bin/turbo")'
+          )"
+          case "$turbo_binary" in
             "$GITHUB_WORKSPACE"/*) ;;
             *)
-              echo "resolved Turbo command escaped the workspace: $turbo_bin" >&2
+              echo "resolved Turbo binary escaped the workspace: $turbo_binary" >&2
               exit 1
               ;;
           esac
-          test -x "$turbo_bin"
-          test "$("$turbo_bin" --version)" = "2.8.3"
-          echo "$(dirname "$turbo_bin")" >> "$GITHUB_PATH"
+          test -x "$turbo_binary"
+          test "$("$turbo_binary" --version)" = "$wrapper_version"
+
+          mkdir -p "$RUNNER_TEMP/repository-bin"
+          ln -s "$turbo_binary" "$RUNNER_TEMP/repository-bin/turbo"
+          echo "$RUNNER_TEMP/repository-bin" >> "$GITHUB_PATH"
 
       - name: Commit the exact formatter output and remove automation
         shell: bash
         run: |
           set -euo pipefail
           command -v turbo
-          test "$(turbo --version)" = "2.8.3"
+          test "$(turbo --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
           rm .github/workflows/format-workspace-details-oracle.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
