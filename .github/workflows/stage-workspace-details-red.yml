@@ -27,7 +27,7 @@ jobs:
           ref: rust/typescript-deprecation
           fetch-depth: 0
 
-      - name: Verify branch and oracle commit
+      - name: Verify branch and pinned TypeScript oracle
         shell: bash
         run: |
           set -euo pipefail
@@ -36,6 +36,10 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor \
             4e7fb108a32798fc2a9f8c2f3b9caa3ae18c78ff HEAD
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/__tests__/workspace-details.test.ts)" = \
+            "6e02fb9cd847a24d49ecdacb77effaa78ed6ed45"
+          test "$(git rev-parse HEAD:tools/migration/stage_workspace_details_red.py)" = \
+            "8ebdd66b68c15519371b94b5aa5d2799929a3371"
           test ! -e packages/turbo-workspaces/rust
           grep -Fq '"aube",' \
             packages/turbo-workspaces/__tests__/workspace-details.test.ts
