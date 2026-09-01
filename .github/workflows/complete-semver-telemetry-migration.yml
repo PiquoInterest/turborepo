@@ -127,6 +127,7 @@ jobs:
           set -euo pipefail
           bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
           bash -euo pipefail /tmp/prove-rust-dependency-coherence.sh
+          git checkout -- .github/workflows/rust-migration-validate.yml
           python3 tools/check-rust-dependency-coherence.py
           cargo metadata --locked --format-version 1 >/tmp/coherent-cargo-metadata.json
           cargo check --locked -p create-turbo-rs --all-targets
@@ -138,24 +139,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm \
-            .github/workflows/repair-rust-dependency-coherence.yml \
-            .github/workflows/repair-rust-dependency-coherence-v2.yml \
-            .github/workflows/repair-rust-dependency-coherence-v3.yml \
-            .github/workflows/repair-rust-dependency-coherence-v4.yml \
-            .github/workflows/complete-semver-telemetry-migration.yml
           git add \
             Cargo.toml \
             Cargo.lock \
-            .github/workflows/rust-migration-validate.yml \
-            .github/workflows/repair-rust-dependency-coherence.yml \
-            .github/workflows/repair-rust-dependency-coherence-v2.yml \
-            .github/workflows/repair-rust-dependency-coherence-v3.yml \
-            .github/workflows/repair-rust-dependency-coherence-v4.yml \
-            .github/workflows/complete-semver-telemetry-migration.yml \
             tools/check-rust-dependency-coherence.py
           git diff --cached --check
-          test "$(git diff --cached --name-only | wc -l)" -eq 9
+          test "$(git diff --cached --name-only | wc -l)" -eq 3
           git commit -m "fix(rust): Pin coherent parser dependency families"
 
       - name: Set up Node and install the locked workspace
@@ -350,13 +339,32 @@ jobs:
               raise SystemExit("reviewed telemetry Clippy anchor changed")
           path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/turborepo-telemetry/tests/package_security.rs")
+          text = path.read_text(encoding="utf-8")
+          expected = 4
+          actual = text.count(".unwrap()")
+          if actual != expected:
+              raise SystemExit(
+                  f"telemetry parent-symlink unwrap count changed: expected {expected}, found {actual}"
+              )
+          text = text.replace(
+              ".unwrap()",
+              '.test_must("telemetry parent-symlink setup")',
+          )
+          if ".unwrap()" in text or ".expect(" in text:
+              raise SystemExit("panic shorthand remains in telemetry security tests")
+          path.write_text(text, encoding="utf-8")
+          PY
+          git checkout -- .github/workflows/rust-migration-validate.yml
           cargo fmt --all
           cargo fmt --all --check
           python3 <<'PY'
           import subprocess
 
           expected = {
-              ".github/workflows/rust-migration-validate.yml",
               "crates/turborepo-telemetry/src/events/package/config.rs",
               "crates/turborepo-telemetry/tests/package_security.rs",
               "tools/migration/apply_create_node_semver_matcher.py",
@@ -379,7 +387,6 @@ jobs:
             exit 1
           fi
           git add \
-            .github/workflows/rust-migration-validate.yml \
             crates/turborepo-telemetry/src/events/package/config.rs \
             crates/turborepo-telemetry/tests/package_security.rs
           git diff --cached --check
@@ -419,17 +426,10 @@ jobs:
           )
           PY
 
-          rm -f \
-            .github/workflows/repair-create-node-semver-matcher.yml \
-            .github/workflows/finalize-create-node-semver-matcher.yml \
-            .github/workflows/finalize-create-node-semver-v2.yml \
-            .github/workflows/finalize-semver-telemetry-v3.yml \
-            tools/migration/repair_create_node_semver_matcher.py
+          git checkout -- .github/workflows
+          rm -f tools/migration/repair_create_node_semver_matcher.py
 
-          test ! -e .github/workflows/apply-create-node-semver-matcher.yml
           test ! -e tools/migration/apply_create_node_semver_matcher.py
-          test -z "$(find .github/workflows -maxdepth 1 -type f -name '*node-semver*' -print)"
-          test -z "$(find .github/workflows -maxdepth 1 -type f -name '*semver-telemetry*' -print)"
           grep -Fq 'CT-RS-036' packages/create-turbo/rust/SECURITY.md
           grep -Fq 'RF-026' docs/rust-migration-security-findings.md
           grep -Fq '${{ steps.semver.outputs.sha }}' \
@@ -442,11 +442,6 @@ jobs:
           import subprocess
 
           allowed = {
-              ".github/workflows/apply-create-node-semver-matcher.yml",
-              ".github/workflows/repair-create-node-semver-matcher.yml",
-              ".github/workflows/finalize-create-node-semver-matcher.yml",
-              ".github/workflows/finalize-create-node-semver-v2.yml",
-              ".github/workflows/finalize-semver-telemetry-v3.yml",
               "tools/migration/apply_create_node_semver_matcher.py",
               "tools/migration/repair_create_node_semver_matcher.py",
               "packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md",
@@ -466,7 +461,6 @@ jobs:
           if unexpected:
               raise SystemExit(f"unexpected evidence commit paths: {unexpected}")
           required = {
-              ".github/workflows/apply-create-node-semver-matcher.yml",
               "tools/migration/apply_create_node_semver_matcher.py",
               "packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md",
               "crates/turborepo-telemetry/README.md",
