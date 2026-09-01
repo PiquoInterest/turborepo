@@ -1,0 +1,330 @@
+name: Repair Rust dependency coherence v3
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/repair-rust-dependency-coherence-v3.yml
+
+concurrency:
+  group: repair-rust-dependency-coherence-v3-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Apply the already-reviewed dependency repair inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path(
+              ".github/workflows/repair-rust-dependency-coherence-v2.yml"
+          )
+          lines = workflow.read_text(encoding="utf-8").splitlines()
+          marker = "      - name: Pin compatible dependency families and add the invariant checker"
+          try:
+              start = lines.index(marker)
+          except ValueError as error:
+              raise SystemExit("reviewed dependency repair step is missing") from error
+
+          run_index = next(
+              index
+              for index in range(start + 1, len(lines))
+              if lines[index] == "        run: |"
+          )
+          end = next(
+              (
+                  index
+                  for index in range(run_index + 1, len(lines))
+                  if lines[index].startswith("      - name:")
+              ),
+              len(lines),
+          )
+          script = textwrap.dedent("\n".join(lines[run_index + 1 : end])) + "\n"
+          if "downgrade_if_locked unrs_resolver 1.12.2 1.11.1" not in script:
+              raise SystemExit("reviewed resolver repair command is missing")
+          if "tools/check-rust-dependency-coherence.py" not in script:
+              raise SystemExit("permanent dependency checker generation is missing")
+          Path("/tmp/apply-rust-dependency-coherence.sh").write_text(
+              script, encoding="utf-8"
+          )
+          PY
+          bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
+
+      - name: Prove the exact lockfile identity and edge delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check-rust-dependency-coherence.py
+          python3 <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          EXPECTED_REMOVED = {
+              ("biome_console", "0.5.8"),
+              ("biome_diagnostics", "0.5.8"),
+              ("biome_parser", "0.5.8"),
+              ("biome_rowan", "0.5.8"),
+              ("biome_string_case", "0.5.8"),
+              ("biome_text_edit", "0.5.8"),
+              ("biome_text_size", "0.5.8"),
+              ("biome_unicode_table", "0.5.9"),
+              ("enumflags2", "0.7.12"),
+              ("enumflags2_derive", "0.7.12"),
+              ("fast-glob", "1.1.1"),
+              ("float-cmp", "0.10.0"),
+              ("halfbrown", "0.4.0"),
+              ("json-strip-comments", "3.1.2"),
+              ("nodejs-built-in-modules", "1.0.0"),
+              ("result", "1.0.0"),
+              ("self_cell", "1.3.0"),
+              ("serde_ini", "0.2.0"),
+              ("simd-json", "0.17.3"),
+              ("unrs_resolver", "1.12.2"),
+              ("value-trait", "0.12.2"),
+              ("void", "1.0.2"),
+              ("windows", "0.62.2"),
+              ("windows-collections", "0.3.2"),
+              ("windows-future", "0.3.2"),
+              ("windows-numerics", "0.3.1"),
+              ("windows-threading", "0.2.1"),
+          }
+          EXPECTED_ADDED = {
+              ("biome_console", "0.5.7"),
+              ("biome_diagnostics", "0.5.7"),
+              ("biome_parser", "0.5.7"),
+              ("biome_rowan", "0.5.7"),
+              ("biome_string_case", "0.5.7"),
+              ("biome_text_edit", "0.5.7"),
+              ("biome_text_size", "0.5.7"),
+              ("biome_unicode_table", "0.5.7"),
+              ("memoffset", "0.8.0"),
+              ("unrs_resolver", "1.11.1"),
+          }
+          EXPECTED_SHARED_EDGE_DELTAS = {
+              ("winapi-util", "0.1.11"): (
+                  {"windows-sys 0.61.2"},
+                  {"windows-sys 0.48.0"},
+              )
+          }
+
+          def load(path: str) -> dict:
+              return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+          def key(package: dict) -> tuple[str, str, str]:
+              return (
+                  package["name"],
+                  package["version"],
+                  package.get("source", ""),
+              )
+
+          before = {
+              key(package): package
+              for package in load("/tmp/rust-dependency-coherence-Cargo.lock.original").get(
+                  "package", []
+              )
+          }
+          after = {
+              key(package): package
+              for package in load("Cargo.lock").get("package", [])
+          }
+
+          removed = set(before) - set(after)
+          added = set(after) - set(before)
+          removed_name_versions = {(name, version) for name, version, _ in removed}
+          added_name_versions = {(name, version) for name, version, _ in added}
+          if removed_name_versions != EXPECTED_REMOVED:
+              raise SystemExit(
+                  "unexpected removed lockfile identities: "
+                  f"expected={sorted(EXPECTED_REMOVED)}, "
+                  f"actual={sorted(removed_name_versions)}"
+              )
+          if added_name_versions != EXPECTED_ADDED:
+              raise SystemExit(
+                  "unexpected added lockfile identities: "
+                  f"expected={sorted(EXPECTED_ADDED)}, "
+                  f"actual={sorted(added_name_versions)}"
+              )
+
+          actual_shared_edge_deltas = {}
+          for package_key in sorted(set(before) & set(after)):
+              old = dict(before[package_key])
+              new = dict(after[package_key])
+              old_dependencies = set(old.pop("dependencies", []))
+              new_dependencies = set(new.pop("dependencies", []))
+              if old != new:
+                  raise SystemExit(
+                      f"metadata changed for unchanged lockfile package {package_key}"
+                  )
+              removed_edges = old_dependencies - new_dependencies
+              added_edges = new_dependencies - old_dependencies
+              if removed_edges or added_edges:
+                  actual_shared_edge_deltas[package_key[:2]] = (
+                      removed_edges,
+                      added_edges,
+                  )
+
+          if actual_shared_edge_deltas != EXPECTED_SHARED_EDGE_DELTAS:
+              raise SystemExit(
+                  "unexpected shared-package dependency edge delta: "
+                  f"expected={EXPECTED_SHARED_EDGE_DELTAS}, "
+                  f"actual={actual_shared_edge_deltas}"
+              )
+
+          print(
+              "Exact dependency repair delta verified: "
+              f"{len(removed)} removed, {len(added)} added, "
+              f"{len(actual_shared_edge_deltas)} shared edge rewrite"
+          )
+          PY
+
+      - name: Validate telemetry and create-turbo on the coherent graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt -p turborepo-telemetry -- --check
+          cargo fmt -p create-turbo-rs -- --check
+          cargo check --locked -p turborepo-telemetry --all-targets
+          cargo test --locked -p turborepo-telemetry --all-targets
+          cargo clippy --locked -p turborepo-telemetry --all-targets -- -D warnings
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          git diff --check
+
+      - name: Format the complete Rust workspace and constrain legacy drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          python3 <<'PY'
+          import subprocess
+
+          allowed = {"packages/turbo-utils/rust/tests/network_authority_bounds.rs"}
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--name-only", "--", "*.rs"], text=True
+              ).splitlines()
+          )
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit(f"unexpected rustfmt drift: {unexpected}")
+          PY
+          cargo fmt --all --check
+
+      - name: Commit the coherent dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm \
+            .github/workflows/repair-rust-dependency-coherence.yml \
+            .github/workflows/repair-rust-dependency-coherence-v2.yml \
+            .github/workflows/repair-rust-dependency-coherence-v3.yml
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            .github/workflows/rust-migration-validate.yml \
+            .github/workflows/repair-rust-dependency-coherence.yml \
+            .github/workflows/repair-rust-dependency-coherence-v2.yml \
+            .github/workflows/repair-rust-dependency-coherence-v3.yml \
+            tools/check-rust-dependency-coherence.py
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 7
+          git commit -m "fix(rust): Pin coherent parser dependency families"
+
+      - name: Commit isolated pre-existing rustfmt repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- packages/turbo-utils/rust/tests/network_authority_bounds.rs; then
+            git add packages/turbo-utils/rust/tests/network_authority_bounds.rs
+            test "$(git diff --cached --name-only)" = \
+              "packages/turbo-utils/rust/tests/network_authority_bounds.rs"
+            git diff --cached --check
+            git commit -m "style(turbo-utils): Restore network authority rustfmt output"
+          fi
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Install source-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build the branch-compatible Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Preflight and push through the unchanged repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          command -v turbo
+          sh .husky/pre-push
+          test -z "$(git status --porcelain)"
+
+          git config --unset-all remote.origin.pushurl || true
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during validation: $remote_head" >&2
+            exit 1
+          fi
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation
