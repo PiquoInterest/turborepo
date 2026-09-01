@@ -1,4 +1,4 @@
-name: Resume semver and telemetry migration v4
+name: Materialize semver and telemetry migration repair v4
 
 on:
   push:
@@ -13,10 +13,9 @@ concurrency:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
-  resume:
+  materialize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -36,51 +35,23 @@ jobs:
           test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - name: Close the telemetry Clippy blocker and enable guarded dispatch
+      - name: Materialize the exact telemetry Clippy closure
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
 
-          path = Path(".github/workflows/complete-semver-telemetry-migration.yml")
-          text = path.read_text(encoding="utf-8")
+          source = Path(".github/workflows/complete-semver-telemetry-migration.yml")
+          output = Path("tools/migration/generated-complete-semver-telemetry.yml")
+          if output.exists():
+              raise SystemExit("generated telemetry workflow handoff already exists")
 
-          def replace_once(old: str, new: str, label: str) -> None:
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label} anchor count changed: {count}")
-              text = text.replace(old, new, 1)
-
-          replace_once(
-              """on:
-            push:
-              branches:
-                - rust/typescript-deprecation
-              paths:
-                - .github/workflows/complete-semver-telemetry-migration.yml
-          """,
-              """on:
-            push:
-              branches:
-                - rust/typescript-deprecation
-              paths:
-                - .github/workflows/complete-semver-telemetry-migration.yml
-            workflow_dispatch:
-          """,
-              "workflow dispatch",
-          )
-          replace_once(
-              "    if: github.actor != 'github-actions[bot]'\n",
-              "    if: github.event_name == 'workflow_dispatch'\n",
-              "dispatch guard",
-          )
-          replace_once(
-              """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+          text = source.read_text(encoding="utf-8")
+          old = """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
                     cargo fmt --all
-          """,
-              """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+          """
+          new = """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
                     python3 <<'PY'
                     from pathlib import Path
 
@@ -111,55 +82,35 @@ jobs:
                     path.write_text(text.replace(old, new, 1), encoding="utf-8")
                     PY
                     cargo fmt --all
-          """,
-              "telemetry Clippy closure",
-          )
+          """
+          if text.count(old) != 1:
+              raise SystemExit(
+                  f"telemetry workflow anchor count changed: {text.count(old)}"
+              )
+          if "workflow_dispatch:" in text:
+              raise SystemExit("unreviewed dispatch authority is present")
+          if "github.event_name == 'workflow_dispatch'" in text:
+              raise SystemExit("unreviewed dispatch-only job guard is present")
 
-          if text.count("workflow_dispatch:") != 1:
-              raise SystemExit("guarded dispatch was not installed exactly once")
-          if text.count("reviewed telemetry Clippy anchor changed") != 1:
-              raise SystemExit("telemetry Clippy repair was not installed exactly once")
-          path.write_text(text, encoding="utf-8")
+          patched = text.replace(old, new, 1)
+          if patched.count("reviewed telemetry Clippy anchor changed") != 1:
+              raise SystemExit("telemetry Clippy closure was not materialized exactly once")
+          output.write_text(patched, encoding="utf-8")
           PY
 
-          git diff --check
-          git diff -- .github/workflows/complete-semver-telemetry-migration.yml
+          git diff --no-index -- \
+            .github/workflows/complete-semver-telemetry-migration.yml \
+            tools/migration/generated-complete-semver-telemetry.yml || test "$?" -eq 1
 
-      - name: Commit the guarded repair and remove this resumer
+      - name: Commit the non-workflow handoff
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm .github/workflows/resume-semver-telemetry-v4.yml
-          git add \
-            .github/workflows/complete-semver-telemetry-migration.yml \
-            .github/workflows/resume-semver-telemetry-v4.yml
+          git add tools/migration/generated-complete-semver-telemetry.yml
           git diff --cached --check
-          python3 <<'PY'
-          import subprocess
-
-          expected = {
-              ".github/workflows/complete-semver-telemetry-migration.yml",
-              ".github/workflows/resume-semver-telemetry-v4.yml",
-          }
-          changed = set(
-              subprocess.check_output(
-                  ["git", "diff", "--cached", "--name-only"], text=True
-              ).splitlines()
-          )
-          if changed != expected:
-              raise SystemExit(f"guarded repair path set changed: {sorted(changed)}")
-          PY
-          git commit -m "ci(rust): Resume telemetry migration after Clippy closure"
+          test "$(git diff --cached --name-only)" = \
+            "tools/migration/generated-complete-semver-telemetry.yml"
+          git commit -m "chore(rust): Materialize reviewed telemetry workflow repair"
           git push origin HEAD:rust/typescript-deprecation
-
-      - name: Dispatch the repaired completion workflow
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/complete-semver-telemetry-migration.yml/dispatches" \
-            -f ref=rust/typescript-deprecation
