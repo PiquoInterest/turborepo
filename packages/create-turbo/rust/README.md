@@ -150,12 +150,16 @@ Path-relative, grouping, locale ordering, coloring, and host emission remain bin
 ### Package-manager installation profile core
 
 - preserves all eight source profiles and source-order/default selection;
-- keeps Node-semver matching behind a provider boundary;
+- implements the six committed range literals through a dependency-free bounded matcher;
+- rejects version or range text above 256 UTF-8 bytes before parsing;
+- rejects non-ASCII, whitespace-bearing, and control-bearing version text rather than normalizing it;
+- validates strict three-component versions, identifiers, leading-zero rules, and JavaScript-safe integers;
+- preserves canonical build-metadata and prerelease selection behavior covered by the TypeScript oracle;
 - represents programs as the closed six-manager enum and arguments as static slices;
 - forbids project-local executable preference and shell execution on every platform;
 - always ignores standard input.
 
-The production runner remains blocked on canonical executable resolution, environment isolation, deadlines, bounded output, descendant cleanup, Windows shims, and platform differentials. See [`PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md`](./PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md).
+The production runner remains blocked on canonical executable resolution, environment isolation, deadlines, bounded output, descendant cleanup, Windows shims, and platform differentials. See [`PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md`](./PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md) and the repository-wide [test inventory](../../../docs/rust-migration-test-inventory.md).
 
 ### Project-directory prompt core
 
@@ -171,7 +175,7 @@ The repaired TypeScript caller now checks validation, but production Rust prompt
 
 - production directory and package-manager prompt providers, including bounded input, cancellation, EOF, signals, and non-TTY behavior;
 - example discovery and secure network/archive acquisition;
-- production package-manager workspace conversion plus the no-shell installation runner and Node-semver-compatible matcher;
+- production package-manager workspace conversion plus the no-shell installation runner;
 - production Git/Hg process execution and `.git` cleanup providers;
 - production filesystem/JSON provider for the `official-starter` transform, including deterministic JSON ordering and atomic no-follow writes;
 - transform-pipeline, create-error, install-warning, and final-output host binding, including terminal emission, telemetry, cleanup-before-exit, and public error mapping;
@@ -182,7 +186,7 @@ The repaired TypeScript caller now checks validation, but production Rust prompt
 
 ## Architecture
 
-`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation. `create_error_policy` owns typed error classification and bounded display fields. `create_install_policy` owns package-install selection and warning data. `create_output_policy` owns bounded final terminal lines. `package_manager_install_policy` owns static profile selection and no-shell/no-local invocation metadata. `directory_prompt` owns argument/prompt selection, input policy, and typed validator propagation.
+`readme_transform` owns the bounded pure Markdown scanner and the README replacement policy. `git_ignore` owns creation-only `.gitignore` publication. `git_init` owns the deterministic VCS decision and command sequence behind injected runner and cleanup traits. `default_example` owns the pure default-acquisition routing predicate. `official_starter` owns exact official-repository classification and effect ordering behind typed package/document providers. `package_manager_transform` owns the no-op decision and typed conversion request while leaving mutations behind `PackageManagerConverter`. `transform_pipeline` owns the fixed transform order and typed fatal/nonfatal control flow. `package_manager_prompt` owns exact manager parsing, discovered-version truthiness, stable choice ordering, and disabled-selection validation. `create_error_policy` owns typed error classification and bounded display fields. `create_install_policy` owns package-install selection and warning data. `create_output_policy` owns bounded final terminal lines. `package_manager_install_policy` owns bounded closed-range profile selection and no-shell/no-local invocation metadata. `directory_prompt` owns argument/prompt selection, input policy, and typed validator propagation.
 
 The `.gitignore` transform never performs a separate “does not exist, then overwrite-capable write” sequence. It writes the constant to a newly created sibling temporary file, synchronizes it, revalidates the root, and publishes it with a no-overwrite hard link. A concurrent destination wins and is never overwritten.
 
@@ -224,6 +228,12 @@ Create output RED:      68f5ddf67e95b41cf45623a8ada402f9a6a1cd57
 Create output GREEN:    f1ea07ef8404321a85fd0091cd612ba64779ef62
 Install profiles RED:   b858e98565eb0415c6ab85bb120220529b9a981b
 Install profiles GREEN: a200c283e0cfb17bec0cb3422b44cdfaa3f7c60c
+Node semver oracle:     3d0d7d63950f21acf4604536fdaffbfffa335798
+Node semver RED:        816216a20b5620ab381842e26ed322d9409b3cec
+Node semver GREEN:      a47192630977ffec2a4208f67d01fbd948a8aa97
+Node semver rustfmt:    149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31
+Node semver evidence:   6fbab195a23fd567891a9c7e31f820534c83a0a6
+Test inventory:         1873ad057e82b58f1efdd8dc0614c71ae4bc5f96
 Directory prompt RED:   11131d1fc01536c151bdda04ba39fdc4aec5779a
 Directory prompt GREEN: e0d5663e51c084f4f25051270ed9bb494df1b21a
 Directory consolidation: 3ac9a5c4864602372d1b88f8e39986c700d52508

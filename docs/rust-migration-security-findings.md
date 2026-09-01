@@ -272,6 +272,18 @@ TDD evidence is RED `4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c`, GREEN `19f91e5ca
 
 Production closure still requires one bounded request executor with explicit TLS, DNS/rebinding, proxy application, redirect, timeout, response-size, cancellation, and credential-redaction behavior across Linux, macOS, and Windows.
 
+### RF-027: Package-manager profile matching accepted unbounded provider authority
+
+**Status:** Fixed in the Rust profile core; production process execution remains blocked.
+
+The TypeScript installer selects profiles through npm `semver.satisfies`. The first Rust profile tranche left that decision behind an injected provider, which could normalize hostile input, accept a different grammar, or choose a different profile.
+
+The Rust core now enforces 256-byte version and range limits, strict ASCII three-component versions, JavaScript-safe numeric components, validated prerelease/build identifiers, default prerelease exclusion, and a closed six-selector grammar. Whitespace and control characters are intentionally rejected instead of normalized. Unknown range syntax is a typed configuration error.
+
+The TypeScript oracle remains GREEN and documents current whitespace normalization while retaining `it.failing` security expectations. TDD evidence is oracle `3d0d7d63950f21acf4604536fdaffbfffa335798`, RED `816216a20b5620ab381842e26ed322d9409b3cec`, GREEN `a47192630977ffec2a4208f67d01fbd948a8aa97`, formatter `149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31`, and divergence record `6fbab195a23fd567891a9c7e31f820534c83a0a6`. The source implementation adds no dependency or side-effect authority.
+
+Production closure still requires canonical executable resolution, no shell or project-local substitution, explicit environment policy, deadlines, bounded output, cancellation, descendant cleanup, Windows shim behavior, supported-platform differential fixtures, host binding, packaging, caller cutover, and removal proof.
+
 ## Required repository gates
 
 Before declaring repository-wide TypeScript deprecation complete:

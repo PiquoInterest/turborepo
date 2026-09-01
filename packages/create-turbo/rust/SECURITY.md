@@ -366,6 +366,32 @@ The production prompt must enforce the bound while reading, not only after submi
 
 The decision core does not own filesystem mutation. A production validator and creator must use stable directory handles or private staging plus atomic promotion, define symlink/reparse-point behavior for every path component, bound enumeration and diagnostics, and pass Linux/macOS/Windows differential tests.
 
+### CT-RS-036: Version matching was delegated to an unbounded provider
+
+**Severity:** Medium
+
+The first Rust profile tranche delegated `semver.satisfies` to an injected matcher. A permissive or incompatible provider could normalize hostile text, accept an unreviewed range grammar, or select the wrong installation profile.
+
+The committed Rust matcher limits version and range text to 256 UTF-8 bytes, rejects non-ASCII, whitespace-bearing, and control-bearing input, validates strict three-component versions and identifiers, caps numeric components at JavaScript's maximum safe integer, and accepts only the six selectors currently present in the source profile table. Unknown selectors are typed `InvalidRange` errors rather than permissive fallbacks.
+
+Regression coverage is in `package_manager_install_policy_parity.rs` and `package_manager_install_policy_security.rs`. TDD evidence is TypeScript oracle `3d0d7d63950f21acf4604536fdaffbfffa335798`, compiling RED `816216a20b5620ab381842e26ed322d9409b3cec`, GREEN `a47192630977ffec2a4208f67d01fbd948a8aa97`, and formatter proof `149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31`. GitHub Actions run `33547336164` compiled the exact formatted implementation, passed all migration parity/security tests, and passed Clippy with warnings denied.
+
+### CT-RS-037: npm edge-whitespace normalization is intentionally rejected
+
+**Severity:** Low intentional hardening
+
+The TypeScript npm `semver` path accepts leading and trailing ASCII whitespace around an otherwise valid version. Package-manager versions normally come from executable discovery and have no legitimate need for hidden line or spacing characters. Normalizing those bytes can turn ambiguous terminal-derived text into a trusted installation profile.
+
+Rust rejects any ASCII whitespace or control before parsing. The TypeScript suite remains GREEN: ordinary tests document current normalization and `it.failing` tests preserve the desired security expectation. Rust security tests require rejection. Canonical safe versions retain the same profile selection.
+
+### CT-RS-038: Matcher grammar expansion requires explicit review
+
+**Severity:** Low defense in depth
+
+A general SemVer range parser would accept substantially more syntax than the six repository-owned selectors used by the installer. That authority is unnecessary for this boundary and could make a future profile edit silently executable without a dedicated TDD and security review.
+
+Rust matches only `*`, `6.x`, `>=7`, `<2`, `>=2`, and `^1.0.1`. Any other range is a typed configuration error. Adding a selector requires a RED test, implementation change, parity entry, advisory review, and security record.
+
 ## Security invariants
 
 - No new `unsafe` or shell command construction is introduced by these tranches.
@@ -373,6 +399,9 @@ The decision core does not own filesystem mutation. A production validator and c
 - The official-starter core performs no filesystem access, JSON parsing, serialization, deletion, process execution, or logging; those effects remain behind typed providers.
 - The default-example route uses exact borrowed ASCII literals only.
 - The package-manager core accepts a closed enum, preserves the root as a path, does not forward version text, and cannot mutate files or execute a process directly.
+- Package-manager version and range input is bounded before parsing and cannot influence program or argument construction.
+- Only the six reviewed profile selectors are accepted; unknown range syntax fails typed and closed.
+- Whitespace, controls, Unicode lookalikes, invalid identifiers, leading-zero core components, and integers above JavaScript's safe range cannot select an install profile.
 - The Git orchestration core does not execute a subprocess or delete a path directly; those effects remain behind unimplemented production providers.
 - Untrusted README size is bounded before allocation and writing.
 - Rejected README inputs remain unchanged.
@@ -385,7 +414,7 @@ The decision core does not own filesystem mutation. A production validator and c
 
 ## Advisory lookup
 
-**Lookup date: 2026-08-31**
+**Lookup date: 2026-09-01**
 
 Authoritative sources checked:
 
@@ -399,7 +428,10 @@ Disposition:
 
 - The official-starter orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, logging operation, or mutable global state.
 - A production official-starter store remains blocked until its JSON truthiness, ordering, resource bounds, no-follow identity, atomic write, metadata, and supported-platform contracts are proven.
-- The package-manager orchestration tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
+- The package-manager orchestration tranche adds no dependency, network call, filesystem operation, subprocess, or mutable global state.
+- The bounded matcher implementation is dependency-free and therefore adds no transitive advisory surface.
+- The TypeScript oracle uses npm `semver` 7.6.2; the historical regular-expression denial-of-service issue fixed after 7.5.2 does not affect that installed version.
+- The lockfile-wide audit remains authoritative and the existing `webbrowser`, `h2`, and `quick-xml` findings remain blockers rather than exceptions.
 - A production converter cannot be approved until its manager adapters, executable versions, filesystem/process policies, transaction or rollback model, and supported platforms are reviewed.
 - The default-example tranche adds no dependency, parser, network call, filesystem operation, subprocess, or mutable global state.
 - The Git core adds no external Rust crate and does not yet execute an external tool.

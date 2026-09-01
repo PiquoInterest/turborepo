@@ -17,7 +17,7 @@ That is **382 authored Rust migration tests** on the integration branch. Test co
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
-The mandatory workflow is in `AGENTS.md`. Every tranche must use RED-first translated tests, retain TypeScript as an oracle until cutover, perform current advisory review, and update `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, this ledger, and the repository security index in the same change.
+The mandatory workflow is in `AGENTS.md`. Every tranche must use RED-first translated tests, retain TypeScript as an oracle until cutover, perform current advisory review, and update `README.md`, `PARITY_MATRIX.md`, `SECURITY.md`, this ledger, and the repository security index in the same change. The executable suite-by-suite mapping and remaining test debt are tracked in [`docs/rust-migration-test-inventory.md`](./rust-migration-test-inventory.md).
 
 ## Weighted progress estimate
 
@@ -182,7 +182,7 @@ Security closure includes terminal-control and directionality escaping, explicit
 
 ### Package-manager installation profiles
 
-The Rust core preserves all eight npm/pnpm/yarn/bun/nub/aube profiles while forbidding project-local executable preference and shell execution. Node-semver matching and real execution remain provider-owned. Production closure requires canonical executables, environment policy, deadlines, output bounds, descendant cleanup, Windows shim handling, and platform differentials.
+The Rust core preserves all eight npm/pnpm/yarn/bun/nub/aube profiles, implements a dependency-free bounded matcher for the six committed selectors, and forbids project-local executable preference and shell execution. The TypeScript oracle remains GREEN and records npm whitespace normalization as an intentional Rust security divergence. Real execution remains provider-owned. Production closure requires canonical executables, environment policy, deadlines, output bounds, descendant cleanup, Windows shim handling, and platform differentials.
 
 ### Project-directory selection
 

@@ -175,7 +175,9 @@ Detailed differences are in `CREATE_OUTPUT_POLICY_DIVERGENCES.md`.
 | TypeScript boundary | Rust boundary | Status | Evidence and notes |
 | --- | --- | --- | --- |
 | eight source profiles and order/default selection | static profile tables | implemented core | All six managers and eight profiles are translated. |
-| `semver.satisfies` | injected matcher | partial | Production binding must prove Node-semver behavior. |
+| `semver.satisfies` for the six committed selectors | dependency-free bounded `NodeSemverMatcher` | implemented core | All eight profile records, first-match order, canonical versions, build metadata, prerelease exclusion, malformed versions, and unknown ranges have TypeScript/Rust coverage. |
+| npm edge-whitespace normalization | reject any whitespace or control before parsing | intentional-hardening | The TypeScript oracle stays GREEN by recording current normalization and using `it.failing` for the stricter policy. Canonical safe versions remain equivalent. |
+| arbitrary future range grammar | six reviewed literal selectors only | intentional-hardening | An unreviewed profile edit fails with `InvalidRange` instead of silently expanding parser authority. |
 | `preferLocal: true` | `prefer_local: false` | intentional-hardening | Blocks generated-project executable substitution. |
 | Windows `shell: true` | `shell: false` | intentional-hardening | Requires an explicit safe Windows shim adapter or typed unsupported result. |
 | process execution | typed invocation metadata only | blocked | Needs canonical resolution, environment policy, deadlines, output bounds, and tree cleanup. |
@@ -218,7 +220,7 @@ Detailed differences are in `DIRECTORY_PROMPT_DIVERGENCES.md`.
 | create-command error routing and terminal bounds | seven parity and eight security tests | implemented core and intentional-hardening evidence |
 | create install decision and warning rendering | fourteen parity and thirteen security tests | implemented core and intentional-hardening evidence |
 | final create output rendering | six parity and six security tests | implemented core and intentional-hardening evidence |
-| package-manager installation profiles | eight parity and five security tests | implemented core and intentional-hardening evidence |
+| package-manager installation profiles and bounded matching | twelve parity and eight security test functions plus the GREEN TypeScript oracle | implemented core and intentional-hardening evidence |
 | directory argument/prompt/validator behavior | eight parity and nine security tests plus TypeScript regressions | implemented core, repaired oracle, providers blocked |
 | symlink/race/resource regressions absent from TypeScript transform suite | transform security tests | intentional-deviation evidence |
 

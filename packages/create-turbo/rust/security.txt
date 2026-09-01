@@ -1,0 +1,33 @@
+# Rust migration security index for packages/create-turbo
+# Canonical narrative review: SECURITY.md
+# Vulnerability disclosure policy: ../../../SECURITY.md
+
+Component: create-turbo-rs
+Status: migration-core-only
+Production-Cutover: blocked
+TypeScript-Removal: not-started
+
+Tranche: package-manager-profile-matching
+TypeScript-Oracle: 3d0d7d63950f21acf4604536fdaffbfffa335798
+Rust-RED: 816216a20b5620ab381842e26ed322d9409b3cec
+Rust-GREEN: a47192630977ffec2a4208f67d01fbd948a8aa97
+Rustfmt-Proof: 149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31
+Divergence-Record: 6fbab195a23fd567891a9c7e31f820534c83a0a6
+Test-Inventory: 1873ad057e82b58f1efdd8dc0614c71ae4bc5f96
+GitHub-Actions-Run: 33547336164
+
+Security-Fix: CT-RS-029 project-local executable substitution rejected
+Security-Fix: CT-RS-030 Windows shell mediation rejected
+Security-Fix: CT-RS-036 bounded strict version matching implemented
+Security-Fix: CT-RS-037 npm edge-whitespace normalization intentionally rejected
+Security-Fix: CT-RS-038 matcher grammar restricted to six reviewed selectors
+
+Input-Limit-Version-Bytes: 256
+Input-Limit-Range-Bytes: 256
+Allowed-Ranges: *,6.x,>=7,<2,>=2,^1.0.1
+Shell-Execution: forbidden
+Project-Local-Executable-Preference: forbidden
+Unsafe-Code: none
+New-Dependencies: none
+
+Remaining-Security-Blockers: canonical executable resolution; environment isolation; deadlines; bounded output; cancellation; descendant cleanup; Windows shim handling; platform differentials; host binding; package provenance; caller cutover; TypeScript artifact removal; repository lockfile advisories
