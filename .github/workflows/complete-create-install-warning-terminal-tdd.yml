@@ -22,7 +22,7 @@ jobs:
     env:
       FORCE_COLOR: "0"
       TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
-      EXPECTED_PARENT: ea909c22081e78d586c3bcec5d27b749c1d5242a
+      EXPECTED_PARENT: 7699ea11d4a6a409094132e5eacc186393d58fc1
       WORKFLOW_PATH: .github/workflows/complete-create-install-warning-terminal-tdd.yml
       RUNNER_PATH: tools/migration/run_create_install_warning_terminal_tdd.sh
       TRANSFORM_SCRIPT: tools/migration/repair_create_install_warning_terminal_text.py
