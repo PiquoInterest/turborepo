@@ -1,0 +1,165 @@
+name: Resume semver and telemetry migration v4
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/resume-semver-telemetry-v4.yml
+
+concurrency:
+  group: resume-semver-telemetry-v4-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  resume:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Close the telemetry Clippy blocker and enable guarded dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/complete-semver-telemetry-migration.yml")
+          text = path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} anchor count changed: {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              """on:
+            push:
+              branches:
+                - rust/typescript-deprecation
+              paths:
+                - .github/workflows/complete-semver-telemetry-migration.yml
+          """,
+              """on:
+            push:
+              branches:
+                - rust/typescript-deprecation
+              paths:
+                - .github/workflows/complete-semver-telemetry-migration.yml
+            workflow_dispatch:
+          """,
+              "workflow dispatch",
+          )
+          replace_once(
+              "    if: github.actor != 'github-actions[bot]'\n",
+              "    if: github.event_name == 'workflow_dispatch'\n",
+              "dispatch guard",
+          )
+          replace_once(
+              """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+                    cargo fmt --all
+          """,
+              """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+                    python3 <<'PY'
+                    from pathlib import Path
+
+                    path = Path("crates/turborepo-telemetry/src/events/package/config.rs")
+                    text = path.read_text(encoding="utf-8")
+                    old = "\\n".join(
+                        [
+                            "    if let Ok(metadata) = fs::symlink_metadata(path) {",
+                            "        if metadata.file_type().is_symlink() || !metadata.is_file() {",
+                            "            return Err(PackageTelemetryError::UnsafeConfigPath);",
+                            "        }",
+                            "    }",
+                            "",
+                        ]
+                    )
+                    new = "\\n".join(
+                        [
+                            "    if let Ok(metadata) = fs::symlink_metadata(path)",
+                            "        && (metadata.file_type().is_symlink() || !metadata.is_file())",
+                            "    {",
+                            "        return Err(PackageTelemetryError::UnsafeConfigPath);",
+                            "    }",
+                            "",
+                        ]
+                    )
+                    if text.count(old) != 1:
+                        raise SystemExit("reviewed telemetry Clippy anchor changed")
+                    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                    PY
+                    cargo fmt --all
+          """,
+              "telemetry Clippy closure",
+          )
+
+          if text.count("workflow_dispatch:") != 1:
+              raise SystemExit("guarded dispatch was not installed exactly once")
+          if text.count("reviewed telemetry Clippy anchor changed") != 1:
+              raise SystemExit("telemetry Clippy repair was not installed exactly once")
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          git diff --check
+          git diff -- .github/workflows/complete-semver-telemetry-migration.yml
+
+      - name: Commit the guarded repair and remove this resumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/resume-semver-telemetry-v4.yml
+          git add \
+            .github/workflows/complete-semver-telemetry-migration.yml \
+            .github/workflows/resume-semver-telemetry-v4.yml
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              ".github/workflows/complete-semver-telemetry-migration.yml",
+              ".github/workflows/resume-semver-telemetry-v4.yml",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"guarded repair path set changed: {sorted(changed)}")
+          PY
+          git commit -m "ci(rust): Resume telemetry migration after Clippy closure"
+          git push origin HEAD:rust/typescript-deprecation
+
+      - name: Dispatch the repaired completion workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/complete-semver-telemetry-migration.yml/dispatches" \
+            -f ref=rust/typescript-deprecation
