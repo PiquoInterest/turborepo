@@ -1,0 +1,102 @@
+name: Complete create-turbo install warning TDD
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/complete-create-install-warning-terminal-tdd.yml
+
+concurrency:
+  group: complete-create-install-warning-terminal-tdd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+      EXPECTED_PARENT: e8677299a5e7ae6243da572f597f40f74777758f
+      WORKFLOW_PATH: .github/workflows/complete-create-install-warning-terminal-tdd.yml
+      RUNNER_PATH: tools/migration/run_create_install_warning_terminal_tdd.sh
+      TRANSFORM_SCRIPT: tools/migration/repair_create_install_warning_terminal_text.py
+      V1_WORKFLOW_PATH: .github/workflows/repair-create-install-warning-terminal-text.yml
+      V2_WORKFLOW_PATH: .github/workflows/repair-create-install-warning-terminal-text-v2.yml
+      EXPECTED_RUNNER_BLOB: 0f24548dd58d5e68253415677b340ca10473c51b
+      EXPECTED_TRANSFORM_BLOB: 37ba7035e0d3dec608f7d3cc4b3b20cee1a0affc
+      EXPECTED_V1_WORKFLOW_BLOB: 0cc16142ff15c98d3308185ecf11b469e940ccbf
+      EXPECTED_V2_WORKFLOW_BLOB: c3bfbf21151cc241ce2a71ea52170a6b6094af14
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository, activation commit, and reviewed inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+
+          mapfile -t activation_paths < <(
+            git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort
+          )
+          test "${#activation_paths[@]}" -eq 1
+          test "${activation_paths[0]}" = "$WORKFLOW_PATH"
+
+          test "$(git rev-parse "HEAD:$RUNNER_PATH")" = "$EXPECTED_RUNNER_BLOB"
+          test "$(git rev-parse "HEAD:$TRANSFORM_SCRIPT")" = "$EXPECTED_TRANSFORM_BLOB"
+          test "$(git rev-parse "HEAD:$V1_WORKFLOW_PATH")" = \
+            "$EXPECTED_V1_WORKFLOW_BLOB"
+          test "$(git rev-parse "HEAD:$V2_WORKFLOW_PATH")" = \
+            "$EXPECTED_V2_WORKFLOW_BLOB"
+
+          bash -n "$RUNNER_PATH"
+          python3 - "$TRANSFORM_SCRIPT" <<'PY'
+          import ast
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          PY
+          test -z "$(git status --porcelain)"
+
+      - name: Set up Node and the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Run the ordered TypeScript RED, Rust GREEN, TypeScript GREEN chain
+        shell: bash
+        run: bash "$RUNNER_PATH"
