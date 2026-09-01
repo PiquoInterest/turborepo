@@ -204,7 +204,8 @@ fn all_six_rejections_return_the_exact_unable_to_detect_error() {
     assert_eq!(error.error_type(), "package_manager-unable_to_detect");
     assert_eq!(
         error.message(),
-        "Could not determine package manager. Add `devEngines.packageManager` or legacy `packageManager` to `package.json`, or ensure a lockfile is present."
+        "Could not determine package manager. Add `devEngines.packageManager` or legacy \
+         `packageManager` to `package.json`, or ensure a lockfile is present."
     );
     assert_eq!(
         provider

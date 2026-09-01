@@ -7,10 +7,9 @@ fn accepts_one_simple_workspace_glob() {
 
 #[test]
 fn accepts_multiple_simple_workspace_globs() {
-    assert!(is_compatible_with_bun_workspaces(&[
-        "apps/*",
-        "packages/*",
-    ]));
+    assert!(is_compatible_with_bun_workspaces(
+        &["apps/*", "packages/*",]
+    ));
 }
 
 #[test]
@@ -20,9 +19,7 @@ fn accepts_a_root_wildcard() {
 
 #[test]
 fn rejects_a_double_star_glob() {
-    assert!(!is_compatible_with_bun_workspaces(&[
-        "workspaces/**/*",
-    ]));
+    assert!(!is_compatible_with_bun_workspaces(&["workspaces/**/*",]));
 }
 
 #[test]
@@ -43,9 +40,7 @@ fn rejects_a_wildcard_before_the_final_path_segment() {
 
 #[test]
 fn rejects_a_wildcard_in_an_intermediate_hyphenated_segment() {
-    assert!(!is_compatible_with_bun_workspaces(&[
-        "internal-*/*",
-    ]));
+    assert!(!is_compatible_with_bun_workspaces(&["internal-*/*",]));
 }
 
 #[test]

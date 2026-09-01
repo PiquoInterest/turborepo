@@ -103,8 +103,7 @@ fn detection_error_stops_without_trying_a_less_trusted_parser() {
     );
     assert!(!provider.calls.iter().any(|call| matches!(
         call,
-        Call::Detect(WorkspaceManager::Yarn, _)
-            | Call::Read(WorkspaceManager::Yarn, _)
+        Call::Detect(WorkspaceManager::Yarn, _) | Call::Read(WorkspaceManager::Yarn, _)
     )));
 }
 
@@ -121,13 +120,17 @@ fn false_detectors_never_receive_read_authority() {
         WorkspaceManager::Pnpm,
         WorkspaceManager::Yarn,
     ] {
-        assert!(!provider
-            .calls
-            .contains(&Call::Read(manager, root.to_path_buf())));
+        assert!(
+            !provider
+                .calls
+                .contains(&Call::Read(manager, root.to_path_buf()))
+        );
     }
-    assert!(provider
-        .calls
-        .contains(&Call::Read(WorkspaceManager::Npm, root.to_path_buf())));
+    assert!(
+        provider
+            .calls
+            .contains(&Call::Read(WorkspaceManager::Npm, root.to_path_buf()))
+    );
 }
 
 #[test]
@@ -166,8 +169,10 @@ fn unable_to_detect_work_is_bounded_to_the_fixed_registry() {
             .count(),
         MANAGER_DETECTION_ORDER.len()
     );
-    assert!(!provider
-        .calls
-        .iter()
-        .any(|call| matches!(call, Call::Read(_, _))));
+    assert!(
+        !provider
+            .calls
+            .iter()
+            .any(|call| matches!(call, Call::Read(_, _)))
+    );
 }

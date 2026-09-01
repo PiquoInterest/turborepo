@@ -68,9 +68,10 @@ impl WorkspaceDetailsKnownError {
                 "Could not find directory at {}. Ensure the directory exists.",
                 absolute.display()
             ),
-            Self::UnableToDetect =>
-                "Could not determine package manager. Add `devEngines.packageManager` or legacy `packageManager` to `package.json`, or ensure a lockfile is present."
-                    .to_owned(),
+            Self::UnableToDetect => "Could not determine package manager. Add \
+                                     `devEngines.packageManager` or legacy `packageManager` to \
+                                     `package.json`, or ensure a lockfile is present."
+                .to_owned(),
         }
     }
 }
