@@ -38,13 +38,10 @@ fn explicit_default_https_port_receives_github_authorization() {
 }
 
 #[test]
-fn implicit_and_explicit_default_ports_are_the_same_authorized_origin(
-) -> Result<(), Box<dyn Error>> {
+fn implicit_and_explicit_default_ports_are_the_same_authorized_origin() -> Result<(), Box<dyn Error>>
+{
     let environment = github_environment();
-    let mut chain = RedirectChain::new(
-        "https://api.github.com/repos/user/repo",
-        &environment,
-    )?;
+    let mut chain = RedirectChain::new("https://api.github.com/repos/user/repo", &environment)?;
 
     assert_eq!(
         chain.follow("https://api.github.com:443/repos/user/repo/archive")?,
@@ -77,10 +74,7 @@ fn oversized_request_urls_fail_closed_across_policy_entrypoints() {
     let environment = github_environment();
     let oversized = github_url_with_length(EXPECTED_REQUEST_URL_MAX_BYTES + 1);
 
-    assert_eq!(
-        github_authorization_header(&oversized, &environment),
-        None
-    );
+    assert_eq!(github_authorization_header(&oversized, &environment), None);
     assert_eq!(
         proxy_for_url(&oversized, &environment),
         Err(NetworkPolicyError::InvalidRequestUrl)
@@ -103,10 +97,7 @@ fn oversized_request_urls_fail_closed_across_policy_entrypoints() {
 #[test]
 fn oversized_redirect_target_does_not_mutate_chain_state() -> Result<(), Box<dyn Error>> {
     let environment = github_environment();
-    let mut chain = RedirectChain::new(
-        "https://api.github.com/repos/user/repo",
-        &environment,
-    )?;
+    let mut chain = RedirectChain::new("https://api.github.com/repos/user/repo", &environment)?;
     let oversized = github_url_with_length(EXPECTED_REQUEST_URL_MAX_BYTES + 1);
     let original_url = chain.current_url().to_owned();
     let original_policy = chain.current_policy();
