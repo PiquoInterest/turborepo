@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: resume-semver-telemetry-v4-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -34,6 +34,12 @@ jobs:
           test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
           test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
 
       - name: Apply the exact lint-clean test repair
         shell: bash
