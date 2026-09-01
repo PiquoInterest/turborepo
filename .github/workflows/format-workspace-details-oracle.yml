@@ -18,7 +18,7 @@ jobs:
   format-and-verify:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout the single migration branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -42,6 +42,25 @@ jobs:
         uses: ./.github/actions/setup-node
         with:
           node-version: 24
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install source-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
 
       - name: Apply the exact repository formatter
         shell: bash
@@ -74,36 +93,15 @@ jobs:
           pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
             __tests__/workspace-details.test.ts
 
-      - name: Resolve the branch-matched locked Turbo binary
+      - name: Build the branch-compatible Turbo hook binary
         shell: bash
         run: |
           set -euo pipefail
-          wrapper_version="$(
-            node -p 'require("./packages/turbo/package.json").version'
-          )"
-          binary_version="$(
-            pnpm --filter turbo exec node -p \
-              'require("@turbo/linux-64/package.json").version'
-          )"
-          test "$binary_version" = "$wrapper_version"
-
-          turbo_binary="$(
-            pnpm --filter turbo exec node -p \
-              'require.resolve("@turbo/linux-64/bin/turbo")'
-          )"
-          case "$turbo_binary" in
-            "$GITHUB_WORKSPACE"/*) ;;
-            *)
-              echo "resolved Turbo binary escaped the workspace: $turbo_binary" >&2
-              exit 1
-              ;;
-          esac
-          test -x "$turbo_binary"
-          test "$("$turbo_binary" --version)" = "$wrapper_version"
-
-          mkdir -p "$RUNNER_TEMP/repository-bin"
-          ln -s "$turbo_binary" "$RUNNER_TEMP/repository-bin/turbo"
-          echo "$RUNNER_TEMP/repository-bin" >> "$GITHUB_PATH"
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          test "$("$GITHUB_WORKSPACE/target/debug/turbo" --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
 
       - name: Commit the exact formatter output and remove automation
         shell: bash
