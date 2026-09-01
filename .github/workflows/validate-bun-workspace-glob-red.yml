@@ -1,0 +1,76 @@
+name: Prove Bun workspace glob RED contract
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/validate-bun-workspace-glob-red.yml
+
+permissions:
+  contents: read
+
+jobs:
+  prove-red:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the exact RED branch state
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the immutable RED parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "7d3657eff34202f912aa0f78437f2dff833c19f3"
+          grep -Fq 'RED stub: the source-compatible validator' \
+            packages/turbo-workspaces/rust/src/lib.rs
+
+      - name: Set up Node and the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Prove the TypeScript oracle remains green
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/utils.test.ts \
+            __tests__/bun-workspace-glob-security.test.ts
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the Rust tests compile and fail behaviorally
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="packages/turbo-workspaces/rust/Cargo.toml"
+          cargo fmt --manifest-path "$manifest" --check
+          cargo check --manifest-path "$manifest" --all-targets
+
+          set +e
+          cargo test --manifest-path "$manifest" \
+            --test bun_workspace_glob_parity \
+            --test bun_workspace_glob_security \
+            > /tmp/bun-workspace-glob-red.log 2>&1
+          status=$?
+          set -e
+
+          cat /tmp/bun-workspace-glob-red.log
+          test "$status" -ne 0
+          ! grep -Fq 'could not compile' /tmp/bun-workspace-glob-red.log
+          grep -Fq 'test result: FAILED' /tmp/bun-workspace-glob-red.log
+          grep -Fq 'accepts_one_simple_workspace_glob' \
+            /tmp/bun-workspace-glob-red.log
