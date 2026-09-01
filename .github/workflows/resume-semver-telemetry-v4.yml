@@ -1,4 +1,4 @@
-name: Materialize semver and telemetry migration repair v4
+name: Capture telemetry migration failure diagnostic
 
 on:
   push:
@@ -12,10 +12,11 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
-  materialize:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -35,82 +36,101 @@ jobs:
           test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - name: Materialize the exact telemetry Clippy closure
+      - name: Download and reduce the failed job log
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_JOB_ID: "99805482524"
         run: |
           set -euo pipefail
+          curl --fail --show-error --silent --location \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${FAILED_JOB_ID}/logs" \
+            --output /tmp/telemetry-job.log
+          test -s /tmp/telemetry-job.log
+
           python3 <<'PY'
           from pathlib import Path
+          import re
 
-          source = Path(".github/workflows/complete-semver-telemetry-migration.yml")
-          output = Path("tools/migration/generated-complete-semver-telemetry.yml")
-          if output.exists():
-              raise SystemExit("generated telemetry workflow handoff already exists")
+          source = Path("/tmp/telemetry-job.log")
+          output = Path("tools/migration/telemetry-failure-diagnostic.txt")
+          text = source.read_bytes().decode("utf-8-sig", errors="replace")
+          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+          lines = text.splitlines()
 
-          text = source.read_text(encoding="utf-8")
-          old = """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
-                    cargo fmt --all
-          """
-          new = """          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
-                    python3 <<'PY'
-                    from pathlib import Path
+          strict_markers = (
+              "##[error]",
+              "error:",
+              "error[",
+              "Process completed with exit code",
+              "panicked at",
+              "test result: FAILED",
+              "failures:",
+              "fatal:",
+              "path set changed",
+              "anchor count changed",
+              "is not staged",
+              "did not change",
+              "introduced unsafe code",
+          )
+          indices = {
+              index
+              for index, line in enumerate(lines)
+              if any(marker in line for marker in strict_markers)
+          }
+          if not indices:
+              indices.update(range(max(0, len(lines) - 240), len(lines)))
 
-                    path = Path("crates/turborepo-telemetry/src/events/package/config.rs")
-                    text = path.read_text(encoding="utf-8")
-                    old = "\\n".join(
-                        [
-                            "    if let Ok(metadata) = fs::symlink_metadata(path) {",
-                            "        if metadata.file_type().is_symlink() || !metadata.is_file() {",
-                            "            return Err(PackageTelemetryError::UnsafeConfigPath);",
-                            "        }",
-                            "    }",
-                            "",
-                        ]
-                    )
-                    new = "\\n".join(
-                        [
-                            "    if let Ok(metadata) = fs::symlink_metadata(path)",
-                            "        && (metadata.file_type().is_symlink() || !metadata.is_file())",
-                            "    {",
-                            "        return Err(PackageTelemetryError::UnsafeConfigPath);",
-                            "    }",
-                            "",
-                        ]
-                    )
-                    if text.count(old) != 1:
-                        raise SystemExit("reviewed telemetry Clippy anchor changed")
-                    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-                    PY
-                    cargo fmt --all
-          """
-          if text.count(old) != 1:
-              raise SystemExit(
-                  f"telemetry workflow anchor count changed: {text.count(old)}"
-              )
-          if "workflow_dispatch:" in text:
-              raise SystemExit("unreviewed dispatch authority is present")
-          if "github.event_name == 'workflow_dispatch'" in text:
-              raise SystemExit("unreviewed dispatch-only job guard is present")
+          selected: set[int] = set()
+          for index in indices:
+              selected.update(range(max(0, index - 35), min(len(lines), index + 36)))
+          selected.update(range(max(0, len(lines) - 140), len(lines)))
 
-          patched = text.replace(old, new, 1)
-          if patched.count("reviewed telemetry Clippy anchor changed") != 1:
-              raise SystemExit("telemetry Clippy closure was not materialized exactly once")
-          output.write_text(patched, encoding="utf-8")
+          chunks: list[list[str]] = []
+          current: list[str] = []
+          previous: int | None = None
+          for index in sorted(selected):
+              if previous is not None and index != previous + 1:
+                  if current:
+                      chunks.append(current)
+                  current = []
+              current.append(f"{index + 1:06d}: {lines[index]}")
+              previous = index
+          if current:
+              chunks.append(current)
+
+          body = [
+              "Failed workflow run: 33492027948",
+              "Failed job: 99805482524",
+              f"Original log lines: {len(lines)}",
+              f"Matched diagnostic anchors: {len(indices)}",
+              "",
+          ]
+          for chunk_index, chunk in enumerate(chunks, start=1):
+              body.append(f"===== CONTEXT {chunk_index} =====")
+              body.extend(chunk)
+              body.append("")
+
+          output.write_text("\n".join(body), encoding="utf-8")
+          if output.stat().st_size > 250_000:
+              raise SystemExit("reduced diagnostic unexpectedly exceeds 250 KiB")
           PY
 
-          git diff --no-index -- \
-            .github/workflows/complete-semver-telemetry-migration.yml \
-            tools/migration/generated-complete-semver-telemetry.yml || test "$?" -eq 1
+          test -s tools/migration/telemetry-failure-diagnostic.txt
+          tail -n 200 tools/migration/telemetry-failure-diagnostic.txt
 
-      - name: Commit the non-workflow handoff
+      - name: Commit the exact diagnostic handoff
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/migration/generated-complete-semver-telemetry.yml
+          git add tools/migration/telemetry-failure-diagnostic.txt
           git diff --cached --check
           test "$(git diff --cached --name-only)" = \
-            "tools/migration/generated-complete-semver-telemetry.yml"
-          git commit -m "chore(rust): Materialize reviewed telemetry workflow repair"
+            "tools/migration/telemetry-failure-diagnostic.txt"
+          git commit -m "chore(rust): Record telemetry migration failure diagnostic"
           git push origin HEAD:rust/typescript-deprecation
