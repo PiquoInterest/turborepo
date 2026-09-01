@@ -1,0 +1,514 @@
+name: Complete semver and telemetry migration tranches
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/complete-semver-telemetry-migration.yml
+
+concurrency:
+  group: complete-semver-telemetry-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Capture the reviewed one-shot scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          def extract_step(path: str, marker: str, output: str, required: set[str]) -> None:
+              lines = Path(path).read_text(encoding="utf-8").splitlines()
+              try:
+                  start = lines.index(f"      - name: {marker}")
+              except ValueError as error:
+                  raise SystemExit(f"reviewed workflow step is missing: {marker}") from error
+
+              run_index = next(
+                  index
+                  for index in range(start + 1, len(lines))
+                  if lines[index] == "        run: |"
+              )
+              end = next(
+                  (
+                      index
+                      for index in range(run_index + 1, len(lines))
+                      if lines[index].startswith("      - name:")
+                  ),
+                  len(lines),
+              )
+              script = textwrap.dedent("\n".join(lines[run_index + 1 : end])) + "\n"
+              missing = sorted(value for value in required if value not in script)
+              if missing:
+                  raise SystemExit(
+                      f"reviewed workflow step {marker!r} is incomplete: {missing}"
+                  )
+              Path(output).write_text(script, encoding="utf-8")
+
+          extract_step(
+              ".github/workflows/repair-rust-dependency-coherence-v2.yml",
+              "Pin compatible dependency families and add the invariant checker",
+              "/tmp/apply-rust-dependency-coherence.sh",
+              {
+                  "downgrade_if_locked biome_parser 0.5.8 0.5.7",
+                  "downgrade_if_locked unrs_resolver 1.12.2 1.11.1",
+                  "tools/check-rust-dependency-coherence.py",
+              },
+          )
+          extract_step(
+              ".github/workflows/repair-rust-dependency-coherence-v4.yml",
+              "Prove the complete lockfile identity and edge delta",
+              "/tmp/prove-rust-dependency-coherence.sh",
+              {
+                  "EXPECTED_REMOVED",
+                  "EXPECTED_ADDED",
+                  "EXPECTED_SHARED_EDGE_DELTAS",
+                  "19 shared edge rewrites",
+              },
+          )
+          extract_step(
+              ".github/workflows/finalize-semver-telemetry-v3.yml",
+              "Apply the telemetry path-boundary repair",
+              "/tmp/apply-telemetry-path-boundary.sh",
+              {
+                  "let path = path.as_path().as_std_path();",
+                  "symlinked_config_parent_is_rejected_without_writing_through_the_link",
+                  "turborepo-telemetry",
+              },
+          )
+          PY
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Apply and prove the coherent dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -euo pipefail /tmp/apply-rust-dependency-coherence.sh
+          bash -euo pipefail /tmp/prove-rust-dependency-coherence.sh
+          cargo check --locked -p turborepo-telemetry --all-targets
+          cargo test --locked -p turborepo-telemetry --all-targets
+          cargo clippy --locked -p turborepo-telemetry --all-targets -- -D warnings
+          cargo check --locked -p create-turbo-rs --all-targets
+          git diff --check
+
+      - name: Commit the coherent dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm \
+            .github/workflows/repair-rust-dependency-coherence.yml \
+            .github/workflows/repair-rust-dependency-coherence-v2.yml \
+            .github/workflows/repair-rust-dependency-coherence-v3.yml \
+            .github/workflows/repair-rust-dependency-coherence-v4.yml \
+            .github/workflows/complete-semver-telemetry-migration.yml
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            .github/workflows/rust-migration-validate.yml \
+            .github/workflows/repair-rust-dependency-coherence.yml \
+            .github/workflows/repair-rust-dependency-coherence-v2.yml \
+            .github/workflows/repair-rust-dependency-coherence-v3.yml \
+            .github/workflows/repair-rust-dependency-coherence-v4.yml \
+            .github/workflows/complete-semver-telemetry-migration.yml \
+            tools/check-rust-dependency-coherence.py
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 9
+          git commit -m "fix(rust): Pin coherent parser dependency families"
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Apply the strict Node-semver GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/repair_create_node_semver_matcher.py
+          cp Cargo.lock /tmp/node-semver-Cargo.lock.original
+          python3 tools/migration/apply_create_node_semver_matcher.py implement
+          cargo check -p create-turbo-rs --all-targets
+
+          python3 <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          def load(path: str) -> dict:
+              return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+          def key(package: dict) -> tuple[str, str, str]:
+              return (
+                  package["name"],
+                  package["version"],
+                  package.get("source", ""),
+              )
+
+          before = {
+              key(package): package
+              for package in load("/tmp/node-semver-Cargo.lock.original").get("package", [])
+          }
+          after = {
+              key(package): package
+              for package in load("Cargo.lock").get("package", [])
+          }
+          if set(before) != set(after):
+              raise SystemExit("Node-semver direct edge changed package identities")
+
+          target = ("create-turbo-rs", "0.1.0", "")
+          if target not in before or target not in after:
+              raise SystemExit("create-turbo-rs lockfile record is missing")
+
+          for package_key, old_package in before.items():
+              new_package = after[package_key]
+              if package_key == target:
+                  old_dependencies = set(old_package.get("dependencies", []))
+                  new_dependencies = set(new_package.get("dependencies", []))
+                  if new_dependencies != old_dependencies | {"node-semver"}:
+                      raise SystemExit(
+                          "create-turbo-rs lockfile delta is not exactly node-semver"
+                      )
+                  old_metadata = dict(old_package)
+                  new_metadata = dict(new_package)
+                  old_metadata.pop("dependencies", None)
+                  new_metadata.pop("dependencies", None)
+                  if old_metadata != new_metadata:
+                      raise SystemExit("create-turbo-rs lockfile metadata changed")
+              elif old_package != new_package:
+                  raise SystemExit(f"unreviewed lockfile record changed: {package_key}")
+
+          versions = sorted(
+              package["version"]
+              for package in after.values()
+              if package.get("name") == "node-semver"
+          )
+          if versions != ["2.2.0"]:
+              raise SystemExit(f"expected node-semver 2.2.0, found {versions}")
+          PY
+
+          cargo fmt --all
+          python3 <<'PY'
+          import subprocess
+
+          allowed = {
+              "packages/create-turbo/rust/src/lib.rs",
+              "packages/create-turbo/rust/src/package_manager_install_policy.rs",
+              "packages/create-turbo/rust/tests/package_manager_install_policy_parity.rs",
+              "packages/turbo-utils/rust/tests/network_authority_bounds.rs",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--name-only", "--", "*.rs"], text=True
+              ).splitlines()
+          )
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit(f"unexpected rustfmt or semver source paths: {unexpected}")
+          required = {"packages/create-turbo/rust/src/package_manager_install_policy.rs"}
+          if not required <= changed:
+              raise SystemExit("strict Node-semver implementation source did not change")
+          PY
+
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          pnpm exec oxfmt --check packages/turbo-workspaces/__tests__/install-meta.test.ts
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/install-meta.test.ts \
+            __tests__/install-security.test.ts
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/create-turbo/rust/src/package_manager_install_policy.rs \
+            packages/create-turbo/rust/tests/package_manager_install_policy_*.rs; then
+            echo "Node-semver tranche introduced unsafe code" >&2
+            exit 1
+          fi
+
+      - name: Commit the strict Node-semver implementation
+        id: semver
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            packages/create-turbo/rust/Cargo.toml \
+            packages/create-turbo/rust/src/lib.rs \
+            packages/create-turbo/rust/src/package_manager_install_policy.rs \
+            packages/create-turbo/rust/tests/package_manager_install_policy_parity.rs
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          allowed = {
+              "Cargo.toml",
+              "Cargo.lock",
+              "packages/create-turbo/rust/Cargo.toml",
+              "packages/create-turbo/rust/src/lib.rs",
+              "packages/create-turbo/rust/src/package_manager_install_policy.rs",
+              "packages/create-turbo/rust/tests/package_manager_install_policy_parity.rs",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed - allowed:
+              raise SystemExit(f"unexpected semver commit paths: {sorted(changed - allowed)}")
+          if "packages/create-turbo/rust/src/package_manager_install_policy.rs" not in changed:
+              raise SystemExit("semver implementation source is not staged")
+          PY
+          git commit -m "feat(create-turbo): Implement strict bounded Node semver matcher"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit isolated pre-existing rustfmt repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- packages/turbo-utils/rust/tests/network_authority_bounds.rs; then
+            git add packages/turbo-utils/rust/tests/network_authority_bounds.rs
+            test "$(git diff --cached --name-only)" = \
+              "packages/turbo-utils/rust/tests/network_authority_bounds.rs"
+            git diff --cached --check
+            git commit -m "style(turbo-utils): Restore network authority rustfmt output"
+          fi
+
+      - name: Apply and validate the telemetry path boundary
+        id: telemetry
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -euo pipefail /tmp/apply-telemetry-path-boundary.sh
+          cargo fmt --all
+          cargo fmt --all --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              ".github/workflows/rust-migration-validate.yml",
+              "crates/turborepo-telemetry/src/events/package/config.rs",
+              "crates/turborepo-telemetry/tests/package_security.rs",
+          }
+          changed = set(
+              subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"telemetry path set changed: {sorted(changed)}")
+          PY
+          python3 tools/check-rust-dependency-coherence.py
+          cargo check --locked -p turborepo-telemetry --all-targets
+          cargo test --locked -p turborepo-telemetry --all-targets
+          cargo clippy --locked -p turborepo-telemetry --all-targets -- -D warnings
+          git diff --exit-code -- Cargo.toml Cargo.lock
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            crates/turborepo-telemetry/src/events/package/config.rs \
+            crates/turborepo-telemetry/tests/package_security.rs; then
+            echo "telemetry path tranche introduced unsafe code" >&2
+            exit 1
+          fi
+          git add \
+            .github/workflows/rust-migration-validate.yml \
+            crates/turborepo-telemetry/src/events/package/config.rs \
+            crates/turborepo-telemetry/tests/package_security.rs
+          git diff --cached --check
+          git commit -m "fix(telemetry): Bridge validated config paths safely"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record migration evidence and remove one-shot automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/apply_create_node_semver_matcher.py \
+            document "${{ steps.semver.outputs.sha }}"
+
+          python3 - "${{ steps.telemetry.outputs.sha }}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          telemetry_sha = sys.argv[1]
+          readme = Path("crates/turborepo-telemetry/README.md")
+          marker = "## Package-facing config path boundary"
+          text = readme.read_text(encoding="utf-8")
+          if marker in text:
+              raise SystemExit("telemetry path-boundary evidence already exists")
+          readme.write_text(
+              text.rstrip()
+              + f'''\n\n{marker}\n\n'''
+              + "The package-facing config writer now converts its validated Camino path once "
+              + "to a borrowed standard-library path before target checks, parent validation, "
+              + "temporary-file construction, and replacement. Commit `"
+              + telemetry_sha
+              + "` adds no lossy conversion, normalization, canonicalization, dependency, "
+              + "process, network authority, or unsafe code. A Unix regression proves that a "
+              + "symlinked parent cannot redirect config creation. Descriptor-relative ancestor "
+              + "identity and Windows reparse-point/atomic-replacement closure remain production "
+              + "cutover requirements.\n",
+              encoding="utf-8",
+          )
+          PY
+
+          rm -f \
+            .github/workflows/repair-create-node-semver-matcher.yml \
+            .github/workflows/finalize-create-node-semver-matcher.yml \
+            .github/workflows/finalize-create-node-semver-v2.yml \
+            .github/workflows/finalize-semver-telemetry-v3.yml \
+            tools/migration/repair_create_node_semver_matcher.py
+
+          test ! -e .github/workflows/apply-create-node-semver-matcher.yml
+          test ! -e tools/migration/apply_create_node_semver_matcher.py
+          test -z "$(find .github/workflows -maxdepth 1 -type f -name '*node-semver*' -print)"
+          test -z "$(find .github/workflows -maxdepth 1 -type f -name '*semver-telemetry*' -print)"
+          grep -Fq 'CT-RS-036' packages/create-turbo/rust/SECURITY.md
+          grep -Fq 'RF-026' docs/rust-migration-security-findings.md
+          grep -Fq '${{ steps.semver.outputs.sha }}' \
+            packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md
+          grep -Fq '${{ steps.telemetry.outputs.sha }}' crates/turborepo-telemetry/README.md
+
+          git add -A
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          allowed = {
+              ".github/workflows/apply-create-node-semver-matcher.yml",
+              ".github/workflows/repair-create-node-semver-matcher.yml",
+              ".github/workflows/finalize-create-node-semver-matcher.yml",
+              ".github/workflows/finalize-create-node-semver-v2.yml",
+              ".github/workflows/finalize-semver-telemetry-v3.yml",
+              "tools/migration/apply_create_node_semver_matcher.py",
+              "tools/migration/repair_create_node_semver_matcher.py",
+              "packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md",
+              "packages/create-turbo/rust/README.md",
+              "packages/create-turbo/rust/PARITY_MATRIX.md",
+              "packages/create-turbo/rust/SECURITY.md",
+              "crates/turborepo-telemetry/README.md",
+              "docs/typescript-deprecation.md",
+              "docs/rust-migration-security-findings.md",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit(f"unexpected evidence commit paths: {unexpected}")
+          required = {
+              ".github/workflows/apply-create-node-semver-matcher.yml",
+              "tools/migration/apply_create_node_semver_matcher.py",
+              "packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md",
+              "crates/turborepo-telemetry/README.md",
+          }
+          missing = sorted(required - changed)
+          if missing:
+              raise SystemExit(f"required evidence paths are missing: {missing}")
+          PY
+          git commit -m "docs(rust): Record semver and telemetry security evidence"
+
+      - name: Validate the completed migration tranches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check-rust-dependency-coherence.py
+          cargo fmt --all --check
+          cargo check --locked \
+            -p turbo-ignore-rs \
+            -p turbo-utils-rs \
+            -p create-turbo-rs \
+            -p turborepo-telemetry \
+            --all-targets
+          cargo test --locked \
+            -p turbo-ignore-rs \
+            -p turbo-utils-rs \
+            -p create-turbo-rs \
+            -p turborepo-telemetry \
+            --all-targets
+          cargo clippy --locked \
+            -p turbo-ignore-rs \
+            -p turbo-utils-rs \
+            -p create-turbo-rs \
+            -p turborepo-telemetry \
+            --all-targets -- -D warnings
+          pnpm --filter turbo-ignore test
+          pnpm --filter @turbo/utils test
+          pnpm --filter @turbo/workspaces test
+          pnpm --filter create-turbo test
+          test -z "$(git status --porcelain)"
+
+      - name: Install source-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build the branch-compatible Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Preflight and push through the unchanged repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          command -v turbo
+          sh .husky/pre-push
+          test -z "$(git status --porcelain)"
+
+          git config --unset-all remote.origin.pushurl || true
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during validation: $remote_head" >&2
+            exit 1
+          fi
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation
