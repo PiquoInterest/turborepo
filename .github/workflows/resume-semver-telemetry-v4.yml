@@ -1,4 +1,4 @@
-name: Capture telemetry migration failure diagnostic
+name: Materialize lint-clean telemetry migration tests
 
 on:
   push:
@@ -12,14 +12,13 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
   contents: write
 
 jobs:
-  diagnose:
+  materialize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout the sole migration branch
@@ -36,101 +35,149 @@ jobs:
           test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - name: Download and reduce the failed job log
+      - name: Apply the exact lint-clean test repair
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FAILED_JOB_ID: "99805482524"
         run: |
           set -euo pipefail
-          curl --fail --show-error --silent --location \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${FAILED_JOB_ID}/logs" \
-            --output /tmp/telemetry-job.log
-          test -s /tmp/telemetry-job.log
-
           python3 <<'PY'
           from pathlib import Path
-          import re
 
-          source = Path("/tmp/telemetry-job.log")
-          output = Path("tools/migration/telemetry-failure-diagnostic.txt")
-          text = source.read_bytes().decode("utf-8-sig", errors="replace")
-          text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
-          lines = text.splitlines()
+          helper = '''trait TestMust {
+              type Output;
 
-          strict_markers = (
-              "##[error]",
-              "error:",
-              "error[",
-              "Process completed with exit code",
-              "panicked at",
-              "test result: FAILED",
-              "failures:",
-              "fatal:",
-              "path set changed",
-              "anchor count changed",
-              "is not staged",
-              "did not change",
-              "introduced unsafe code",
-          )
-          indices = {
-              index
-              for index, line in enumerate(lines)
-              if any(marker in line for marker in strict_markers)
+              fn test_must(self, context: &str) -> Self::Output;
           }
-          if not indices:
-              indices.update(range(max(0, len(lines) - 240), len(lines)))
 
-          selected: set[int] = set()
-          for index in indices:
-              selected.update(range(max(0, index - 35), min(len(lines), index + 36)))
-          selected.update(range(max(0, len(lines) - 140), len(lines)))
+          impl<T, E> TestMust for Result<T, E>
+          where
+              E: std::fmt::Debug,
+          {
+              type Output = T;
 
-          chunks: list[list[str]] = []
-          current: list[str] = []
-          previous: int | None = None
-          for index in sorted(selected):
-              if previous is not None and index != previous + 1:
-                  if current:
-                      chunks.append(current)
-                  current = []
-              current.append(f"{index + 1:06d}: {lines[index]}")
-              previous = index
-          if current:
-              chunks.append(current)
+              fn test_must(self, context: &str) -> Self::Output {
+                  self.unwrap_or_else(|error| panic!("{context}: {error:?}"))
+              }
+          }
 
-          body = [
-              "Failed workflow run: 33492027948",
-              "Failed job: 99805482524",
-              f"Original log lines: {len(lines)}",
-              f"Matched diagnostic anchors: {len(indices)}",
-              "",
-          ]
-          for chunk_index, chunk in enumerate(chunks, start=1):
-              body.append(f"===== CONTEXT {chunk_index} =====")
-              body.extend(chunk)
-              body.append("")
+          impl<T> TestMust for Option<T> {
+              type Output = T;
 
-          output.write_text("\n".join(body), encoding="utf-8")
-          if output.stat().st_size > 250_000:
-              raise SystemExit("reduced diagnostic unexpectedly exceeds 250 KiB")
+              fn test_must(self, context: &str) -> Self::Output {
+                  self.unwrap_or_else(|| panic!("{context}"))
+              }
+          }
+
+          '''
+
+          expected_unwraps = {
+              Path("crates/turborepo-telemetry/tests/package_security.rs"): 25,
+              Path("crates/turborepo-telemetry/tests/package_parity.rs"): 24,
+          }
+          derive_anchor = "#[derive(Clone, Default)]\n"
+          replacement = '.test_must("telemetry test invariant")'
+
+          for path, expected in expected_unwraps.items():
+              text = path.read_text(encoding="utf-8")
+              if "trait TestMust" in text:
+                  raise SystemExit(f"TestMust helper already exists in {path}")
+              if text.count(derive_anchor) != 1:
+                  raise SystemExit(f"recording transport anchor changed in {path}")
+              actual = text.count(".unwrap()")
+              if actual != expected:
+                  raise SystemExit(
+                      f"unwrap count changed in {path}: expected {expected}, found {actual}"
+                  )
+              text = text.replace(derive_anchor, helper + derive_anchor, 1)
+              text = text.replace(".unwrap()", replacement)
+              if ".unwrap()" in text or ".expect(" in text:
+                  raise SystemExit(f"panic shorthand remains in {path}")
+              path.write_text(text, encoding="utf-8")
           PY
 
-          test -s tools/migration/telemetry-failure-diagnostic.txt
-          tail -n 200 tools/migration/telemetry-failure-diagnostic.txt
+          rustfmt --edition 2024 \
+            crates/turborepo-telemetry/tests/package_security.rs \
+            crates/turborepo-telemetry/tests/package_parity.rs
+          git diff --check -- \
+            crates/turborepo-telemetry/tests/package_security.rs \
+            crates/turborepo-telemetry/tests/package_parity.rs
 
-      - name: Commit the exact diagnostic handoff
+      - name: Materialize the completion-workflow follow-up
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          source = Path(".github/workflows/complete-semver-telemetry-migration.yml")
+          output = Path("tools/migration/generated-complete-semver-telemetry.yml")
+          text = source.read_text(encoding="utf-8")
+          old = '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                    PY
+                    cargo fmt --all
+          '''
+          new = '''          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                    PY
+                    python3 <<'PY'
+                    from pathlib import Path
+
+                    path = Path("crates/turborepo-telemetry/tests/package_security.rs")
+                    text = path.read_text(encoding="utf-8")
+                    expected = 4
+                    actual = text.count(".unwrap()")
+                    if actual != expected:
+                        raise SystemExit(
+                            f"telemetry parent-symlink unwrap count changed: expected {expected}, found {actual}"
+                        )
+                    text = text.replace(
+                        ".unwrap()",
+                        '.test_must("telemetry parent-symlink setup")',
+                    )
+                    if ".unwrap()" in text or ".expect(" in text:
+                        raise SystemExit("panic shorthand remains in telemetry security tests")
+                    path.write_text(text, encoding="utf-8")
+                    PY
+                    cargo fmt --all
+          '''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f"completion workflow lint anchor count changed: {count}")
+          patched = text.replace(old, new, 1)
+          if patched.count("telemetry parent-symlink unwrap count changed") != 1:
+              raise SystemExit("lint-clean telemetry follow-up was not installed exactly once")
+          output.write_text(patched, encoding="utf-8")
+          PY
+
+          git diff --no-index -- \
+            .github/workflows/complete-semver-telemetry-migration.yml \
+            tools/migration/generated-complete-semver-telemetry.yml || test "$?" -eq 1
+          git diff --check -- tools/migration/generated-complete-semver-telemetry.yml
+
+      - name: Commit the ordinary-file handoff
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/migration/telemetry-failure-diagnostic.txt
+          git add \
+            crates/turborepo-telemetry/tests/package_security.rs \
+            crates/turborepo-telemetry/tests/package_parity.rs \
+            tools/migration/generated-complete-semver-telemetry.yml
           git diff --cached --check
-          test "$(git diff --cached --name-only)" = \
-            "tools/migration/telemetry-failure-diagnostic.txt"
-          git commit -m "chore(rust): Record telemetry migration failure diagnostic"
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              "crates/turborepo-telemetry/tests/package_security.rs",
+              "crates/turborepo-telemetry/tests/package_parity.rs",
+              "tools/migration/generated-complete-semver-telemetry.yml",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"lint-clean handoff path set changed: {sorted(changed)}")
+          PY
+          git commit -m "test(telemetry): Remove denied panic shorthand"
           git push origin HEAD:rust/typescript-deprecation
