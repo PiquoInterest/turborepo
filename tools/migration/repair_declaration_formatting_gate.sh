@@ -100,52 +100,6 @@ git add "${formatter_files[@]}"
 git diff --cached --check
 git commit -m "style: Normalize migration formatter debt"
 
-python3 <<'PY'
-from pathlib import Path
-
-path = Path(".github/workflows/continue-package-manager-declaration.yml")
-text = path.read_text(encoding="utf-8")
-old = '''          pnpm exec oxfmt --write \\
-            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
-          pnpm exec oxfmt --check \\
-            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
-'''
-new = '''          pnpm exec oxfmt --write \\
-            tools/migration/turbo-workspaces-declaration/package-manager-declaration-security.test.ts \\
-            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
-          pnpm exec oxfmt --check \\
-            tools/migration/turbo-workspaces-declaration/package-manager-declaration-security.test.ts \\
-            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
-'''
-if text.count(old) != 1:
-    raise SystemExit("declaration formatter anchor changed")
-path.write_text(text.replace(old, new, 1), encoding="utf-8")
-PY
-
-git rm .github/workflows/repair-declaration-formatting-gate.yml
-git rm tools/migration/repair_declaration_formatting_gate.sh
-git add .github/workflows/continue-package-manager-declaration.yml
-git diff --cached --check
-
-python3 <<'PY'
-import subprocess
-
-expected = {
-    ".github/workflows/continue-package-manager-declaration.yml",
-    ".github/workflows/repair-declaration-formatting-gate.yml",
-    "tools/migration/repair_declaration_formatting_gate.sh",
-}
-changed = set(
-    subprocess.check_output(
-        ["git", "diff", "--cached", "--name-only"], text=True
-    ).splitlines()
-)
-if changed != expected:
-    raise SystemExit(f"workflow repair path set changed: {sorted(changed)}")
-PY
-
-git commit -m "ci(turbo-workspaces): Format declaration oracle asset before push"
-
 command -v turbo
 test "$(turbo --version)" = \
   "$(node -p 'require("./packages/turbo/package.json").version')"
