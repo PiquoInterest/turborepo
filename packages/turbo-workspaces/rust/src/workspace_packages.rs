@@ -45,9 +45,69 @@ impl fmt::Display for WorkspacePackagesError {
 impl std::error::Error for WorkspacePackagesError {}
 
 pub fn parse_workspace_packages<'a>(
-    _input: WorkspacePackages<'a>,
+    input: WorkspacePackages<'a>,
 ) -> Result<Vec<&'a str>, WorkspacePackagesError> {
-    // Compiling behavioral RED: the final API and error contract exist, but
-    // value extraction and input validation are intentionally absent.
-    Ok(Vec::new())
+    let workspace_globs: &'a [&'a str] = match input {
+        WorkspacePackages::Missing => &[],
+        WorkspacePackages::Array(workspace_globs) => workspace_globs,
+        WorkspacePackages::Object { packages } => packages.unwrap_or(&[]),
+    };
+
+    if workspace_globs.len() > WORKSPACE_PACKAGE_GLOB_COUNT_LIMIT {
+        return Err(WorkspacePackagesError::TooManyGlobs {
+            actual: workspace_globs.len(),
+            limit: WORKSPACE_PACKAGE_GLOB_COUNT_LIMIT,
+        });
+    }
+
+    let mut total_bytes = 0usize;
+    for (index, workspace_glob) in workspace_globs.iter().copied().enumerate() {
+        let bytes = workspace_glob.len();
+        if bytes > WORKSPACE_PACKAGE_GLOB_INPUT_LIMIT {
+            return Err(WorkspacePackagesError::GlobTooLarge {
+                index,
+                bytes,
+                limit: WORKSPACE_PACKAGE_GLOB_INPUT_LIMIT,
+            });
+        }
+
+        let Some(next_total) = total_bytes.checked_add(bytes) else {
+            return Err(WorkspacePackagesError::TotalInputTooLarge {
+                bytes: usize::MAX,
+                limit: WORKSPACE_PACKAGE_GLOB_TOTAL_INPUT_LIMIT,
+            });
+        };
+        total_bytes = next_total;
+        if total_bytes > WORKSPACE_PACKAGE_GLOB_TOTAL_INPUT_LIMIT {
+            return Err(WorkspacePackagesError::TotalInputTooLarge {
+                bytes: total_bytes,
+                limit: WORKSPACE_PACKAGE_GLOB_TOTAL_INPUT_LIMIT,
+            });
+        }
+
+        if contains_unsafe_workspace_glob_text(workspace_glob) {
+            return Err(WorkspacePackagesError::UnsafeGlobText { index });
+        }
+    }
+
+    Ok(workspace_globs.to_vec())
+}
+
+fn contains_unsafe_workspace_glob_text(value: &str) -> bool {
+    value.chars().any(|character| {
+        matches!(
+            character,
+            '\u{0000}'..='\u{001f}'
+                | '\u{007f}'..='\u{009f}'
+                | '\u{00ad}'
+                | '\u{034f}'
+                | '\u{061c}'
+                | '\u{180e}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{2028}'..='\u{202e}'
+                | '\u{2060}'..='\u{206f}'
+                | '\u{feff}'
+                | '\u{fff9}'..='\u{fffb}'
+        )
+    })
 }
