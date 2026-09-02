@@ -102,10 +102,27 @@ jobs:
           test "$(sha256sum "$asset_dir/green_section.rs" | awk '{print $1}')" = \
             "1f29ba311547288e35b18caef21c8cb505570210765e9b45268b906825fd38c2"
 
+          cp "$asset_dir/red-section.rs" "$asset_dir/red_section.rs"
+          cp "$asset_dir/green-section.rs" "$asset_dir/green_section.rs"
+          cmp "$asset_dir/red-section.rs" "$asset_dir/red_section.rs"
+          cmp "$asset_dir/green-section.rs" "$asset_dir/green_section.rs"
+          grep -Fq 'manager: WorkspaceManager,' "$asset_dir/green_section.rs"
+          if grep -Fq 'WorkspaaceManager' "$asset_dir/green_section.rs"; then
+            echo 'reviewed declaration GREEN asset contains misspelled manager type' >&2
+            exit 1
+          fi
+
       - name: Set up Node and locked JavaScript dependencies
         uses: ./.github/actions/setup-node
         with:
           node-version: 24
+
+      - name: Expose locked repository binaries to Git hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/turbo"
+          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up repository Rust toolchain
         uses: ./.github/actions/setup-rust
