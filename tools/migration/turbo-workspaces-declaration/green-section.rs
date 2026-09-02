@@ -225,7 +225,7 @@ pub fn get_workspace_package_manager(
 
 pub fn set_package_manager_declaration(
     document: &mut PackageManagerDeclarationDocument,
-    manager: WorkspaaceManager,
+    manager: WorkspaceManager,
     version: &str,
 ) -> Result<(), PackageManagerDeclarationError> {
     validate_bounded_policy_text(
