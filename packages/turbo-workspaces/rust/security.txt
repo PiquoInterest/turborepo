@@ -22,8 +22,10 @@ Security-Fix: TW-RS-013 mutable workspace-array aliasing removed at the Rust bou
 Security-Divergence: TypeScript accepts unbounded and terminal-active workspace-package values; the GREEN oracle records expected-failure evidence
 
 Workspace-Packages-TypeScript-Oracle: 9c8f77deee15c01baba73fdd510960e899756f0e
-Workspace-Packages-Rust-RED: 089112a3f85bc2cbaaf864991eb5b6129602ff30
-Workspace-Packages-Rust-GREEN: 8b4aea45459aa09237aef7d8dd35ccf06503ae28
+Workspace-Packages-Initial-RED-Rejected: 089112a3f85bc2cbaaf864991eb5b6129602ff30 [test compile failure E0505]
+Workspace-Packages-Rust-RED: 72aa20cf4e17f528b46111f9681f06d522994655
+Workspace-Packages-Rust-GREEN: d997c57b66b4d10710ecee8c98b8a72ff61f2eef
+Workspace-Packages-Oracle-Format: aaa354bf2a808039bdff461dc65dd5e7507a8aec
 
 New-Dependencies: none
 Unsafe-Code: none

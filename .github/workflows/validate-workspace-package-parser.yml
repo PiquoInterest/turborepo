@@ -55,9 +55,9 @@ jobs:
           git merge-base --is-ancestor \
             9c8f77deee15c01baba73fdd510960e899756f0e HEAD
           git merge-base --is-ancestor \
-            089112a3f85bc2cbaaf864991eb5b6129602ff30 HEAD
+            72aa20cf4e17f528b46111f9681f06d522994655 HEAD
           git merge-base --is-ancestor \
-            8b4aea45459aa09237aef7d8dd35ccf06503ae28 HEAD
+            d997c57b66b4d10710ecee8c98b8a72ff61f2eef HEAD
           test -f packages/turbo-workspaces/__tests__/workspace-packages.test.ts
           test -f packages/turbo-workspaces/rust/src/workspace_packages.rs
           test -f packages/turbo-workspaces/rust/tests/workspace_packages_parity.rs
@@ -65,6 +65,7 @@ jobs:
           grep -Fq 'TW-RS-011' packages/turbo-workspaces/rust/security.txt
           grep -Fq 'TW-RS-012' packages/turbo-workspaces/rust/security.txt
           grep -Fq 'TW-RS-013' packages/turbo-workspaces/rust/security.txt
+          grep -Fq 'Initial-RED-Rejected' packages/turbo-workspaces/rust/security.txt
 
       - name: Set up Node and locked JavaScript dependencies
         uses: ./.github/actions/setup-node
@@ -86,13 +87,13 @@ jobs:
           cache: false
           save-cache: false
 
-      - name: Prove the compiling behavioral Rust RED
+      - name: Prove the corrected compiling behavioral Rust RED
         shell: bash
         run: |
           set -euo pipefail
           red_worktree="$RUNNER_TEMP/workspace-packages-red"
           git worktree add --detach "$red_worktree" \
-            089112a3f85bc2cbaaf864991eb5b6129602ff30
+            72aa20cf4e17f528b46111f9681f06d522994655
           trap 'git worktree remove --force "$red_worktree"' EXIT
 
           set +e

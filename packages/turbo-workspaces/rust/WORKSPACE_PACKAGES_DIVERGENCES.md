@@ -11,12 +11,14 @@ Rust target: `packages/turbo-workspaces/rust/src/workspace_packages.rs`.
 ## TDD chain
 
 - TypeScript oracle commit: `9c8f77deee15c01baba73fdd510960e899756f0e`.
-- Compiling behavioral Rust RED: `089112a3f85bc2cbaaf864991eb5b6129602ff30`.
-- Rust GREEN implementation: `8b4aea45459aa09237aef7d8dd35ccf06503ae28`.
+- Initial RED candidate: `089112a3f85bc2cbaaf864991eb5b6129602ff30`, rejected because one security assertion moved a vector while its elements were borrowed and therefore failed to compile.
+- Corrected compiling behavioral Rust RED: `72aa20cf4e17f528b46111f9681f06d522994655`.
+- Corrected Rust GREEN implementation: `d997c57b66b4d10710ecee8c98b8a72ff61f2eef`.
+- TypeScript formatter repair: `aaa354bf2a808039bdff461dc65dd5e7507a8aec`.
 - Rust parity tests: 7.
 - Rust security tests: 6.
 
-The RED implementation exposed the final Rust input and error types but returned an empty vector for every input. The translated value tests and security tests therefore compile and fail for missing behavior rather than missing APIs.
+The corrected RED exports the final Rust input and error types but returns an empty vector for every input. The tests compile and fail for missing extraction and validation behavior. The earlier non-compiling candidate remains in history and is explicitly excluded from TDD evidence rather than rewritten or hidden.
 
 ## Preserved valid-input behavior
 

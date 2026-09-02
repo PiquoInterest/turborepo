@@ -95,11 +95,13 @@ The TypeScript helper returns the original array object, so callers can mutate t
 ## Workspace-package parser TDD evidence
 
 - TypeScript oracle commit: `9c8f77deee15c01baba73fdd510960e899756f0e`;
-- compiling behavioral Rust RED: `089112a3f85bc2cbaaf864991eb5b6129602ff30`;
-- Rust GREEN: `8b4aea45459aa09237aef7d8dd35ccf06503ae28`;
+- initial RED candidate: `089112a3f85bc2cbaaf864991eb5b6129602ff30`, rejected after GitHub exposed Rust error E0505 in the security test;
+- corrected compiling behavioral Rust RED: `72aa20cf4e17f528b46111f9681f06d522994655`;
+- corrected Rust GREEN: `d997c57b66b4d10710ecee8c98b8a72ff61f2eef`;
+- exact TypeScript formatter output: `aaa354bf2a808039bdff461dc65dd5e7507a8aec`;
 - Rust evidence: 7 parity tests and 6 security tests.
 
-The RED source exported the final API and typed errors but returned an empty vector for every input. The GREEN commit adds bounded extraction only. It adds no third-party dependency, filesystem access, process execution, network access, logging sink, credential source, mutable global state, or `unsafe` code.
+The corrected RED exports the final API and typed errors but returns an empty vector for every input. The GREEN commit adds bounded extraction only. The earlier non-compiling candidate remains visible in history but is not counted as TDD proof. This tranche adds no third-party dependency, filesystem access, process execution, network access, logging sink, credential source, mutable global state, or `unsafe` code.
 
 ## Security invariants
 
@@ -121,7 +123,7 @@ The workspace-package tranche adds no dependency. It does not change or ignore a
 
 ## Production blockers
 
-- authoritative GitHub format, TypeScript oracle, Rust RED, GREEN test, and Clippy execution for the new parser tranche;
+- authoritative GitHub format, TypeScript oracle, corrected Rust RED, GREEN test, and Clippy execution for the new parser tranche;
 - bounded no-follow `package.json`, workspace configuration, and lockfile reads;
 - stable filesystem identity between detection, parsing, expansion, and mutation;
 - JSON/YAML parser byte, collection, alias, and nesting limits;

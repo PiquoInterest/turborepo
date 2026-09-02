@@ -45,10 +45,14 @@ The TypeScript oracle deliberately records unsafe legacy behavior with passing `
 TDD evidence:
 
 - TypeScript oracle: `9c8f77deee15c01baba73fdd510960e899756f0e`;
-- compiling behavioral Rust RED: `089112a3f85bc2cbaaf864991eb5b6129602ff30`;
-- Rust GREEN: `8b4aea45459aa09237aef7d8dd35ccf06503ae28`;
+- initial RED candidate `089112a3f85bc2cbaaf864991eb5b6129602ff30` was rejected because a security assertion did not compile;
+- corrected compiling behavioral Rust RED: `72aa20cf4e17f528b46111f9681f06d522994655`;
+- corrected Rust GREEN: `d997c57b66b4d10710ecee8c98b8a72ff61f2eef`;
+- exact TypeScript formatter output: `aaa354bf2a808039bdff461dc65dd5e7507a8aec`;
 - tests: 7 parity and 6 security;
 - detailed ledger: [`WORKSPACE_PACKAGES_DIVERGENCES.md`](./WORKSPACE_PACKAGES_DIVERGENCES.md).
+
+The rejected RED remains visible in history but is not counted as valid behavioral RED evidence.
 
 ## Current test inventory
 
