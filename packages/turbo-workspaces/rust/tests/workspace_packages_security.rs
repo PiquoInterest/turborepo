@@ -54,7 +54,7 @@ fn exact_count_size_and_total_limits_are_accepted() {
     let globs: Vec<&str> = values.iter().map(String::as_str).collect();
 
     let parsed = parse_workspace_packages(WorkspacePackages::Array(&globs));
-    assert_eq!(parsed, Ok(globs));
+    assert_eq!(parsed.as_deref(), Ok(globs.as_slice()));
 }
 
 #[test]
