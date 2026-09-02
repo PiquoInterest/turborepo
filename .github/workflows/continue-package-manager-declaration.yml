@@ -117,19 +117,47 @@ jobs:
         with:
           node-version: 24
 
-      - name: Expose locked repository Turbo to Git hooks
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -x "$GITHUB_WORKSPACE/packages/turbo/bin/turbo"
-          "$GITHUB_WORKSPACE/packages/turbo/bin/turbo" --version
-          echo "$GITHUB_WORKSPACE/packages/turbo/bin" >> "$GITHUB_PATH"
-
       - name: Set up repository Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
           cache: false
           save-cache: false
+
+      - name: Install immutable Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build immutable Turbo for Git hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          hook_source="$RUNNER_TEMP/turbo-hook-source"
+          hook_target="$RUNNER_TEMP/turbo-hook-target"
+          hook_bin="$RUNNER_TEMP/turbo-hook-bin"
+          git worktree add --detach "$hook_source" \
+            813d54ae054923e85269979dfa98fe5e47331070
+          (
+            cd "$hook_source"
+            CARGO_TARGET_DIR="$hook_target" cargo build --locked -p turbo --bin turbo
+          )
+          turbo_binary="$hook_target/debug/turbo"
+          test -x "$turbo_binary"
+          test "$("$turbo_binary" --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+          mkdir -p "$hook_bin"
+          ln -s "$turbo_binary" "$hook_bin/turbo"
+          echo "$hook_bin" >> "$GITHUB_PATH"
+          git worktree remove --force "$hook_source"
+          rm -rf "$GITHUB_WORKSPACE/zig"
 
       - name: Configure commit identity
         shell: bash
@@ -143,6 +171,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          command -v turbo
           python3 tools/migration/turbo-workspaces-declaration/stage_package_manager_declaration.py red
           pnpm exec oxfmt --write \
             packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
