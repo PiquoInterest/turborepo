@@ -31,11 +31,14 @@ export function validateDirectory(directory: string): {
   const root = path.resolve(directory);
   const projectName = path.basename(root);
 
-  // Prevent resolved paths that could be misinterpreted as command-line options
-  // when passed to tools like git, and ensure the project name is well-formed.
-  const unsafeRoot = !root || root.startsWith("-") || root.includes("\0");
+  // Reject option-like basenames before any filesystem access. The resolved
+  // root is absolute on supported platforms, so checking root.startsWith("-")
+  // cannot protect subprocess callers from a basename such as "-rf".
+  const unsafeRoot = !root || root.includes("\0");
   const invalidProjectName =
-    !projectName || !/^[a-zA-Z0-9._-]+$/.test(projectName);
+    !projectName ||
+    projectName.startsWith("-") ||
+    !/^[a-zA-Z0-9._-]+$/.test(projectName);
 
   if (unsafeRoot || invalidProjectName) {
     return {

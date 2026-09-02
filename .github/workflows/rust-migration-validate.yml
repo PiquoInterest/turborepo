@@ -1,0 +1,153 @@
+name: Rust migration validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/rust-migration-validate.yml
+      - AGENTS.md
+      - Cargo.toml
+      - Cargo.lock
+      - docs/rust-migration-security-findings.md
+      - docs/typescript-deprecation.md
+      - packages/*/rust/**
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/rust-migration-validate.yml
+      - AGENTS.md
+      - Cargo.toml
+      - Cargo.lock
+      - docs/rust-migration-security-findings.md
+      - docs/typescript-deprecation.md
+      - packages/*/rust/**
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: rust-migration-validation-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate committed Rust migration crates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact migration commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Verify migration workflow and evidence documents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -Fq '## TypeScript-to-Rust Deprecation Workflow' AGENTS.md
+          grep -Fq 'current advisory lookup' AGENTS.md
+          grep -Fq 'README.md' AGENTS.md
+          grep -Fq 'PARITY_MATRIX.md' AGENTS.md
+          grep -Fq 'SECURITY.md' AGENTS.md
+
+          mapfile -t all_manifests < <(
+            find packages -type f -path '*/rust/Cargo.toml' -print | LC_ALL=C sort
+          )
+          migration_manifests=()
+          for manifest in "${all_manifests[@]}"; do
+            # This is the repository's pre-existing N-API crate, not a tranche
+            # created by the TypeScript deprecation program.
+            if [[ "$manifest" == 'packages/turbo-repository/rust/Cargo.toml' ]]; then
+              continue
+            fi
+            migration_manifests+=("$manifest")
+          done
+
+          if (( ${#migration_manifests[@]} == 0 )); then
+            echo 'No package-local Rust migration manifests were discovered.' >&2
+            exit 1
+          fi
+
+          for manifest in "${migration_manifests[@]}"; do
+            component="${manifest%/Cargo.toml}"
+            test -s "$component/README.md"
+            test -s "$component/PARITY_MATRIX.md"
+            test -s "$component/SECURITY.md"
+            grep -Fq "\`$component\`" docs/typescript-deprecation.md
+            grep -Eqi '^## .*advisory lookup|^## advisory lookup' "$component/SECURITY.md"
+            grep -Eq 'Lookup date:.*20[0-9]{2}-[01][0-9]-[0-3][0-9]' "$component/SECURITY.md"
+          done
+
+          test -s docs/rust-migration-security-findings.md
+
+          {
+            echo 'MIGRATION_PACKAGES<<__MIGRATION_PACKAGES__'
+            python3 - "${migration_manifests[@]}" <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+
+          for manifest in sys.argv[1:]:
+              path = pathlib.Path(manifest)
+              document = tomllib.loads(path.read_text(encoding="utf-8"))
+              package = document.get("package", {}).get("name")
+              if not isinstance(package, str) or not package:
+                  raise SystemExit(f"missing package.name in {manifest}")
+              print(package)
+          PY
+            echo '__MIGRATION_PACKAGES__'
+          } >> "$GITHUB_ENV"
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache-key: rust-typescript-deprecation
+
+      - name: Verify committed formatting
+        run: cargo fmt --all --check
+
+      - name: Compile committed migration crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t packages <<< "$MIGRATION_PACKAGES"
+          arguments=()
+          for package in "${packages[@]}"; do
+            [[ -n "$package" ]] && arguments+=(-p "$package")
+          done
+          cargo check --locked "${arguments[@]}" --all-targets
+
+      - name: Run migration parity and security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t packages <<< "$MIGRATION_PACKAGES"
+          arguments=()
+          for package in "${packages[@]}"; do
+            [[ -n "$package" ]] && arguments+=(-p "$package")
+          done
+          cargo test --locked "${arguments[@]}" --all-targets
+
+      - name: Run migration Clippy gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t packages <<< "$MIGRATION_PACKAGES"
+          arguments=()
+          for package in "${packages[@]}"; do
+            [[ -n "$package" ]] && arguments+=(-p "$package")
+          done
+          cargo clippy --locked "${arguments[@]}" --all-targets -- -D warnings
+
+      - name: Audit the complete resolved Rust dependency graph
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Temporary documented exception. Remove when the workspace upgrades
+          # webbrowser to >=1.2.2 or removes it. No other advisory is ignored.
+          ignore: RUSTSEC-2026-0257

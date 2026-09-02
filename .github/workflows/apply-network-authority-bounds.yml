@@ -1,0 +1,304 @@
+name: Apply secure network authority and URL bounds
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/apply-network-authority-bounds.yml
+      - tools/migration/apply_network_authority_bounds.py
+
+concurrency:
+  group: apply-network-authority-bounds-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole integration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the committed RED contract fails behaviorally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/network-authority-red \
+            4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c
+          set +e
+          (
+            cd /tmp/network-authority-red
+            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/network-authority-red" \
+              cargo test --locked -p turbo-utils-rs \
+                --test network_authority_bounds
+          ) > /tmp/network-authority-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/network-authority-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "RED contract unexpectedly passed before implementation" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/network-authority-red.log; then
+            echo "RED contract failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/network-authority-red.log
+          grep -Fq 'explicit_default_https_port_receives_github_authorization' \
+            /tmp/network-authority-red.log
+          grep -Fq 'oversized_request_urls_fail_closed_across_policy_entrypoints' \
+            /tmp/network-authority-red.log
+          git worktree remove --force /tmp/network-authority-red
+
+      - name: Apply the GREEN network policy implementation
+        run: python3 tools/migration/apply_network_authority_bounds.py code
+
+      - name: Format and validate the Rust tranche
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff --check
+          cargo check --locked -p turbo-utils-rs --all-targets
+          cargo test --locked -p turbo-utils-rs --all-targets
+          cargo clippy --locked -p turbo-utils-rs --all-targets -- -D warnings
+          cargo fmt --all --check
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-utils/rust/src/network.rs \
+            packages/turbo-utils/rust/tests/network_authority_bounds.rs; then
+            echo "network authority tranche introduced unsafe code" >&2
+            exit 1
+          fi
+          git diff --exit-code -- Cargo.toml Cargo.lock
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Run the TypeScript oracle suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/utils test
+
+      - name: Commit the GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/turbo-utils/rust/src/network.rs \
+            packages/turbo-utils/rust/src/entry.rs \
+            packages/turbo-utils/rust/tests/network_authority_bounds.rs \
+            packages/turbo-utils/rust/tests/network_security.rs \
+            packages/turbo-utils/rust/tests/redirect_policy_security.rs
+          git diff --cached --check
+          git commit -m "fix(turbo-utils): Bound request authority policy"
+          echo "GREEN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Record parity, security, and program evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/apply_network_authority_bounds.py docs "$GREEN_SHA"
+          pnpm exec oxfmt \
+            packages/turbo-utils/rust/README.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-utils/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --check
+          grep -Fq '76 parity tests and 49 security regression tests' \
+            packages/turbo-utils/rust/README.md
+          grep -Fq '**387 authored Rust migration tests**' \
+            docs/typescript-deprecation.md
+          grep -Fq '## TU-031:' packages/turbo-utils/rust/SECURITY.md
+          grep -Fq '### RF-026:' docs/rust-migration-security-findings.md
+          test ! -e .github/workflows/apply-network-authority-bounds.yml
+          test ! -e tools/migration/apply_network_authority_bounds.py
+
+      - name: Commit the reviewed evidence and remove one-shot automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A \
+            .github/workflows/apply-network-authority-bounds.yml \
+            tools/migration/apply_network_authority_bounds.py \
+            packages/turbo-utils/rust/README.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-utils/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs(turbo-utils): Record bounded network authority policy"
+
+      - name: Install repository Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Prepare a temporary source-compatible Rust graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.toml /tmp/network-authority-Cargo.toml.original
+          cp Cargo.lock /tmp/network-authority-Cargo.lock.original
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'biome_diagnostics = { version = "0.5.7" }': 'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }': 'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"Cargo.toml dependency anchor changed: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          package_is_locked() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          present = any(
+              package.get("name") == name and package.get("version") == version
+              for package in lock.get("package", [])
+          )
+          raise SystemExit(0 if present else 1)
+          PY
+          }
+
+          downgrade_if_locked() {
+            local name="$1"
+            local from_version="$2"
+            local to_version="$3"
+            if package_is_locked "$name" "$from_version"; then
+              cargo update -p "$name@$from_version" --precise "$to_version"
+            fi
+          }
+
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
+          python3 <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          packages = lock.get("package", [])
+
+          mismatched_biome = {
+              package["name"]: package["version"]
+              for package in packages
+              if package.get("name", "").startswith("biome_")
+              and package.get("version", "").startswith("0.5.")
+              and package.get("version") != "0.5.7"
+          }
+          if mismatched_biome:
+              raise SystemExit(
+                  f"Biome dependency family is still incoherent: {mismatched_biome}"
+              )
+
+          resolver_versions = [
+              package["version"]
+              for package in packages
+              if package.get("name") == "unrs_resolver"
+          ]
+          if resolver_versions != ["1.11.1"]:
+              raise SystemExit(
+                  f"source-compatible unrs_resolver lock changed: {resolver_versions}"
+              )
+
+          original = tomllib.loads(
+              Path("/tmp/network-authority-Cargo.lock.original").read_text(
+                  encoding="utf-8"
+              )
+          )
+          original_count = len(original.get("package", []))
+          current_count = len(packages)
+          if abs(current_count - original_count) > 32:
+              raise SystemExit(
+                  "temporary dependency repair changed an unexpectedly large number "
+                  f"of package records: {original_count} -> {current_count}"
+              )
+          PY
+
+      - name: Build the exact Turbo binary used by the pre-push hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Restore the committed dependency graph
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git restore --source=HEAD -- Cargo.toml Cargo.lock
+          git diff --exit-code -- Cargo.toml Cargo.lock
+
+      - name: Push both reviewed commits through repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during the tranche: $remote_head" >&2
+            exit 1
+          fi
+          git status --short
+          git push origin HEAD:rust/typescript-deprecation

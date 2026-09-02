@@ -1,0 +1,301 @@
+# Rust migration security findings
+
+This is the repository-level index for security findings discovered while moving executable TypeScript logic to Rust. Package-specific details, regression tests, residual risks, and intentional incompatibilities remain in each migration crate's `SECURITY.md`.
+
+This index is evidence-based but not exhaustive. A component is not considered audited merely because it appears here.
+
+## Package reviews
+
+- [`packages/turbo-ignore/rust/SECURITY.md`](../packages/turbo-ignore/rust/SECURITY.md)
+- [`packages/turbo-utils/rust/SECURITY.md`](../packages/turbo-utils/rust/SECURITY.md)
+- [`packages/create-turbo/rust/SECURITY.md`](../packages/create-turbo/rust/SECURITY.md)
+
+## Repository findings
+
+### RF-001: Affected `webbrowser` dependency remains in the workspace
+
+**Status:** Open, upgrade or removal required before integration merge.
+
+The workspace declares `webbrowser = "0.8.7"` and currently resolves an affected `0.8.x` release. RustSec advisory `RUSTSEC-2026-0257`, also published as `GHSA-2ph8-5cr8-hr33`, affects relevant browser-opening APIs through version `1.2.1`; version `1.2.2` or later is patched.
+
+The observed repository call uses a constant HTTP URL, which limits current reachability, but the dependency remains in an affected range. Required closure is to upgrade or remove it, run the affected query tests/lints, retain an HTTP(S)-only input policy, and remove the existing temporary migration-CI exception. No additional advisory exception may be added to make the integration branch appear green.
+
+References:
+
+- <https://rustsec.org/advisories/RUSTSEC-2026-0257.html>
+- <https://github.com/advisories/GHSA-2ph8-5cr8-hr33>
+
+### RF-002: Project archive paths do not share one proven extraction contract
+
+**Status:** Production cutover blocked.
+
+The TypeScript archive paths apply different explicit checks. A production Rust provider must use one extractor with tested limits for entry count, file size, total expansion, decompression ratio, depth, links, device nodes, permissions, time, redirects, staging, and cleanup.
+
+### RF-003: TypeScript project creation mutates process-wide working-directory state
+
+**Status:** Fixed in the Rust coordinator; TypeScript production path remains.
+
+The TypeScript coordinator calls `process.chdir(root)` without restoration. The Rust core passes absolute destinations and does not mutate global current-directory state.
+
+### RF-004: Decision metadata has symlink and resource-exhaustion boundaries
+
+**Status:** Fixed in current Rust cores; TypeScript production paths remain.
+
+Rust migration cores use bounded regular-file reads, reject or ignore symlinked decision metadata, and fail conservatively where uncertainty changes a build or generation decision.
+
+### RF-005: CLI notification text can spoof terminal output
+
+**Status:** Fixed in the Rust notification core; TypeScript production path remains.
+
+Rust escapes terminal controls and Unicode directionality controls and bounds each untrusted field while preserving safe printable message order and exit behavior.
+
+### RF-006: README transforms follow links, process unbounded content, and write in place
+
+**Status:** Fixed in the `create-turbo` Rust transform core; TypeScript production path remains.
+
+Rust limits input to 4 MiB, scans linearly, rejects malformed UTF-8 and symlinked roots/files, checks Unix file identity, writes through a synchronized sibling temporary file, preserves mode bits, and replaces only after revalidation.
+
+Windows atomic replacement, complete metadata/ACL preservation, descriptor-relative concurrent-path handling, and differential behavior for the shared `nub`/`aube` target type remain open.
+
+### RF-007: `.gitignore` check/write race and broken-link following
+
+**Status:** Fixed in the `create-turbo` Rust transform core; TypeScript production path remains.
+
+The TypeScript transform checks `existsSync` and then performs an overwrite-capable write. A destination can appear between those operations. More seriously, `existsSync` reports a broken `.gitignore` symlink as absent, after which the write follows the link and can create an external target.
+
+The Rust core:
+
+- rejects symlinked roots and broken or existing `.gitignore` symlinks;
+- writes the exact default bytes to a newly created sibling file;
+- synchronizes the file before publication;
+- publishes through `hard_link`, which never overwrites an existing destination;
+- treats a concurrent regular destination as `not-applicable`;
+- bounds temporary-name retries and cleans up ordinary failure paths.
+
+Regression tests prove that external symlink targets are not created or modified and customer-owned existing content is not overwritten.
+
+Residual risk: path-based standard-library APIs cannot close every malicious root-component exchange. Descriptor-relative Unix operations and reviewed Windows handle-based publication remain required before production cutover in attacker-writable roots.
+
+### RF-008: TypeScript Git root validation models shell injection instead of path safety
+
+**Status:** Fixed in the injected Rust orchestration core; production provider remains blocked.
+
+The TypeScript `tryGitInit` path rejects `$`, `#`, `;`, and `!` even though it passes an argument vector to `spawnSync` rather than a shell string. It does not reject relative roots, filesystem roots, parent components, controls, or all filename characters invalid on Windows.
+
+The Rust core requires an absolute non-root path, rejects current/parent components, controls, and Windows-invalid filename characters, and permits harmless shell metacharacters because no shell is used. It also carries the root as `PathBuf`, preserving non-UTF-8 Unix paths.
+
+Regression coverage is in `packages/create-turbo/rust/tests/git_init_security.rs`.
+
+### RF-009: Git initialization can inherit executable, template, configuration, and hook execution
+
+**Status:** Production cutover blocked; no production runner is implemented.
+
+The TypeScript code resolves `git` and `hg` by command name and inherits the caller environment and VCS configuration. Git documents that `git init` may copy templates selected by environment or configuration and that `git commit` may execute commit-related hooks. A production Rust provider must therefore prove canonical executable resolution, an explicit environment/configuration policy, no shell, deadlines, bounded output, descendant cleanup, and deliberate hook/template behavior.
+
+The Rust tranche keeps these effects behind `VcsRunner`. The integration branch must not treat the injected orchestration tests as evidence that process execution is production-safe.
+
+References:
+
+- <https://git-scm.com/docs/git-init>
+- <https://git-scm.com/docs/git-commit>
+- <https://git-scm.com/docs/githooks>
+
+### RF-010: Recursive `.git` cleanup lacks a proven no-follow ownership contract
+
+**Status:** Production cutover blocked; no production cleaner is implemented.
+
+A naive recursive delete can cross links or Windows reparse points, race with path replacement, or remove a repository the current operation did not create. The Rust orchestration core requests cleanup only after `git init` returned success and a later command failed. It does not request cleanup after an ambiguous init failure.
+
+A production `GitDirectoryCleaner` must prove root identity, `.git` ownership, no-follow traversal, bounded work, cleanup failure behavior, and supported Windows semantics.
+
+### RF-011: `h2 0.4.5` is affected by unbounded empty DATA frame handling
+
+**Status:** Open, patched lockfile version required.
+
+The current audited lockfile contains `h2 0.4.5`. `RUSTSEC-2026-0258` / `GHSA-q83h-524g-xf6h` describes unbounded queuing of empty HTTP/2 DATA frames and is patched in `h2 0.4.16`.
+
+A temporary dependency-refresh workflow proved that Cargo can select `h2 0.4.16`, but the workflow did not commit any lockfile because a later `quick-xml` constraint failed and validation was intentionally fail-closed. The permanent remediation must update the lockfile in a reviewed branch and pass all affected workspace checks before integration.
+
+References:
+
+- <https://rustsec.org/advisories/RUSTSEC-2026-0258.html>
+- <https://github.com/advisories/GHSA-q83h-524g-xf6h>
+
+### RF-012: `quick-xml 0.38.4` has two denial-of-service advisories
+
+**Status:** Open, direct dependency-chain change required.
+
+The current audited lockfile contains `quick-xml 0.38.4`, affected by:
+
+- `RUSTSEC-2026-0194`: quadratic duplicate-attribute checking;
+- `RUSTSEC-2026-0195`: unbounded namespace-declaration allocation.
+
+Both are patched in `quick-xml 0.41.0` or later. A precise lockfile update was rejected because `opendal 0.55.0` requires `quick-xml ^0.38`. The observed reverse chain is `quick-xml -> opendal -> sccache -> turbo` and the `turborepo-sccache-proxy` development path.
+
+Required closure is to update or remove the constraining `opendal`/`sccache` dependency path, then regenerate the lockfile and run the affected workspace build, test, lint, and audit gates. An advisory ignore is not an acceptable substitute.
+
+References:
+
+- <https://rustsec.org/advisories/RUSTSEC-2026-0194.html>
+- <https://rustsec.org/advisories/RUSTSEC-2026-0195.html>
+
+### RF-013: Default-example acquisition routing must remain exact
+
+**Status:** Fixed in the Rust predicate core; production caller remains TypeScript.
+
+`create-turbo` passes `isDefaultExample(exampleName)` into project acquisition. Broadening that predicate through trimming, case folding, Unicode normalization, prefixes, suffixes, path matching, or fuzzy matching could classify attacker-controlled names as built-in defaults.
+
+The Rust core exports the exact source-order values `basic` and `default` and matches only those two borrowed ASCII strings. Regression tests reject case variants, whitespace, controls, NUL, prefixes, suffixes, path-like values, Unicode confusables, normalization variants, joiners, and a 4 MiB arbitrary input.
+
+Required closure is to bind the Rust predicate into production acquisition orchestration and run shared TypeScript/Rust routing fixtures before the TypeScript helper is removed.
+
+### RF-014: Package-manager conversion lacks a proven multi-file transaction and rollback contract
+
+**Status:** Production cutover blocked; only the decision/request core is implemented.
+
+The TypeScript `package-manager` transform delegates to `@turbo/workspaces.convert`, whose reviewed flow performs manager-specific cleanup and creation and updates package metadata and manager-owned lock/configuration files across multiple steps. No single shared atomic commit or complete repository rollback contract is evident in that orchestration. A failure after an early mutation can therefore leave a partially converted workspace unless each adapter closes every recovery path.
+
+The Rust `create-turbo` core narrows this boundary:
+
+- absent or unchanged manager selections cannot invoke mutation;
+- all six repository manager names are closed enum variants;
+- changed selections produce exactly one typed request with a borrowed root and `skip_install: true`;
+- prompt version text is not copied, logged, or forwarded, matching the source transform;
+- provider errors propagate and cannot become success;
+- no filesystem operation, process execution, or free-form command exists in the reviewed core.
+
+Required closure is a production `PackageManagerConverter` with translated manager-specific tests, the complete source/target matrix, path containment and no-follow behavior, bounded parsing and process execution, safe executable resolution, atomic staging or a complete rollback journal, deterministic errors, and Linux/macOS/Windows differential fixtures.
+
+Regression coverage is in `packages/create-turbo/rust/tests/package_manager_transform_parity.rs` and `package_manager_transform_security.rs`.
+
+### RF-015: Official-starter JSON mutation lacks a bounded atomic production provider
+
+**Status:** Orchestration core implemented; production cutover blocked.
+
+The TypeScript `official-starter` transform trusts only a missing repository or the exact repositories `vercel/turbo` and `vercel/turborepo`, reads and best-effort removes `meta.json`, then may rewrite `package.json`. Broadening repository matching would widen a trusted route, while directly reproducing `fs-extra` would retain unbounded parsing, link following, in-place write, metadata, ordering, and concurrent-path uncertainty.
+
+The Rust core now proves exact borrowed-string classification, source call order, metadata failure behavior, package rename/version decisions, public nonfatal errors, and failure propagation. It cannot access a filesystem, parser, serializer, process, network, or logger directly.
+
+Required closure is a production `OfficialStarterStore` with bounded strict parsing, JavaScript-compatible truthiness, unknown-field and insertion-order preservation, no-follow root/file identity, synchronized atomic package publication, transaction or rollback coverage for metadata removal plus package mutation, approved metadata/ACL behavior, deterministic serialization, public binding, and Linux/macOS/Windows differential fixtures.
+
+Regression coverage is in `packages/create-turbo/rust/tests/official_starter_parity.rs` and `official_starter_security.rs`. The complete representation and intentional-divergence ledger is `packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md`.
+
+### RF-016: Transform-loop termination and terminal output require a secure host boundary
+
+**Status:** Fixed-order Rust core implemented; production binding blocked.
+
+The TypeScript create command runs four transforms sequentially, treats nonfatal `TransformError` values as recoverable, exits immediately on fatal transform errors, and rethrows unknown errors. Raw error text is sent to terminal formatting, while telemetry is a separate side effect.
+
+The Rust core closes routing to four enum variants, bounds each to one invocation, preserves exact error defaults and string truthiness, and returns typed partial progress instead of logging or exiting. Production closure requires exact async forwarding, exactly-once telemetry, terminal-control-safe display, cleanup and flush before exit code 1, strict runtime metadata typing, unknown-error propagation, supported-platform differentials, and TypeScript removal proof.
+
+Regression evidence is in `packages/create-turbo/rust/tests/transform_pipeline_parity.rs` and `transform_pipeline_security.rs`; exact differences are in `TRANSFORM_PIPELINE_DIVERGENCES.md`.
+
+### RF-017: Package-manager prompt casting and disabled choices need a typed provider boundary
+
+**Status:** Decision core implemented; discovery and UI providers blocked.
+
+The TypeScript prompt casts free-form manager text before indexing discovered versions and relies on Inquirer to enforce disabled choices. The Rust core accepts only six exact literals, preserves source ordering and truthiness, and revalidates the selected manager against a non-empty discovered version. It never retries or fabricates a fallback.
+
+Production closure requires canonical no-shell discovery with bounded process handling, exact interactive cancellation/non-TTY/signal behavior, terminal-safe rendering, supported-platform differentials, host binding, and TypeScript removal proof. Regression evidence is in the package-manager prompt parity/security tests and `PACKAGE_MANAGER_PROMPT_DIVERGENCES.md`.
+
+### RF-018: Invalid direct project directories could continue after validator rejection
+
+**Status:** Repaired in TypeScript and represented fail-closed in the Rust core; production Rust providers remain blocked.
+
+The original direct-argument path returned a validation object whose `valid: false` result was ignored by the create caller. The repaired TypeScript caller maps this to a trusted known input error, while Rust uses `Result` so rejection cannot be destructured as success.
+
+### RF-019: Create-command error, warning, and final output accept terminal-active untrusted text
+
+**Status:** Fixed in Rust policy/rendering cores; TypeScript production output remains.
+
+Rust escapes terminal, line, directionality, and invisible format controls, applies explicit UTF-8 and record-count limits, and never renders unknown errors. Production bindings must emit only these reviewed strings, apply coloring afterwards, and prove there is no second raw-output path.
+
+### RF-020: Package installation permits project-local substitution and Windows shell mediation
+
+**Status:** Fixed in typed Rust invocation policy; production runner blocked.
+
+The current TypeScript installer uses `preferLocal: true` and `shell: true` on Windows. Rust profile metadata forbids both and uses closed manager/program identities plus static arguments. Canonical executable resolution, environment isolation, deadlines, bounded output, descendant cleanup, and Windows shim behavior remain provider requirements.
+
+### RF-021: Directory allow-listing ignores file type and can alias non-UTF-8 names
+
+**Status:** Fixed in the Rust directory provider; TypeScript production path remains.
+
+Rust treats every symlink entry as a conflict, including allow-listed names, and rejects non-UTF-8 names rather than applying lossy conversion before suffix/allow-list decisions.
+
+### RF-022: Directory validation misses option-like basenames and symlinked ancestors
+
+**Status:** Fixed for stable existing paths in Rust; handle-relative production closure remains blocked.
+
+Rust validates the basename itself and inspects existing path components for symlinks before enumeration. Portable path checks remain raceable and may be conservative on symlink-aliased system paths, so supported-platform differential tests plus Unix directory handles and Windows reparse-point-aware handles are required.
+
+### RF-023: Directory enumeration and conflict collection are unbounded
+
+**Status:** Fixed in Rust with a 256-entry fail-closed limit; TypeScript production path remains.
+
+The Rust validator stops before building an unbounded conflict collection and converts inspection overflow into an invalid-directory result.
+
+### RF-024: Project-directory prompt input is unbounded and can contain invisible terminal controls
+
+**Status:** Fixed in the Rust decision core and partially repaired TypeScript boundary; production prompt provider blocked.
+
+Rust rejects input over 4096 UTF-8 bytes and rejects C0/C1, line separators, bidi controls, zero-width and related format controls before terminal or filesystem providers. The production prompt must enforce the limit while reading and preserve cancellation, EOF, signals, and non-TTY behavior.
+
+### RF-025: Missing or permissive `NO_PROXY` handling can route sensitive destinations incorrectly
+
+**Status:** Fixed in the Rust network-policy core; TypeScript production request execution remains and the Rust provider is still blocked.
+
+The existing TypeScript helper selects HTTP/HTTPS proxy variables but does not model `NO_PROXY` or `no_proxy`. That can send loopback, internal, or explicitly exempt destinations through a proxy. A permissive port could also bypass a proxy too broadly through substring, partial-wildcard, Unicode/confusable, CIDR, or ambiguous authority matching.
+
+The Rust core now evaluates a bounded lowercase-first bypass policy before returning a selected proxy:
+
+- 4,096-byte and 256-entry limits;
+- global `*`;
+- exact domains and explicit leading-dot suffixes with DNS-label boundaries;
+- exact IPv4 and bracketed IPv6;
+- optional ports matched against explicit or HTTP/HTTPS default ports;
+- fail-closed rejection of partial wildcards, CIDR, Unicode, controls, invalid ports, unbracketed IPv6, userinfo-bearing authorities, empty-only lists, and excessive input;
+- no fallback from an invalid lowercase value to uppercase policy and no silent direct/proxied transport decision.
+
+This tranche adds no dependency, network call, credential access, parser crate, subprocess, or unsafe code. TDD evidence is RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094be133fcbba7fd5ffda12a288deee19`, formatting `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`, and corrected protocol fixture `94c14b4b530db457923ede6dfee906ef45cb07d9`.
+
+Required production closure is a request executor that consumes the decision exactly once across redirects, applies an explicit DNS/rebinding and TLS policy, bounds time and response size, redacts proxy credentials, passes Linux/macOS/Windows differentials, and removes the TypeScript request path only after binding and packaging proof.
+
+### RF-026: Request authority normalization and URL bounds were incomplete
+
+**Status:** Fixed in the Rust network-policy core; production request execution remains blocked.
+
+The network core previously compared raw GitHub authorities, so an explicit default HTTPS port was treated as a different origin, while request URLs had no shared input-size boundary. The corrected policy normalizes the effective HTTPS port for exact GitHub API hosts, continues to reject userinfo and non-default ports, and rejects URLs above 8,192 UTF-8 bytes before authorization, proxy, or redirect-state decisions.
+
+Rejected redirect targets cannot mutate the chain URL, authorization/proxy policy, or hop count. The change adds no dependency, parser crate, network call, subprocess, credential source, or unsafe code.
+
+TDD evidence is RED `4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c`, GREEN `19f91e5ca23fb547e06d727a628a1405033f5420`, and formatting `538e2ddb259bb29dd2e973432f49d01e30985c1f`. Regression coverage is in `packages/turbo-utils/rust/tests/network_authority_bounds.rs` and `network_security.rs`.
+
+Production closure still requires one bounded request executor with explicit TLS, DNS/rebinding, proxy application, redirect, timeout, response-size, cancellation, and credential-redaction behavior across Linux, macOS, and Windows.
+
+### RF-027: Package-manager profile matching accepted unbounded provider authority
+
+**Status:** Fixed in the Rust profile core; production process execution remains blocked.
+
+The TypeScript installer selects profiles through npm `semver.satisfies`. The first Rust profile tranche left that decision behind an injected provider, which could normalize hostile input, accept a different grammar, or choose a different profile.
+
+The Rust core now enforces 256-byte version and range limits, strict ASCII three-component versions, JavaScript-safe numeric components, validated prerelease/build identifiers, default prerelease exclusion, and a closed six-selector grammar. Whitespace and control characters are intentionally rejected instead of normalized. Unknown range syntax is a typed configuration error.
+
+The TypeScript oracle remains GREEN and documents current whitespace normalization while retaining `it.failing` security expectations. TDD evidence is oracle `3d0d7d63950f21acf4604536fdaffbfffa335798`, RED `816216a20b5620ab381842e26ed322d9409b3cec`, GREEN `a47192630977ffec2a4208f67d01fbd948a8aa97`, formatter `149f43f4662d8ab3f44b35a2b21e4e3bfd8c3c31`, and divergence record `6fbab195a23fd567891a9c7e31f820534c83a0a6`. The source implementation adds no dependency or side-effect authority.
+
+Production closure still requires canonical executable resolution, no shell or project-local substitution, explicit environment policy, deadlines, bounded output, cancellation, descendant cleanup, Windows shim behavior, supported-platform differential fixtures, host binding, packaging, caller cutover, and removal proof.
+
+## Required repository gates
+
+Before declaring repository-wide TypeScript deprecation complete:
+
+- keep lockfile-wide RustSec auditing enabled and remove every temporary exception after remediation;
+- resolve `webbrowser`, `h2`, and `quick-xml` rather than suppressing them;
+- close the package-manager conversion transaction, rollback, and supported-platform contract;
+- close the official-starter bounded JSON, truthiness, no-follow identity, deterministic ordering, atomic publication, and supported-platform provider contract;
+- close the transform-pipeline async binding, telemetry, terminal-safe logging, cleanup-before-exit, runtime typing, and supported-platform differential contract;
+- close the package-manager discovery and prompt provider contract, including canonical execution, cancellation, non-TTY/signals, terminal-safe UI, and supported-platform differentials;
+- close project-directory prompting and validation with bounded reads, trusted diagnostics, stable Unix directory handles, Windows reparse-point-aware handles, atomic/private staging, and platform differentials;
+- run npm advisory and provenance checks for retained host adapters;
+- execute differential fixtures on Linux, macOS, and Windows;
+- prove that published artifacts do not load executable TypeScript at runtime;
+- retain minimal JavaScript host shims only where host APIs require them, with business logic behind reviewed Rust/native/WASM boundaries.

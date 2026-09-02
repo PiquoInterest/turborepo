@@ -1,0 +1,243 @@
+name: Stage turbo-workspaces workspace-details RED contract
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/stage-workspace-details-red.yml
+      - tools/migration/stage_workspace_details_red.py
+
+concurrency:
+  group: stage-workspace-details-red-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  stage-red:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout the single migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify branch and pinned TypeScript oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor \
+            4e7fb108a32798fc2a9f8c2f3b9caa3ae18c78ff HEAD
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/__tests__/workspace-details.test.ts)" = \
+            "6e02fb9cd847a24d49ecdacb77effaa78ed6ed45"
+          test "$(git rev-parse HEAD:tools/migration/stage_workspace_details_red.py)" = \
+            "8ebdd66b68c15519371b94b5aa5d2799929a3371"
+          test ! -e packages/turbo-workspaces/rust
+          grep -Fq '"aube",' \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts
+          grep -Fq 'selected manager read failure without parser fallback' \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Prove the TypeScript oracle is GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --check \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/workspace-details.test.ts
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Stage the Rust crate and repository evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.lock /tmp/workspace-details-Cargo.lock.before
+          python3 tools/migration/stage_workspace_details_red.py
+          cargo fmt --all
+
+      - name: Prove a compiling behavioral RED
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          cargo test -p turbo-workspaces-rs \
+            --test workspace_details_parity \
+            --test workspace_details_security \
+            > /tmp/workspace-details-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/workspace-details-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "workspace-details RED unexpectedly passed" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/workspace-details-red.log; then
+            echo "workspace-details RED failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/workspace-details-red.log
+          grep -Eq \
+            'first_detected_manager_is_read_and_later_managers_are_not_consulted|the_provider_absolute_path_is_the_only_path_given_to_managers' \
+            /tmp/workspace-details-red.log
+
+      - name: Verify the exact lockfile delta and lint-clean RED source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          def load(path: str) -> dict:
+              return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+          before = load("/tmp/workspace-details-Cargo.lock.before")
+          after = load("Cargo.lock")
+
+          def key(package: dict) -> tuple[str, str, str]:
+              return (
+                  package["name"],
+                  package["version"],
+                  package.get("source", ""),
+              )
+
+          before_packages = {key(package): package for package in before.get("package", [])}
+          after_packages = {key(package): package for package in after.get("package", [])}
+          added = set(after_packages) - set(before_packages)
+          removed = set(before_packages) - set(after_packages)
+          expected = {("turbo-workspaces-rs", "0.1.0", "")}
+          if added != expected or removed:
+              raise SystemExit(
+                  f"unexpected workspace-details lock delta: added={sorted(added)}, removed={sorted(removed)}"
+              )
+          for package_key, package in before_packages.items():
+              if after_packages[package_key] != package:
+                  raise SystemExit(f"existing lock record changed: {package_key}")
+          new_package = after_packages[("turbo-workspaces-rs", "0.1.0", "")]
+          if new_package.get("dependencies"):
+              raise SystemExit(
+                  f"RED crate unexpectedly acquired dependencies: {new_package['dependencies']}"
+              )
+          PY
+          cargo fmt --all --check
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+          git diff --check
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-workspaces/rust; then
+            echo "workspace-details RED introduced unsafe code" >&2
+            exit 1
+          fi
+
+      - name: Commit the behavioral RED
+        id: red
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            packages/turbo-workspaces/rust \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-test-inventory.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              "Cargo.toml",
+              "Cargo.lock",
+              "packages/turbo-workspaces/rust/Cargo.toml",
+              "packages/turbo-workspaces/rust/src/lib.rs",
+              "packages/turbo-workspaces/rust/tests/workspace_details_parity.rs",
+              "packages/turbo-workspaces/rust/tests/workspace_details_security.rs",
+              "packages/turbo-workspaces/rust/README.md",
+              "packages/turbo-workspaces/rust/PARITY_MATRIX.md",
+              "packages/turbo-workspaces/rust/SECURITY.md",
+              "packages/turbo-workspaces/rust/security.txt",
+              "docs/typescript-deprecation.md",
+              "docs/rust-migration-test-inventory.md",
+              "docs/rust-migration-security-findings.md",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"unexpected RED commit paths: {sorted(changed)}")
+          PY
+          git commit -m "test(turbo-workspaces): Add workspace details RED contract"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record the exact RED SHA and remove one-shot automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "${{ steps.red.outputs.sha }}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          red_sha = sys.argv[1]
+          old = "RED commit: recorded after the behavioral proof."
+          new = f"RED commit: `{red_sha}`."
+          paths = [
+              Path("packages/turbo-workspaces/rust/README.md"),
+              Path("packages/turbo-workspaces/rust/PARITY_MATRIX.md"),
+              Path("packages/turbo-workspaces/rust/SECURITY.md"),
+              Path("packages/turbo-workspaces/rust/security.txt"),
+              Path("docs/typescript-deprecation.md"),
+              Path("docs/rust-migration-test-inventory.md"),
+              Path("docs/rust-migration-security-findings.md"),
+          ]
+          for path in paths:
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(
+                      f"expected one RED marker in {path}, found {text.count(old)}"
+                  )
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          rm \
+            .github/workflows/stage-workspace-details-red.yml \
+            tools/migration/stage_workspace_details_red.py
+          git add -A
+          git diff --cached --check
+          git commit -m "docs(turbo-workspaces): Record workspace details RED evidence"
+
+      - name: Publish the sequential RED chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk 'NR == 1 { print $1 }'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "migration branch moved during RED validation: $remote_head" >&2
+            exit 1
+          fi
+          test -z "$(git status --porcelain)"
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation

@@ -1,0 +1,142 @@
+name: Format turbo-workspaces workspace-details oracle
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/format-workspace-details-oracle.yml
+
+concurrency:
+  group: format-workspace-details-oracle-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout the single migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify branch and source-oracle identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor \
+            4e7fb108a32798fc2a9f8c2f3b9caa3ae18c78ff HEAD
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/__tests__/workspace-details.test.ts)" = \
+            "6e02fb9cd847a24d49ecdacb77effaa78ed6ed45"
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install source-build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Apply the exact repository formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --write \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts
+          pnpm exec oxfmt --check \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts
+          git diff --check
+          python3 <<'PY'
+          import subprocess
+
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--name-only"], text=True
+              ).splitlines()
+          )
+          expected = {
+              "packages/turbo-workspaces/__tests__/workspace-details.test.ts"
+          }
+          if changed != expected:
+              raise SystemExit(f"unexpected formatter paths: {sorted(changed)}")
+          PY
+
+      - name: Prove the formatted TypeScript oracle is GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/workspace-details.test.ts
+
+      - name: Build the immutable base Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/turbo-hook-source \
+            813d54ae054923e85269979dfa98fe5e47331070
+          (
+            cd /tmp/turbo-hook-source
+            CARGO_TARGET_DIR="$RUNNER_TEMP/turbo-hook-target" \
+              cargo build --locked -p turbo --bin turbo
+          )
+          turbo_binary="$RUNNER_TEMP/turbo-hook-target/debug/turbo"
+          test -x "$turbo_binary"
+          test "$("$turbo_binary" --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+
+          mkdir -p "$RUNNER_TEMP/repository-bin"
+          ln -s "$turbo_binary" "$RUNNER_TEMP/repository-bin/turbo"
+          echo "$RUNNER_TEMP/repository-bin" >> "$GITHUB_PATH"
+          git worktree remove --force /tmp/turbo-hook-source
+
+      - name: Commit the exact formatter output and remove automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v turbo
+          test "$(turbo --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+          rm .github/workflows/format-workspace-details-oracle.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts \
+            .github/workflows/format-workspace-details-oracle.yml
+          git diff --cached --check
+          git commit -m "style(turbo-workspaces): Format workspace details oracle"
+
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk 'NR == 1 { print $1 }'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "migration branch moved during oracle formatting: $remote_head" >&2
+            exit 1
+          fi
+          test -z "$(git status --porcelain)"
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation

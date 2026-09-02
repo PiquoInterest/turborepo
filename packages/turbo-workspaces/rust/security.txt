@@ -1,0 +1,31 @@
+# Rust migration security index for packages/turbo-workspaces
+# Canonical narrative review: SECURITY.md
+# Vulnerability disclosure policy: ../../../SECURITY.md
+
+Component: turbo-workspaces-rs
+Status: root-workspace-integrated
+Production-Cutover: blocked
+TypeScript-Removal: not-started
+Rust-Parity-Tests: 25
+Rust-Security-Tests: 17
+
+Security-Fix: TW-RS-001 fixed six-manager detection order
+Security-Fix: TW-RS-002 no parser fallback after detector or reader error
+Security-Fix: TW-RS-003 validated absolute path is the only manager path
+Security-Fix: TW-RS-004 at most six detections and one read
+Security-Blocker: TW-RS-005 stable bounded no-follow filesystem provider required
+Security-Fix: TW-RS-006 bounded Bun workspace-glob count and byte volume
+Security-Fix: TW-RS-007 terminal-active and invisible Bun glob text rejected
+Security-Fix: TW-RS-011 bounded workspace-package glob count and byte volume
+Security-Fix: TW-RS-012 terminal-active and invisible workspace-package glob text rejected
+Security-Fix: TW-RS-013 mutable workspace-array aliasing removed at the Rust boundary
+Security-Divergence: TypeScript accepts unbounded and terminal-active workspace-package values; the GREEN oracle records expected-failure evidence
+
+Workspace-Packages-TypeScript-Oracle: 9c8f77deee15c01baba73fdd510960e899756f0e
+Workspace-Packages-Initial-RED-Rejected: 089112a3f85bc2cbaaf864991eb5b6129602ff30 [test compile failure E0505]
+Workspace-Packages-Rust-RED: 72aa20cf4e17f528b46111f9681f06d522994655
+Workspace-Packages-Rust-GREEN: d997c57b66b4d10710ecee8c98b8a72ff61f2eef
+Workspace-Packages-Oracle-Format: aaa354bf2a808039bdff461dc65dd5e7507a8aec
+
+New-Dependencies: none
+Unsafe-Code: none

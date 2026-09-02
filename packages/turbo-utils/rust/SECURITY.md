@@ -1,0 +1,282 @@
+# Security review
+
+Base TypeScript revision: `813d54ae054923e85269979dfa98fe5e47331070`.
+
+This document records observed trust-boundary defects, hardened compatibility decisions, and remaining blockers in migrated `@turbo/utils` surfaces. It is not an exhaustive repository audit.
+
+## TU-001: Ancestor-search target traversal
+
+TypeScript joins an arbitrary `searchUp` target under each ancestor, so parent components can escape the searched directory. Rust accepts only a non-empty relative target without parent, root, or platform-prefix components.
+
+## TU-002: Unbounded content predicates
+
+TypeScript reads each candidate fully before `contentCheck`. Rust inspects only regular files up to 4 MiB and treats larger or unreadable candidates as non-matches.
+
+## TU-003: Symlinked project roots
+
+Current TypeScript `lstat` behavior rejects project-root symlinks. Rust preserves and tests this explicitly so later refactors cannot silently follow them.
+
+## TU-004: Metadata and read uncertainty
+
+TypeScript can throw on permission and I/O failures. Rust treats uncertain metadata or enumeration as invalid and does not continue creation against an uninspected path.
+
+## TU-005: Cross-operation TOCTOU remains
+
+Validation and project creation are separate operations. Production code must use descriptor-relative no-follow operations or private staging followed by atomic promotion.
+
+## TU-006: Platform writability differences
+
+Unix uses `access(W_OK)`. The non-Unix fallback is not complete ACL parity. Windows cutover remains blocked pending native access checks and tests.
+
+## TU-007: Package-manager executable substitution
+
+TypeScript executes bare package-manager names and a separate bare `which`. Repository or environment `PATH` manipulation can substitute code during detection.
+
+Rust scans only absolute `PATH` entries, canonicalizes regular executables, rejects paths inside the inspected project, and invokes argument vectors without a shell. Nub and Aube are resolved directly.
+
+**Residual:** writable host-trusted `PATH` directories remain a boundary. Prefer provisioned or allow-listed executable paths.
+
+**Regression:** `resolver_skips_relative_and_project_local_path_entries`.
+
+## TU-008: Unbounded package-manager output
+
+Rust limits stdout and stderr to 1 MiB and treats overflow as unavailable. Both streams are drained concurrently.
+
+**Regression:** `command_output_is_bounded`.
+
+## TU-009: Process-tree cleanup
+
+Rust creates a Unix process group and terminates it on timeout or output overflow. Windows still needs a kill-on-close Job Object.
+
+**Regression:** `command_execution_has_a_deadline`.
+
+## TU-010: Project metadata symlinks and resource exhaustion
+
+Rust accepts only non-symlink regular `package.json` and `.yarnrc.yml` files no larger than 1 MiB. Custom Yarn paths are configuration markers but are never executed.
+
+**Regressions:** `symlinked_package_metadata_is_not_followed`, `oversized_package_metadata_is_not_parsed`, and `custom_yarn_path_is_never_executed`.
+
+## TU-011: Windows command-shim boundary
+
+`.cmd` and `.bat` execution requires an explicit reviewed Windows adapter rather than implicit `cmd.exe` parsing. Those shims remain intentionally blocked.
+
+## TU-012: Hostname-only repository URL policy
+
+TypeScript accepts any parsed URL with `hostname === "github.com"`. Rust requires credential-free HTTPS with exact `github.com` authority, no explicit port, and no control/whitespace characters.
+
+**Regression:** `github_url_validation_rejects_scheme_host_credential_and_port_confusion`.
+
+## TU-013: Unvalidated examples and repository subpaths
+
+Rust restricts named examples to ASCII letters, digits, hyphens, and underscores. Repository subpaths reject backslashes, percent signs, URL delimiters, controls, empty segments, and `.`/`..` components before provider calls.
+
+**Regressions:** `unsafe_named_example_is_rejected_before_any_source_operation` and `unsafe_repository_subpath_is_rejected_before_network_resolution`.
+
+## TU-014: Process-wide current-directory mutation
+
+TypeScript calls `process.chdir(root)` without restoring it. Rust never changes process-wide current-directory state and passes absolute destinations explicitly.
+
+## TU-015: Generated `package.json` boundary
+
+Rust preserves file-presence behavior but parses scripts only from a regular non-symlink file no larger than 1 MiB. Unix opens use `O_NOFOLLOW` and `O_CLOEXEC`.
+
+**Residual:** non-Unix final-component no-follow handling still needs a native implementation.
+
+**Regressions:** `symlinked_package_json_is_not_read` and `oversized_package_json_is_not_parsed`.
+
+## TU-016: Destination replacement and extraction TOCTOU
+
+Rust rejects unsafe targets and immediate-parent symlinks and revalidates before and after each provider attempt. Production extraction still requires private staging or descriptor-relative no-follow writes.
+
+**Regressions:** `conflicting_target_is_rejected_before_download` and `symlinked_project_root_is_never_followed`.
+
+## TU-017: Retry over partially written destinations
+
+TypeScript can make four attempts in one destination. Rust preserves the count, but the production provider must isolate and clean every attempt before promotion.
+
+**Regressions:** `retries_three_times_and_succeeds_on_the_fourth_attempt` and `stops_after_four_failed_download_attempts`.
+
+## TU-018: Inconsistent archive safeguards
+
+TypeScript extraction paths do not expose one proven entry policy. The production Rust provider must use one extractor with entry-count, per-file, total-size, decompression-ratio, path-depth, link, device-node, permission, timeout, cleanup, and staging limits.
+
+## TU-019: Update-notification terminal and bidi spoofing
+
+TypeScript renders package names, upgrade commands, and debug errors without a uniform control/length policy. Rust escapes C0/C1 controls, escape characters, Arabic/left/right marks, embedding/override controls, isolate controls, and byte-order mark. Each untrusted field is limited to 1,024 Unicode scalar values.
+
+**Intentional incompatibility:** unsafe characters are visible escapes rather than verbatim terminal text.
+
+**Regressions:** `terminal_controls_are_escaped_in_package_name_and_command`, `unicode_directionality_controls_are_escaped_before_rendering`, `dynamic_error_controls_are_escaped_before_debug_logging`, and `rendered_untrusted_fields_are_bounded`.
+
+## TU-020: Production update checker is not security-closed
+
+`UpdateChecker` is injected and performs no production I/O. The future provider must define HTTPS/TLS, proxy, redirects, DNS/destination policy, deadlines, response/JSON bounds, auth redaction, cache integrity, rate limits, cancellation, and fail-silent compatibility.
+
+## TU-021: Archive path semantics and cross-platform prefixes
+
+TypeScript normalizes backslashes and resolves below the destination, but checks `relativePath.startsWith("..")`. That string-prefix test rejects safe names such as `..cache`, has no explicit entry-name bound, and does not define one platform-independent rule for Windows drive, UNC, or alternate-data-stream syntax.
+
+Rust processes components instead. It permits `..` only while lexical depth remains above the root, accepts safe `..`-prefixed normal names, and rejects NULs, absolute paths, UNC paths, drive prefixes, colons/alternate streams, paths over 4,096 scalar values, and paths over 256 non-empty components on every platform. Symbolic and hard-link classification retains TypeScript behavior.
+
+**Residual:** the production extractor must combine this pure policy with private staging or descriptor-relative no-follow writes and reject links/device nodes at the parser boundary.
+
+**Regressions:** all tests in `archive_parity.rs` and `archive_security.rs`.
+
+## TU-022: GitHub bearer credentials can cross an insecure transport boundary
+
+**TypeScript behavior:** `getGitHubAuthHeaders` parses the URL and checks only `hostname` against `api.github.com` and `codeload.github.com`. Because `URL.hostname` omits scheme, credentials, and port, the helper can attach a bearer token to plaintext `http://api.github.com/...` or to a custom port on an otherwise matching hostname.
+
+**Impact:** a token can be disclosed to an insecure transport or to a service reached through a nonstandard authority. The effect depends on network and redirect behavior, but the credential attachment decision itself is too broad.
+
+**Rust fix:** emit a bearer value only for syntactically valid, credential-free HTTPS URLs whose normalized host is exactly `api.github.com` or `codeload.github.com` and whose effective port is 443. Explicit `:443` is equivalent to the implicit HTTPS default. Malformed URLs, look-alike domains, whitespace, controls, userinfo, HTTP, and non-default ports receive no credential.
+
+**Intentional incompatibility:** hostname-equivalent URLs outside the credential-free HTTPS default-port origin no longer receive tokens.
+
+**Regressions:** `authorization_is_limited_to_exact_github_api_hosts`, `github_authorization_requires_https_without_credentials_or_non_default_ports`, `explicit_default_https_port_receives_github_authorization`, `non_default_port_redirect_target_does_not_receive_github_authorization`, and `malformed_and_control_bearing_urls_never_receive_credentials`.
+
+## TU-023: Token validation, fallback, and diagnostic boundaries
+
+**TypeScript behavior:** the selected token is trimmed and rejected only when it contains CR, LF, or NUL. There is no explicit size or printable-character bound. `GITHUB_TOKEN` takes precedence through JavaScript `||`; once a non-empty primary token is selected, an invalid value is ignored rather than falling back to `GH_TOKEN`.
+
+**Rust fix:** preserve that selection precedence, including no fallback from an invalid non-empty primary token. The selected token must be non-empty after trimming, at most 4,096 characters, and composed only of ASCII graphic bytes. `NetworkEnvironment` intentionally does not implement `Debug`, reducing accidental secret exposure in generic diagnostics.
+
+**Regressions:** `github_token_takes_precedence_over_gh_token`, `invalid_primary_token_does_not_fall_back_to_secondary_credentials`, and `tokens_are_ascii_graphic_and_size_bounded`.
+
+## TU-024: Invalid proxy configuration can create a policy bypass
+
+**TypeScript behavior:** proxy precedence is defined, but validation is deferred to `ProxyAgent` construction. A future caller that catches that error and retries without the dispatcher could silently bypass an administrator-selected proxy. The helper also has no explicit URL-length or allowed-scheme policy and does not model `NO_PROXY`.
+
+**Rust fix:** preserve the existing lower/uppercase proxy precedence, but return a typed error when the winning non-empty value is malformed or is not a bounded absolute HTTP(S) URL. Lower-precedence proxies are not consulted after a value wins, and direct connection is not treated as a fallback. The Rust core also snapshots `no_proxy` before `NO_PROXY` and evaluates a bounded, explicit bypass rule set before returning the selected proxy.
+
+**Residual:** production request execution must consume this decision exactly once and define proxy authentication redaction, DNS/IP pinning or rebinding behavior, certificate trust, redirects, timeouts, response bounds, and whether every GitHub endpoint is required to use the selected proxy.
+
+**Regressions:** `https_proxy_precedence_matches_the_typescript_helper`, `invalid_selected_proxy_is_an_error_instead_of_direct_connection_fallback`, `proxy_urls_are_bounded_and_restricted_to_http_or_https`, `malformed_request_url_is_an_error_before_proxy_selection`, and the `NO_PROXY` parity/security suites.
+
+## TU-025: Option-like project names bypass the TypeScript check
+
+**Severity:** Medium
+
+**TypeScript behavior:** `validateDirectory` resolves the supplied text to an absolute path and then checks `root.startsWith("-")`. A relative input such as `-danger` therefore becomes an absolute path beginning with `/` or a drive prefix, so the intended option-confusion check is ineffective.
+
+**Impact:** the project basename can retain a leading hyphen and later cross display, package, or subprocess boundaries that may interpret it as an option if they do not independently use a `--` terminator or typed argument contract.
+
+**Rust fix:** validate the resolved basename itself and reject names beginning with `-` before any later provider is invoked.
+
+**Intentional incompatibility:** a relative project directory whose basename begins with `-` is rejected even though current TypeScript accepts it.
+
+**Regression:** `option_like_project_name_is_rejected`.
+
+## TU-026: Final-component-only symlink checks miss redirected ancestors
+
+**Severity:** High until handle-relative mutation is implemented
+
+**TypeScript behavior:** `lstatSync(root)` inspects only the final requested path. A path such as `redirect/project` can traverse an existing symlink at `redirect` while the final `project` entry itself is an ordinary directory.
+
+**Impact:** validation and later writes can occur outside the caller's intended directory tree. A malicious actor who can replace path components can also race path-based checks.
+
+**Rust fix:** inspect every existing component of the stable requested path and reject a symbolic-link component before directory enumeration.
+
+**Residual risk:** this is still a portable path-based check. A component can be replaced after validation, and conservative component walking may differ on platforms that expose system paths through symlink aliases. Production writes require directory handles with no-follow semantics on Unix and reviewed Windows handle/reparse-point logic. Supported-platform differential tests remain mandatory.
+
+**Regression:** `symlinked_ancestor_is_rejected_before_directory_enumeration`.
+
+## TU-027: Filename-only allow-listing accepts symlink entries
+
+**Severity:** High
+
+**TypeScript behavior:** `isFolderEmpty` calls `readdirSync` for names and allow-lists entries such as `.git`, `LICENSE`, and any `*.iml` file without checking their type.
+
+**Impact:** an allow-listed symlink can redirect later consumers or hide an unsafe pre-existing project state while the folder is reported empty.
+
+**Rust fix:** inspect each entry type and treat every symlink as a conflict, even when its name would normally be allowed.
+
+**Intentional incompatibility:** symlink entries with allow-listed names are no longer considered harmless.
+
+**Regression:** `allowlisted_symlink_is_never_treated_as_an_empty_directory`.
+
+## TU-028: Lossy filename conversion can alias an allow-listed name
+
+**Severity:** Medium
+
+A Rust port that calls `to_string_lossy()` before applying the allow-list can replace invalid bytes with Unicode replacement characters and then make a non-UTF-8 filename appear to end in an allowed suffix such as `.iml`.
+
+**Impact:** an unrepresentable entry may be hidden from conflict reporting, and any displayed name would no longer identify the real filesystem bytes.
+
+**Rust fix:** require exact UTF-8 for the current string-based public result and fail closed when an entry name cannot be represented. No lossy string participates in the security decision.
+
+**Regression:** `non_utf8_iml_name_is_not_silently_allowlisted`.
+
+## TU-029: Directory enumeration and conflict collection are unbounded
+
+**Severity:** Medium
+
+**TypeScript behavior:** `readdirSync` returns the complete entry list and the implementation filters it into another conflict array without an explicit count bound.
+
+**Impact:** a generated or attacker-controlled directory with a very large number of entries can consume excessive memory and CPU before project creation starts.
+
+**Rust fix:** stop after 256 entries and return `InvalidData`. Validation converts that uncertainty into an invalid directory rather than continuing.
+
+**Intentional incompatibility:** directories above the inspection limit are rejected even when every filename is otherwise allow-listed.
+
+**Regression:** `folder_scan_is_bounded_before_collecting_untrusted_entries`.
+
+## TU-030: Missing or permissive `NO_PROXY` policy can misroute sensitive traffic
+
+**Severity:** High at the production request boundary
+
+**TypeScript behavior:** the current helper selects `HTTP_PROXY`/`HTTPS_PROXY` values but does not model `NO_PROXY` or `no_proxy`. Internal, loopback, or explicitly exempt destinations can therefore be sent through a configured proxy. A loose port could create the opposite problem by using substring, Unicode, partial-wildcard, or CIDR matching to bypass a proxy more broadly than intended.
+
+**Rust fix:** lowercase `no_proxy` wins over uppercase `NO_PROXY`, matching the established lowercase-first environment convention. Values are limited to 4,096 ASCII bytes and 256 non-empty comma-separated rules. The accepted language is deliberately narrow: global `*`, exact domains, explicit leading-dot domain suffixes, exact IPv4 addresses, bracketed IPv6 addresses, and optional ports compared with the explicit or scheme-default request port. Domain suffixes require a dot-label boundary. Invalid winning values fail closed with `InvalidNoProxy`; they do not fall back to uppercase policy or silently select direct/proxied transport.
+
+**Intentional incompatibility:** partial wildcards such as `*.example.com`, CIDR blocks, Unicode/confusable names, unbracketed IPv6, controls, empty-only lists, invalid ports, userinfo-bearing request authorities, oversized values, and excessive rule counts are rejected instead of being interpreted permissively.
+
+**Residual:** this is a pure decision core. The production HTTP provider must prove that redirects cannot bypass the decision, hostnames and resolved addresses follow an explicit DNS/rebinding policy, proxy credentials never enter diagnostics, and the selected transport is applied once with bounded time and response size.
+
+**Regressions:** `no_proxy_exact_suffix_and_star_rules_bypass_configured_proxy`, `lowercase_no_proxy_takes_precedence_over_uppercase_no_proxy`, `no_proxy_port_rules_use_the_effective_request_port`, `no_proxy_domain_matching_uses_label_boundaries_not_substrings`, `invalid_winning_no_proxy_value_is_an_error_without_uppercase_fallback`, `no_proxy_rejects_ambiguous_wildcards_unicode_and_cidr_rules`, `no_proxy_values_are_bounded_by_length_and_entry_count`, `no_proxy_supports_exact_ipv4_and_bracketed_ipv6_without_cross_matching`, and `no_proxy_rejects_request_authority_ambiguity_before_bypass`.
+
+TDD evidence: RED `1ffcd4010de0e5505c21b64caa51af66ef44b8b6`, GREEN `e8bdab4094be133fcbba7fd5ffda12a288deee19`, formatting `bf9e7c5b5653fed8fbbfb49e384f92d2fbc477c8`, and corrected protocol fixture `94c14b4b530db457923ede6dfee906ef45cb07d9`.
+
+## Directory-provider TDD and validation record
+
+- Test-first contract: `53a55eefd92b919824374eb27159ff876e008147`.
+- GREEN implementation: `c77464a7e6f36813a3b52262e78caa9ee449bb72`.
+- Formatting correction: `8ee51022fd84264e0abeee17014802da3afcae20`.
+- Clippy lifetime correction: `e47b4994e0d97641c2f976231aa89833aa142913`.
+
+The first RED workflow stopped at formatting, so it is retained as chronological test-first evidence rather than a clean behavioral RED execution. At merge head, formatting, compilation, and all migration parity/security tests passed before Clippy exposed the unrelated explicit lifetime consolidated from the create-directory tranche. The lifetime was then removed without changing behavior.
+
+## TU-031: Unbounded request URLs expand parser and redirect state
+
+**Severity:** Medium
+
+**TypeScript behavior:** request URLs are accepted without a shared size boundary before parsing, proxy selection, credential routing, or redirect-state updates.
+
+**Impact:** a caller-controlled URL can force disproportionate scanning and allocation and can carry an oversized value into redirect-chain state. Credential and proxy decisions must not succeed on input that the bounded request layer would reject.
+
+**Rust fix:** the shared absolute-URL parser rejects values above 8,192 UTF-8 bytes. The boundary is applied before GitHub authorization, proxy selection, redirect-origin comparison, initial chain creation, and redirect mutation. A rejected target leaves the current URL, policy, and hop count unchanged.
+
+**Intentional incompatibility:** oversized URLs fail closed with no authorization header and a typed `InvalidRequestUrl` error instead of being interpreted or retained.
+
+**Regressions:** `request_url_boundary_preserves_safe_input`, `oversized_request_urls_fail_closed_across_policy_entrypoints`, and `oversized_redirect_target_does_not_mutate_chain_state`.
+
+TDD evidence: RED `4c3a403017046d9c1d922d6ba6bdd1b7fb621b2c`, GREEN `19f91e5ca23fb547e06d727a628a1405033f5420`, formatting `538e2ddb259bb29dd2e973432f49d01e30985c1f`.
+
+## Advisory lookup record
+
+Lookup date: **2026-08-31**.
+
+Sources checked:
+
+- RustSec Advisory Database and package/advisory index.
+- GitHub Advisory Database.
+- Official upstream security notices and release information for direct dependencies and externally executed tools changed by these tranches.
+
+The directory-provider tranche adds no dependency, network destination, subprocess, parser, credential, or unsafe block. Its advisory disposition is therefore unchanged from the resolved workspace graph.
+
+The project, notification, archive-policy, network-policy, and bounded `NO_PROXY` tranches add no new Rust dependency. The bypass parser uses only the standard library's IP address types plus existing workspace-managed dependencies.
+
+The resolved `unsafe-libyaml` version is `0.2.11`, above the `0.2.10` patched floor for `RUSTSEC-2023-0075`. Long-term YAML maintenance/replacement policy remains open and is distinct from a vulnerability in this resolved version.
+
+The lookup found `RUSTSEC-2026-0257` / `GHSA-2ph8-5cr8-hr33` for `webbrowser`; affected releases include versions through `1.2.1`, and `1.2.2` or later is patched. The workspace declares `0.8.7`. The observed `turborepo-query` call uses constant `http://localhost:8000`, limiting current attacker-controlled-scheme reachability, but the dependency must be upgraded or removed before migration merge.
+
+Migration CI audits the complete lockfile and temporarily ignores only that separately tracked advisory so additional findings fail the gate. The exception must be removed with dependency remediation.

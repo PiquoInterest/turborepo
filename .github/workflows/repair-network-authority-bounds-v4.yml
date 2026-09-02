@@ -1,0 +1,286 @@
+name: Repair network authority bounds v4
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/repair-network-authority-bounds-v4.yml
+
+concurrency:
+  group: repair-network-authority-bounds-v4-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+          save-cache: "false"
+
+      - name: Extract the reviewed v2 repair scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path(
+              ".github/workflows/repair-network-authority-bounds-v2.yml"
+          )
+          lines = workflow.read_text(encoding="utf-8").splitlines()
+
+          def extract(marker: str, output: str) -> None:
+              try:
+                  start = lines.index(f"      - name: {marker}")
+              except ValueError as error:
+                  raise SystemExit(f"reviewed step is missing: {marker}") from error
+              run_index = next(
+                  index
+                  for index in range(start + 1, len(lines))
+                  if lines[index] == "        run: |"
+              )
+              end = next(
+                  (
+                      index
+                      for index in range(run_index + 1, len(lines))
+                      if lines[index].startswith("      - name:")
+                  ),
+                  len(lines),
+              )
+              script = textwrap.dedent(
+                  "\n".join(lines[run_index + 1 : end])
+              ) + "\n"
+              Path(output).write_text(script, encoding="utf-8")
+
+          extract(
+              "Implement bounded normalized request authority",
+              "/tmp/network-authority-implementation.sh",
+          )
+          extract(
+              "Record network security evidence",
+              "/tmp/network-authority-docs.sh",
+          )
+          extract(
+              "Validate and push the repair",
+              "/tmp/network-authority-validate.sh",
+          )
+          PY
+
+      - name: Prove the committed network contract is RED
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          cargo test --locked -p turbo-utils-rs --test network_authority_bounds \
+            >/tmp/network-authority-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/network-authority-red.log
+          test "$status" -ne 0
+          grep -Fq "explicit_default_https_port_receives_github_authorization" \
+            /tmp/network-authority-red.log
+          grep -Fq "oversized_request_urls_fail_closed_across_policy_entrypoints" \
+            /tmp/network-authority-red.log
+
+      - name: Implement the normalized authority contract
+        id: implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str, label: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"{label} anchor changed")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          redirect = Path(
+              "packages/turbo-utils/rust/tests/redirect_policy_security.rs"
+          )
+          replace_once(
+              redirect,
+              "fn explicit_port_redirect_target_does_not_receive_github_authorization() {",
+              "fn non_default_port_redirect_target_does_not_receive_github_authorization() {",
+              "redirect test name",
+          )
+          replace_once(
+              redirect,
+              '            "https://api.github.com:443/repositories/1",',
+              '            "https://api.github.com:8443/repositories/1",',
+              "redirect non-default port fixture",
+          )
+
+          path = Path("/tmp/network-authority-implementation.sh")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          network_security_path = (
+              "packages/turbo-utils/rust/tests/network_security.rs"
+          )
+          redirect_path = (
+              "packages/turbo-utils/rust/tests/redirect_policy_security.rs"
+          )
+          quoted_network_security = f'    "{network_security_path}",'
+          exact_path_line = f"  {network_security_path}"
+          unsafe_path_line = f"  {network_security_path}; then"
+          direct_test_line = (
+              "cargo test --locked -p turbo-utils-rs --test network_security"
+          )
+          source_count_line = (
+              'test "$(git diff --cached --name-only | wc -l)" -eq 2'
+          )
+
+          counts = {
+              "quoted": 0,
+              "exact": 0,
+              "unsafe": 0,
+              "test": 0,
+              "count": 0,
+          }
+          rewritten: list[str] = []
+          for line in lines:
+              if line == quoted_network_security:
+                  rewritten.append(line)
+                  rewritten.append(f'    "{redirect_path}",')
+                  counts["quoted"] += 1
+                  continue
+              if line == exact_path_line:
+                  rewritten.append(line + " " + chr(92))
+                  rewritten.append(f"  {redirect_path}")
+                  counts["exact"] += 1
+                  continue
+              if line == unsafe_path_line:
+                  rewritten.append(
+                      f"  {network_security_path} " + chr(92)
+                  )
+                  rewritten.append(f"  {redirect_path}; then")
+                  counts["unsafe"] += 1
+                  continue
+              if line == direct_test_line:
+                  rewritten.append(line)
+                  rewritten.append(
+                      "cargo test --locked -p turbo-utils-rs "
+                      "--test redirect_policy_security"
+                  )
+                  counts["test"] += 1
+                  continue
+              if line == source_count_line:
+                  rewritten.append(
+                      'test "$(git diff --cached --name-only | wc -l)" -eq 3'
+                  )
+                  counts["count"] += 1
+                  continue
+              rewritten.append(line)
+
+          expected = {
+              "quoted": 2,
+              "exact": 3,
+              "unsafe": 1,
+              "test": 1,
+              "count": 1,
+          }
+          if counts != expected:
+              raise SystemExit(
+                  f"reviewed implementation structure changed: {counts}"
+              )
+          path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+          PY
+
+          bash -euo pipefail /tmp/network-authority-implementation.sh
+
+      - name: Record network security evidence
+        env:
+          SOURCE_SHA: ${{ steps.implementation.outputs.source_sha }}
+          FORMATTED_SHA: ${{ steps.implementation.outputs.formatted_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("/tmp/network-authority-docs.sh")
+          script = path.read_text(encoding="utf-8")
+          source_placeholder = '"$' + (
+              '{{ steps.implementation.outputs.source_sha }}"'
+          )
+          formatted_placeholder = '"$' + (
+              '{{ steps.implementation.outputs.formatted_sha }}"'
+          )
+          replacements = {
+              source_placeholder: f'"{os.environ["SOURCE_SHA"]}"',
+              formatted_placeholder: f'"{os.environ["FORMATTED_SHA"]}"',
+              '`explicit_default_https_port_receives_github_authorization`, and `malformed_and_control_bearing_urls_never_receive_credentials`':
+                  '`explicit_default_https_port_receives_github_authorization`, `non_default_port_redirect_target_does_not_receive_github_authorization`, and `malformed_and_control_bearing_urls_never_receive_credentials`',
+              '`network_authority_bounds.rs` and `network_security.rs`':
+                  '`network_authority_bounds.rs`, `network_security.rs`, and `redirect_policy_security.rs`',
+          }
+          for old, new in replacements.items():
+              if script.count(old) != 1:
+                  raise SystemExit(f"documentation script anchor changed: {old}")
+              script = script.replace(old, new, 1)
+          path.write_text(script, encoding="utf-8")
+          PY
+
+          bash -euo pipefail /tmp/network-authority-docs.sh
+
+      - name: Validate and push the repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("/tmp/network-authority-validate.sh")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          network_security = (
+              "  packages/turbo-utils/rust/tests/network_security.rs"
+          )
+          redirect_security = (
+              "  packages/turbo-utils/rust/tests/redirect_policy_security.rs"
+          )
+          rewritten: list[str] = []
+          count = 0
+          for line in lines:
+              if line == network_security:
+                  rewritten.append(line + " " + chr(92))
+                  rewritten.append(redirect_security)
+                  count += 1
+              else:
+                  rewritten.append(line)
+          if count != 1:
+              raise SystemExit(
+                  f"validation rustfmt structure changed: {count}"
+              )
+          path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+          PY
+
+          bash -euo pipefail /tmp/network-authority-validate.sh

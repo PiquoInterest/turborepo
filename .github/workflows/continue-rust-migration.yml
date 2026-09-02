@@ -1,0 +1,180 @@
+name: Repair consolidated Rust migration dependencies
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/continue-rust-migration.yml
+      - packages/turbo-utils/rust/tests/security.rs
+
+concurrency:
+  group: repair-consolidated-rust-migration-dependencies
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout the exact integration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install required native build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Pin coherent dependency families
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'biome_diagnostics = { version = "0.5.7" }': 'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }': 'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f"Cargo.toml dependency anchor missing: {old}")
+          path.write_text(text, encoding="utf-8")
+
+      - name: Regenerate the coherent lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_is_locked() {
+            python - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          present = any(
+              package.get("name") == name and package.get("version") == version
+              for package in lock.get("package", [])
+          )
+          raise SystemExit(0 if present else 1)
+          PY
+          }
+
+          downgrade_if_locked() {
+            local name="$1"
+            local from_version="$2"
+            local to_version="$3"
+            if package_is_locked "$name" "$from_version"; then
+              cargo update -p "$name@$from_version" --precise "$to_version"
+            fi
+          }
+
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
+      - name: Verify the resolved dependency policy
+        shell: python
+        run: |
+          import tomllib
+          from pathlib import Path
+
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          packages = lock.get("package", [])
+
+          biome_mismatches = {
+              package["name"]: package["version"]
+              for package in packages
+              if package.get("name", "").startswith("biome_")
+              and package.get("version", "").startswith("0.5.")
+              and package.get("version") != "0.5.7"
+          }
+          if biome_mismatches:
+              raise SystemExit(
+                  f"Biome 0.5 dependency family is incoherent: {biome_mismatches}"
+              )
+
+          unrs_versions = {
+              package["version"]
+              for package in packages
+              if package.get("name") == "unrs_resolver"
+          }
+          if unrs_versions != {"1.11.1"}:
+              raise SystemExit(
+                  f"unrs_resolver drifted from the workspace pin: {sorted(unrs_versions)}"
+              )
+
+          h2_versions = {
+              package["version"] for package in packages if package.get("name") == "h2"
+          }
+          if not h2_versions or any(
+              tuple(map(int, version.split("."))) < (0, 4, 16)
+              for version in h2_versions
+          ):
+              raise SystemExit(f"an affected h2 version remains locked: {sorted(h2_versions)}")
+
+      - name: Validate repository diff and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          cargo metadata --locked --no-deps >/dev/null
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Check the lockfile crate
+        run: cargo check --locked -p turborepo-lockfiles --all-targets
+
+      - name: Lint the lockfile crate
+        run: cargo clippy --locked -p turborepo-lockfiles --all-targets -- -D warnings
+
+      - name: Run workspace Rust lint
+        run: cargo lint
+
+      - name: Commit the validated repair and remove the one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/continue-rust-migration.yml
+          git add Cargo.toml Cargo.lock
+          git commit -m "fix: Restore coherent Rust dependency resolution"
+          git pull --rebase origin rust/typescript-deprecation
+          git push origin HEAD:rust/typescript-deprecation

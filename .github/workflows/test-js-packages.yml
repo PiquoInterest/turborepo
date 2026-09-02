@@ -110,7 +110,7 @@ jobs:
           - 22
           - 24
     env:
-      TURBO_CACHE: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'remote:rw' || 'local:rw' }}
+      TURBO_CACHE: ${{ github.event.pull_request.head.repo.full_name == github.repository && vars.TURBO_TEAM != '' && 'remote:rw' || 'local:rw' }}
 
     steps:
       - name: Checkout
@@ -121,7 +121,7 @@ jobs:
 
       - parallel:
           - name: Set up Turborepo Remote Cache
-            if: github.event.pull_request.head.repo.full_name == github.repository
+            if: github.event.pull_request.head.repo.full_name == github.repository && vars.TURBO_TEAM != ''
             uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
             with:
               team: ${{ vars.TURBO_TEAM }}

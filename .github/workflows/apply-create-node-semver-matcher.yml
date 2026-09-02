@@ -1,0 +1,381 @@
+name: Apply bounded create-turbo Node-semver matcher
+
+# Reactivated after the create-turbo warning tranche proved the committed RED stub.
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/apply-create-node-semver-matcher.yml
+      - tools/migration/apply_create_node_semver_matcher.py
+
+concurrency:
+  group: apply-create-node-semver-matcher-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the single migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install Turbo hook prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Relocate Zig outside the source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$GITHUB_WORKSPACE/zig"
+          target_dir="$RUNNER_TEMP/repository-zig"
+
+          test -x "$source_dir/zig"
+          rm -rf "$target_dir"
+          mv "$source_dir" "$target_dir"
+          test -x "$target_dir/zig"
+
+          echo "$target_dir" >> "$GITHUB_PATH"
+          echo "ZIG_EXECUTABLE=$target_dir/zig" >> "$GITHUB_ENV"
+          echo "ZIG_GLOBAL_CACHE_DIR=$target_dir/global-cache" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+
+      - name: Prove the compiling RED contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/create-node-semver-red \
+            816216a20b5620ab381842e26ed322d9409b3cec
+          set +e
+          (
+            cd /tmp/create-node-semver-red
+            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/create-node-semver-red" \
+              cargo test --locked -p create-turbo-rs \
+                --test package_manager_install_policy_parity \
+                --test package_manager_install_policy_security
+          ) > /tmp/create-node-semver-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/create-node-semver-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "Node-semver RED contract unexpectedly passed" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/create-node-semver-red.log; then
+            echo "Node-semver RED failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/create-node-semver-red.log
+          grep -Fq 'concrete_node_semver_matcher_selects_the_exact_source_profiles' \
+            /tmp/create-node-semver-red.log
+          git worktree remove --force /tmp/create-node-semver-red
+
+      - name: Apply the GREEN implementation inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/migration/apply_create_node_semver_matcher.py implement
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/create-turbo/rust/src/package_manager_install_policy.rs")
+          text = path.read_text(encoding="utf-8")
+          old = "\n".join(
+              [
+                  "        let Ok(version) = version.parse::<node_semver::Version>() else {",
+                  "            return Ok(false);",
+                  "        };",
+                  "",
+                  "        Ok(version.satisfies(&range))",
+                  "",
+              ]
+          )
+          new = "\n".join(
+              [
+                  "        let Ok(parsed_version) = version.parse::<node_semver::Version>() else {",
+                  "            return Ok(false);",
+                  "        };",
+                  "        if parsed_version.to_string() != version {",
+                  "            return Ok(false);",
+                  "        }",
+                  "",
+                  "        Ok(parsed_version.satisfies(&range))",
+                  "",
+              ]
+          )
+          if text.count(old) != 1:
+              raise SystemExit("reviewed Node-semver GREEN anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Generate and constrain the lockfile change
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.lock /tmp/create-node-semver-Cargo.lock.original
+          cargo check -p create-turbo-rs --all-targets
+
+          python3 <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          def load(path: str) -> dict:
+              return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+          original = load("/tmp/create-node-semver-Cargo.lock.original")
+          current = load("Cargo.lock")
+
+          def package_key(package: dict) -> tuple[str, str, str]:
+              return (
+                  package["name"],
+                  package["version"],
+                  package.get("source", ""),
+              )
+
+          original_packages = {
+              package_key(package): package for package in original.get("package", [])
+          }
+          current_packages = {
+              package_key(package): package for package in current.get("package", [])
+          }
+
+          if set(original_packages) != set(current_packages):
+              removed = sorted(set(original_packages) - set(current_packages))
+              added = sorted(set(current_packages) - set(original_packages))
+              raise SystemExit(
+                  f"Node-semver direct edge changed package identities: removed={removed}, added={added}"
+              )
+
+          target = ("create-turbo-rs", "0.1.0", "")
+          if target not in original_packages or target not in current_packages:
+              raise SystemExit("create-turbo-rs lockfile record is missing")
+
+          for key, original_package in original_packages.items():
+              current_package = current_packages[key]
+              if key == target:
+                  original_dependencies = set(original_package.get("dependencies", []))
+                  current_dependencies = set(current_package.get("dependencies", []))
+                  if current_dependencies != original_dependencies | {"node-semver"}:
+                      raise SystemExit(
+                          "create-turbo-rs dependency delta is not exactly node-semver: "
+                          f"before={sorted(original_dependencies)}, "
+                          f"after={sorted(current_dependencies)}"
+                      )
+                  original_without_dependencies = dict(original_package)
+                  current_without_dependencies = dict(current_package)
+                  original_without_dependencies.pop("dependencies", None)
+                  current_without_dependencies.pop("dependencies", None)
+                  if original_without_dependencies != current_without_dependencies:
+                      raise SystemExit(
+                          "create-turbo-rs lockfile metadata changed beyond dependencies"
+                      )
+              elif original_package != current_package:
+                  raise SystemExit(f"unreviewed lockfile record changed: {key}")
+
+          node_semver_versions = [
+              package["version"]
+              for package in current.get("package", [])
+              if package.get("name") == "node-semver"
+          ]
+          if node_semver_versions != ["2.2.0"]:
+              raise SystemExit(
+                  f"expected exactly node-semver 2.2.0, found {node_semver_versions}"
+              )
+          PY
+
+      - name: Validate the GREEN Rust implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/create-turbo/rust/src/package_manager_install_policy.rs \
+            packages/create-turbo/rust/tests/package_manager_install_policy_*.rs; then
+            echo "Node-semver matcher tranche introduced unsafe code" >&2
+            exit 1
+          fi
+
+      - name: Set up Node and install the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 22
+
+      - name: Validate the TypeScript semver oracle and security evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --check \
+            packages/turbo-workspaces/__tests__/install-meta.test.ts
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/install-meta.test.ts \
+            __tests__/install-security.test.ts
+
+      - name: Commit the reviewed GREEN implementation
+        id: green
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            packages/create-turbo/rust/Cargo.toml \
+            packages/create-turbo/rust/src/package_manager_install_policy.rs
+          git diff --cached --check
+          git commit -m "feat(create-turbo): Implement bounded Node semver matcher"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record parity, security, advisory, and progress evidence
+        run: |
+          python tools/migration/apply_create_node_semver_matcher.py \
+            document "${{ steps.green.outputs.sha }}"
+
+      - name: Validate the documented committed state
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          test ! -e .github/workflows/apply-create-node-semver-matcher.yml
+          test ! -e tools/migration/apply_create_node_semver_matcher.py
+          grep -Fq 'CT-RS-036' packages/create-turbo/rust/SECURITY.md
+          grep -Fq 'RF-026' docs/rust-migration-security-findings.md
+          grep -Fq '${{ steps.green.outputs.sha }}' \
+            packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md
+
+      - name: Build the branch-compatible Turbo hook binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain=v1 --untracked-files=all > \
+            /tmp/node-semver-status.before
+          cp Cargo.toml /tmp/node-semver-Cargo.toml.original
+          cp Cargo.lock /tmp/node-semver-Cargo.lock.original
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'biome_diagnostics = { version = "0.5.7" }': 'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }': 'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"temporary dependency anchor changed: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          package_is_locked() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          present = any(
+              package.get("name") == name and package.get("version") == version
+              for package in lock.get("package", [])
+          )
+          raise SystemExit(0 if present else 1)
+          PY
+          }
+
+          downgrade_if_locked() {
+            local name="$1"
+            local from_version="$2"
+            local to_version="$3"
+            if package_is_locked "$name" "$from_version"; then
+              cargo update -p "$name@$from_version" --precise "$to_version"
+            fi
+          }
+
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+
+          cp /tmp/node-semver-Cargo.toml.original Cargo.toml
+          cp /tmp/node-semver-Cargo.lock.original Cargo.lock
+          git diff --exit-code -- Cargo.toml Cargo.lock
+          git status --porcelain=v1 --untracked-files=all > \
+            /tmp/node-semver-status.after
+          if ! cmp --silent \
+            /tmp/node-semver-status.before \
+            /tmp/node-semver-status.after; then
+            diff -u \
+              /tmp/node-semver-status.before \
+              /tmp/node-semver-status.after || true
+            echo "temporary hook build changed the reviewed source-tree status" >&2
+            exit 1
+          fi
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Commit and push documentation through repository hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A \
+            .github/workflows/apply-create-node-semver-matcher.yml \
+            tools/migration/apply_create_node_semver_matcher.py \
+            packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/README.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/SECURITY.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs(create-turbo): Record Node semver matcher security"
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          command -v turbo
+          git push origin HEAD:rust/typescript-deprecation

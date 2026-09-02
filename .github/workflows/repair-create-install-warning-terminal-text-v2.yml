@@ -1,0 +1,430 @@
+name: Repair create-turbo install warning terminal boundary v2
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/repair-create-install-warning-terminal-text-v2.yml
+
+concurrency:
+  group: repair-create-install-warning-terminal-text-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+      EXPECTED_PARENT: 58eeeef445c6f45a92a76629349df11d8ae2f7af
+      V1_WORKFLOW_PATH: .github/workflows/repair-create-install-warning-terminal-text.yml
+      V2_WORKFLOW_PATH: .github/workflows/repair-create-install-warning-terminal-text-v2.yml
+      SCRIPT_PATH: tools/migration/repair_create_install_warning_terminal_text.py
+      EXPECTED_V1_WORKFLOW_BLOB: 0cc16142ff15c98d3308185ecf11b469e940ccbf
+      EXPECTED_SCRIPT_BLOB: 37ba7035e0d3dec608f7d3cc4b3b20cee1a0affc
+
+    steps:
+      - name: Checkout the sole migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository, branch, and corrected activation commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+
+          mapfile -t activation_paths < <(
+            git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort
+          )
+          test "${#activation_paths[@]}" -eq 1
+          test "${activation_paths[0]}" = "$V2_WORKFLOW_PATH"
+          test "$(git rev-parse "HEAD:$V1_WORKFLOW_PATH")" = \
+            "$EXPECTED_V1_WORKFLOW_BLOB"
+          test "$(git rev-parse "HEAD:$SCRIPT_PATH")" = "$EXPECTED_SCRIPT_BLOB"
+
+          python3 - "$SCRIPT_PATH" <<'PY'
+          import ast
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          PY
+          test -z "$(git status --porcelain)"
+
+      - name: Set up Node and the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the committed TypeScript failing oracle is executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter create-turbo exec jest \
+            --runInBand \
+            --coverage=false \
+            __tests__/create-install-policy.test.ts \
+            -t "does not pass raw terminal-control text from the example name to warning output"
+
+      - name: Commit the TypeScript RED contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$SCRIPT_PATH" red
+          pnpm exec oxfmt \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+          git diff --check
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/create-turbo/__tests__/create-install-policy.test.ts
+          test "$(git diff --cached --name-only)" = \
+            "packages/create-turbo/__tests__/create-install-policy.test.ts"
+          git diff --cached --check
+          git commit -m "test(create-turbo): Expose install warning terminal injection"
+          echo "RED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Prove RED fails behaviorally and not in the harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          pnpm --filter create-turbo exec jest \
+            --runInBand \
+            --coverage=false \
+            __tests__/create-install-policy.test.ts \
+            > /tmp/create-install-warning-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/create-install-warning-red.log
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "TypeScript RED contract unexpectedly passed" >&2
+            exit 1
+          fi
+          if grep -Eq \
+            'Test suite failed to run|Cannot find module|SyntaxError|ReferenceError' \
+            /tmp/create-install-warning-red.log; then
+            echo "RED failed in the harness instead of warning behavior" >&2
+            exit 1
+          fi
+          grep -Fq \
+            'does not pass raw terminal-control text from the example name to warning output' \
+            /tmp/create-install-warning-red.log
+          grep -Fq \
+            'bounds attacker-controlled example names in warning output' \
+            /tmp/create-install-warning-red.log
+          grep -Eq 'Tests:[[:space:]]+2 failed' \
+            /tmp/create-install-warning-red.log
+
+      - name: Prove the corresponding Rust security contract is already GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p create-turbo-rs \
+            --test create_install_warning_security
+
+      - name: Apply and validate the TypeScript GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$SCRIPT_PATH" green
+          pnpm exec oxfmt \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+          git diff --check
+
+          pnpm --filter create-turbo exec jest \
+            --runInBand \
+            --coverage=false \
+            __tests__/create-install-policy.test.ts
+          pnpm --filter create-turbo exec tsc --noEmit --pretty false
+          pnpm exec oxlint \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+          pnpm exec oxfmt --check \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          git diff --exit-code -- Cargo.toml Cargo.lock package.json pnpm-lock.yaml
+
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/create-turbo/rust/src/create_install_policy.rs \
+            packages/create-turbo/rust/src/create_error_policy.rs \
+            packages/create-turbo/rust/tests/create_install_warning_security.rs; then
+            echo "install-warning tranche contains unsafe Rust" >&2
+            exit 1
+          fi
+
+      - name: Commit the TypeScript GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts
+          git diff --cached --check
+
+          mapfile -t staged < <(git diff --cached --name-only | LC_ALL=C sort)
+          expected=(
+            packages/create-turbo/src/commands/create/index.ts
+            packages/create-turbo/src/commands/create/install-warning.ts
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts
+          )
+          test "${#staged[@]}" -eq "${#expected[@]}"
+          for index in "${!expected[@]}"; do
+            test "${staged[$index]}" = "${expected[$index]}"
+          done
+
+          git commit -m "fix(create-turbo): Escape install warning example names"
+          echo "GREEN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Record TDD, parity, and security evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$SCRIPT_PATH" docs "$RED_SHA" "$GREEN_SHA"
+          rm -f "$V2_WORKFLOW_PATH"
+
+          pnpm exec oxfmt \
+            packages/create-turbo/rust/README.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/SECURITY.md \
+            packages/create-turbo/rust/CREATE_INSTALL_POLICY_DIVERGENCES.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+          git diff --check
+
+          grep -Fq "TS warning oracle RED: $RED_SHA" \
+            packages/create-turbo/rust/README.md
+          grep -Fq "TS warning GREEN:      $GREEN_SHA" \
+            packages/create-turbo/rust/README.md
+          grep -Fq 'fixed for the production TypeScript warning and Rust renderer' \
+            packages/create-turbo/rust/SECURITY.md
+          grep -Fq 'Package-install warning fixed in TypeScript and Rust' \
+            docs/rust-migration-security-findings.md
+          test ! -e "$V1_WORKFLOW_PATH"
+          test ! -e "$V2_WORKFLOW_PATH"
+          test ! -e "$SCRIPT_PATH"
+
+      - name: Commit security evidence and remove one-shot automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+
+          python3 <<'PY'
+          import subprocess
+
+          allowed = {
+              ".github/workflows/repair-create-install-warning-terminal-text.yml",
+              ".github/workflows/repair-create-install-warning-terminal-text-v2.yml",
+              "tools/migration/repair_create_install_warning_terminal_text.py",
+              "packages/create-turbo/rust/README.md",
+              "packages/create-turbo/rust/PARITY_MATRIX.md",
+              "packages/create-turbo/rust/SECURITY.md",
+              "packages/create-turbo/rust/CREATE_INSTALL_POLICY_DIVERGENCES.md",
+              "docs/typescript-deprecation.md",
+              "docs/rust-migration-security-findings.md",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit(f"unexpected evidence paths: {unexpected}")
+          required = {
+              ".github/workflows/repair-create-install-warning-terminal-text.yml",
+              ".github/workflows/repair-create-install-warning-terminal-text-v2.yml",
+              "tools/migration/repair_create_install_warning_terminal_text.py",
+              "packages/create-turbo/rust/SECURITY.md",
+              "docs/rust-migration-security-findings.md",
+          }
+          missing = sorted(required - changed)
+          if missing:
+              raise SystemExit(f"required evidence paths are missing: {missing}")
+          PY
+
+          git commit -m "docs(create-turbo): Record install warning terminal fix"
+          echo "DOCS_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Validate the exact final source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+
+          pnpm --filter create-turbo exec jest --runInBand --coverage=false
+          pnpm --filter create-turbo exec tsc --noEmit --pretty false
+          pnpm exec oxlint \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/__tests__/create-install-policy.test.ts
+          pnpm exec oxfmt --check \
+            packages/create-turbo/src/utils/sanitize-terminal-text.ts \
+            packages/create-turbo/src/commands/create/install-warning.ts \
+            packages/create-turbo/src/commands/create/index.ts \
+            packages/create-turbo/__tests__/create-install-policy.test.ts \
+            packages/create-turbo/rust/README.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/SECURITY.md \
+            packages/create-turbo/rust/CREATE_INSTALL_POLICY_DIVERGENCES.md \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-security-findings.md
+
+          cargo fmt --all --check
+          cargo check --locked -p create-turbo-rs --all-targets
+          cargo test --locked -p create-turbo-rs --all-targets
+          cargo clippy --locked -p create-turbo-rs --all-targets -- -D warnings
+          git diff --exit-code -- Cargo.toml Cargo.lock package.json pnpm-lock.yaml
+          test -z "$(git status --porcelain)"
+
+      - name: Install Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up the repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Prepare a temporary source-compatible Rust graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.toml /tmp/install-warning-Cargo.toml.original
+          cp Cargo.lock /tmp/install-warning-Cargo.lock.original
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'biome_diagnostics = { version = "0.5.7" }': 'biome_diagnostics = { version = "=0.5.7" }',
+              'biome_formatter = { version = "0.5.7" }': 'biome_formatter = { version = "=0.5.7" }',
+              'biome_json_parser = { version = "0.5.7" }': 'biome_json_parser = { version = "=0.5.7" }',
+              'biome_json_formatter = { version = "0.5.7" }': 'biome_json_formatter = { version = "=0.5.7" }',
+              'biome_json_syntax = { version = "0.5.7" }': 'biome_json_syntax = { version = "=0.5.7" }',
+              'unrs_resolver = "1.11.1"': 'unrs_resolver = "=1.11.1"',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"temporary dependency anchor changed: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          package_is_locked() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          name, version = sys.argv[1:]
+          lock = tomllib.loads(Path("Cargo.lock").read_text(encoding="utf-8"))
+          present = any(
+              package.get("name") == name and package.get("version") == version
+              for package in lock.get("package", [])
+          )
+          raise SystemExit(0 if present else 1)
+          PY
+          }
+
+          downgrade_if_locked() {
+            local name="$1"
+            local from_version="$2"
+            local to_version="$3"
+            if package_is_locked "$name" "$from_version"; then
+              cargo update -p "$name@$from_version" --precise "$to_version"
+            fi
+          }
+
+          downgrade_if_locked biome_console 0.5.8 0.5.7
+          downgrade_if_locked biome_diagnostics 0.5.8 0.5.7
+          downgrade_if_locked biome_parser 0.5.8 0.5.7
+          downgrade_if_locked biome_rowan 0.5.8 0.5.7
+          downgrade_if_locked biome_string_case 0.5.8 0.5.7
+          downgrade_if_locked biome_text_edit 0.5.8 0.5.7
+          downgrade_if_locked biome_text_size 0.5.8 0.5.7
+          downgrade_if_locked biome_unicode_table 0.5.9 0.5.7
+          downgrade_if_locked unrs_resolver 1.12.2 1.11.1
+
+      - name: Build the Turbo binary used by the unchanged pre-push hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p turbo --bin turbo
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+          echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/target/debug/turbo" --version
+
+      - name: Restore the committed dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/install-warning-Cargo.toml.original Cargo.toml
+          cp /tmp/install-warning-Cargo.lock.original Cargo.lock
+          git diff --exit-code -- Cargo.toml Cargo.lock
+          test -z "$(git status --porcelain)"
+
+      - name: Push the ordered RED, GREEN, and security evidence commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/target/debug/turbo"
+
+          remote_head="$(
+            git ls-remote origin refs/heads/rust/typescript-deprecation |
+              awk '{print $1}'
+          )"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "integration branch moved during the tranche: $remote_head" >&2
+            exit 1
+          fi
+
+          test "$(git rev-parse "$RED_SHA^")" = "$GITHUB_SHA"
+          test "$(git rev-parse "$GREEN_SHA^")" = "$RED_SHA"
+          test "$(git rev-parse "$DOCS_SHA^")" = "$GREEN_SHA"
+          test "$(git rev-parse HEAD)" = "$DOCS_SHA"
+          test -z "$(git status --porcelain)"
+
+          git push origin HEAD:rust/typescript-deprecation

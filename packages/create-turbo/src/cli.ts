@@ -10,6 +10,7 @@ import {
 } from "@turbo/telemetry";
 import cliPkg from "../package.json";
 import { create } from "./commands";
+import { InvalidDirectoryError } from "./commands/create/prompts";
 
 const notifyUpdate = createNotifyUpdate({ packageInfo: cliPkg });
 
@@ -91,6 +92,13 @@ createTurboCli
   .then(() => notifyUpdate())
   .catch(async (reason) => {
     logger.log();
+    if (reason instanceof InvalidDirectoryError) {
+      logger.error(reason.message);
+      logger.log();
+      await notifyUpdate(1);
+      return;
+    }
+
     logger.error("Unexpected error. Please report it as a bug:");
     logger.log(reason);
     logger.log();

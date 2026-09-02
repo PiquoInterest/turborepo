@@ -1,0 +1,34 @@
+[package]
+name = "turbo-ignore-rs"
+version = "2.10.13-canary.1"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+description = "Rust implementation of turbo-ignore with fail-open deployment semantics"
+
+[lib]
+name = "turbo_ignore"
+path = "src/lib.rs"
+
+[[bin]]
+name = "turbo-ignore"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+regex.workspace = true
+semver.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.177"
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

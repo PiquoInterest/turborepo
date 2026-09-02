@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 // all event builders and their event methods
 pub mod command;
 pub mod generic;
+pub mod package;
 pub mod repo;
 pub mod task;
 

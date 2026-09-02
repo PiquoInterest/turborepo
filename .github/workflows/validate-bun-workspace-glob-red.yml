@@ -1,0 +1,79 @@
+name: Validate Bun workspace glob GREEN contract
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/validate-bun-workspace-glob-red.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate-green:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the exact GREEN branch state
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the immutable RED-to-GREEN chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "029e43e562a3df0b152c686e29b37491ce54a096"
+          git merge-base --is-ancestor \
+            7d3657eff34202f912aa0f78437f2dff833c19f3 \
+            HEAD
+          ! grep -Fq 'RED stub: the source-compatible validator' \
+            packages/turbo-workspaces/rust/src/lib.rs
+          test "$(git diff --name-only HEAD^ HEAD | sort)" = "$(printf '%s\n' \
+            .github/workflows/validate-bun-workspace-glob-red.yml \
+            packages/turbo-workspaces/rust/src/lib.rs | sort)"
+          git diff --exit-code HEAD^ -- \
+            Cargo.toml \
+            Cargo.lock \
+            packages/turbo-workspaces/rust/Cargo.toml
+
+      - name: Set up Node and the locked workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Keep the TypeScript oracle green
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/utils.test.ts \
+            __tests__/bun-workspace-glob-security.test.ts
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Validate the Rust GREEN implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="packages/turbo-workspaces/rust/Cargo.toml"
+          cargo fmt --manifest-path "$manifest" --check
+          cargo check --manifest-path "$manifest" --all-targets
+          cargo test --manifest-path "$manifest" --all-targets
+          cargo clippy --manifest-path "$manifest" --all-targets -- -D warnings
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-workspaces/rust/src/lib.rs \
+            packages/turbo-workspaces/rust/tests/bun_workspace_glob_*.rs; then
+            echo "Bun workspace glob tranche introduced unsafe code" >&2
+            exit 1
+          fi
