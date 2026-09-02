@@ -39,6 +39,10 @@ jobs:
             "f1545a2f43cfaae278bbc03e83dd56d79af76320"
           test "$(git rev-parse HEAD:packages/turbo-workspaces/rust/src/lib.rs)" = \
             "9b1d3fd093f8ecb46a4a0b0c2c8db30be106c836"
+          test "$(git rev-parse HEAD:tools/migration/turbo-workspaces-declaration/red-section.rs)" = \
+            "3ddd86e8d7ab357ca9ca6a3f76f0bcffc1fc14cf"
+          test "$(git rev-parse HEAD:tools/migration/turbo-workspaces-declaration/green-section.rs)" = \
+            "532d113415078e4ae712e719bcfb338d293d203a"
           grep -Fq '"packages/turbo-workspaces/rust"' Cargo.toml
           test ! -e packages/turbo-workspaces/rust/Cargo.lock
 
@@ -225,6 +229,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git rm \
+            tools/migration/turbo-workspaces-declaration/red-section.rs \
+            tools/migration/turbo-workspaces-declaration/green-section.rs
           rm -rf tools/migration/turbo-workspaces-declaration
           git rm .github/workflows/continue-package-manager-declaration.yml
           git diff --cached --check
