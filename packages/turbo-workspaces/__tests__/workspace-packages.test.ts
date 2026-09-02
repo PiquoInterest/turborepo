@@ -12,9 +12,12 @@ describe("parseWorkspacePackages", () => {
     },
     { workspaces: { packages: undefined }, expected: [] },
     { workspaces: {}, expected: [] }
-  ])("preserves the source value contract for %#", ({ workspaces, expected }) => {
-    expect(parseWorkspacePackages({ workspaces })).toEqual(expected);
-  });
+  ])(
+    "preserves the source value contract for %#",
+    ({ workspaces, expected }) => {
+      expect(parseWorkspacePackages({ workspaces })).toEqual(expected);
+    }
+  );
 
   it("preserves ordering, duplicates, empty values, and supported glob syntax", () => {
     const globs = [
@@ -30,7 +33,10 @@ describe("parseWorkspacePackages", () => {
   });
 
   it.failing("rejects more than 256 workspace globs", () => {
-    const globs = Array.from({ length: 257 }, (_, index) => `packages/${index}`);
+    const globs = Array.from(
+      { length: 257 },
+      (_, index) => `packages/${index}`
+    );
 
     expect(() => parseWorkspacePackages({ workspaces: globs })).toThrow(
       "workspace glob count exceeds 256"
