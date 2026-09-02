@@ -117,12 +117,13 @@ jobs:
         with:
           node-version: 24
 
-      - name: Expose locked repository binaries to Git hooks
+      - name: Expose locked repository Turbo to Git hooks
         shell: bash
         run: |
           set -euo pipefail
-          test -x "$GITHUB_WORKSPACE/node_modules/.bin/turbo"
-          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+          test -x "$GITHUB_WORKSPACE/packages/turbo/bin/turbo"
+          "$GITHUB_WORKSPACE/packages/turbo/bin/turbo" --version
+          echo "$GITHUB_WORKSPACE/packages/turbo/bin" >> "$GITHUB_PATH"
 
       - name: Set up repository Rust toolchain
         uses: ./.github/actions/setup-rust
