@@ -1,0 +1,188 @@
+name: Integrate turbo-workspaces Rust crate
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/integrate-turbo-workspaces-rust.yml
+
+concurrency:
+  group: integrate-turbo-workspaces-rust
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout the exact migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/rust/src/lib.rs)" = \
+            "9b1d3fd093f8ecb46a4a0b0c2c8db30be106c836"
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Stage root-workspace integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"reviewed anchor changed in {path}: {old!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          root_manifest = Path("Cargo.toml")
+          replace_once(
+              root_manifest,
+              '  "packages/turbo-ignore/rust",\n  "packages/turbo-repository/rust",',
+              '  "packages/turbo-ignore/rust",\n  "packages/turbo-workspaces/rust",\n  "packages/turbo-repository/rust",',
+          )
+
+          Path("packages/turbo-workspaces/rust/Cargo.toml").write_text(
+              '''[package]
+          name = "turbo-workspaces-rs"
+          version = "0.1.0"
+          edition = { workspace = true }
+          license = "MIT"
+          publish = false
+          description = "Rust migration of turbo-workspaces behavior"
+
+          [lib]
+          path = "src/lib.rs"
+
+          [lints]
+          workspace = true
+          '''.replace("          ", ""),
+              encoding="utf-8",
+          )
+          nested_lock = Path("packages/turbo-workspaces/rust/Cargo.lock")
+          if not nested_lock.is_file():
+              raise SystemExit("expected standalone turbo-workspaces Cargo.lock")
+          nested_lock.unlink()
+
+          program = Path("docs/typescript-deprecation.md")
+          replace_once(
+              program,
+              '- `packages/create-turbo/rust`: 116 translated parity tests and 92 security regression tests across README/`.gitignore`, Git, default/official routing, transform and prompt policy, error/install/output policy, installation profiles, and project-directory selection.\n- `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.',
+              '- `packages/create-turbo/rust`: 116 translated parity tests and 92 security regression tests across README/`.gitignore`, Git, default/official routing, transform and prompt policy, error/install/output policy, installation profiles, and project-directory selection.\n- `packages/turbo-workspaces/rust`: 18 translated parity tests and 11 security regression tests across workspace-details orchestration and Bun workspace-glob policy.\n- `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.',
+          )
+          replace_once(
+              program,
+              'That is **382 authored Rust migration tests** on the integration branch.',
+              'That is **411 authored Rust migration tests** on the integration branch.',
+          )
+          replace_once(
+              program,
+              '| `packages/turbo-workspaces` | Rust CLI/library | Queued and partially exposed through provider boundary | Package-manager adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, and packaging. |',
+              '| `packages/turbo-workspaces` | `packages/turbo-workspaces/rust` | Workspace-details and Bun-glob cores implemented | Package-manager declarations, adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, bindings, packaging, callers, and removal proof. |',
+          )
+
+          Path("packages/turbo-workspaces/rust/security.txt").write_text(
+              '''# Rust migration security index for packages/turbo-workspaces
+          # Canonical narrative review: SECURITY.md
+          # Vulnerability disclosure policy: ../../../SECURITY.md
+
+          Component: turbo-workspaces-rs
+          Status: root-workspace-integrated
+          Production-Cutover: blocked
+          TypeScript-Removal: not-started
+          Rust-Parity-Tests: 18
+          Rust-Security-Tests: 11
+
+          Security-Fix: TW-RS-001 fixed six-manager detection order
+          Security-Fix: TW-RS-002 no parser fallback after detector or reader error
+          Security-Fix: TW-RS-003 validated absolute path is the only manager path
+          Security-Fix: TW-RS-004 at most six detections and one read
+          Security-Blocker: TW-RS-005 stable bounded no-follow filesystem provider required
+          Security-Fix: TW-RS-006 bounded Bun workspace-glob count and byte volume
+          Security-Fix: TW-RS-007 terminal-active and invisible Bun glob text rejected
+          New-Dependencies: none
+          Unsafe-Code: none
+          '''.replace("          ", ""),
+              encoding="utf-8",
+          )
+
+      - name: Generate and verify the exact lockfile delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp Cargo.lock /tmp/Cargo.lock.before
+          cargo check -p turbo-workspaces-rs --all-targets
+          python3 <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          def load(path: str) -> dict[tuple[str, str, str], dict]:
+              document = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+              return {
+                  (package["name"], package["version"], package.get("source", "")): package
+                  for package in document.get("package", [])
+              }
+
+          before = load("/tmp/Cargo.lock.before")
+          after = load("Cargo.lock")
+          expected = {("turbo-workspaces-rs", "0.1.0", "")}
+          if set(after) - set(before) != expected or set(before) - set(after):
+              raise SystemExit("unexpected root Cargo.lock package delta")
+          for key, package in before.items():
+              if after[key] != package:
+                  raise SystemExit(f"existing lock record changed: {key}")
+          if after[("turbo-workspaces-rs", "0.1.0", "")].get("dependencies"):
+              raise SystemExit("turbo-workspaces unexpectedly acquired dependencies")
+          PY
+
+      - name: Validate the integrated crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo test --locked -p turbo-workspaces-rs --all-targets
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+          git diff --check
+          if grep -R --line-number --fixed-strings 'unsafe {' packages/turbo-workspaces/rust; then
+            echo 'turbo-workspaces Rust migration introduced unsafe code' >&2
+            exit 1
+          fi
+
+      - name: Commit the integration and remove this one-shot job
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/integrate-turbo-workspaces-rust.yml
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            packages/turbo-workspaces/rust/Cargo.toml \
+            packages/turbo-workspaces/rust/Cargo.lock \
+            packages/turbo-workspaces/rust/security.txt \
+            docs/typescript-deprecation.md
+          git diff --cached --check
+          git commit -m "fix(turbo-workspaces): Integrate Rust crate with root workspace"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          git push origin HEAD:rust/typescript-deprecation
