@@ -11,9 +11,10 @@ The migration program currently contains these Rust migration cores on the singl
 - `packages/turbo-ignore/rust`: 25 translated parity tests and 13 security regression tests.
 - `packages/turbo-utils/rust`: 73 translated parity tests and 47 security regression tests.
 - `packages/create-turbo/rust`: 116 translated parity tests and 92 security regression tests across README/`.gitignore`, Git, default/official routing, transform and prompt policy, error/install/output policy, installation profiles, and project-directory selection.
+- `packages/turbo-workspaces/rust`: 18 translated parity tests and 11 security regression tests across workspace-details orchestration and Bun workspace-glob policy.
 - `crates/turborepo-telemetry::events::package`: 9 translated parity tests and 7 security regression tests for the package-facing telemetry contract.
 
-That is **382 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The consolidated directory and provider-hardening tranches are not treated as reviewable until their merge-head workflow formats, compiles, tests, lints, and audits them successfully.
+That is **411 authored Rust migration tests** on the integration branch. Test count is evidence coverage, not a completion percentage. The consolidated directory and provider-hardening tranches are not treated as reviewable until their merge-head workflow formats, compiles, tests, lints, and audits them successfully.
 
 No TypeScript package is removed yet. Safe-input differential execution, production bindings, packaging, supported-platform closure, downstream cutover, and removal proof remain open. Migration CI auto-discovers package-local Rust crates, requires current evidence documents and advisory records, and compiles, tests, lints, and audits the resolved dependency graph.
 
@@ -63,7 +64,7 @@ Test-only TypeScript and host-required JavaScript adapters are tracked separatel
 | `packages/create-turbo` | `packages/create-turbo/rust` | In progress | README/`.gitignore`, Git, default/official routing, transform/prompt, error/install/output, installation-profile, and directory-selection cores are ported. Production prompt/filesystem/VCS/converter/JSON/process providers, bindings, telemetry, packaging, callers, platform differentials, and removal proof remain. |
 | `packages/turbo-gen` | Rust CLI | Queued | Generator discovery, prompts, template rendering, workspace mutations, packaging. |
 | `packages/turbo-codemod` | Rust CLI | Queued | Golden fixtures, idempotence, parser/rewriter boundaries, packaging. |
-| `packages/turbo-workspaces` | Rust CLI/library | Queued and partially exposed through provider boundary | Package-manager adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, and packaging. |
+| `packages/turbo-workspaces` | `packages/turbo-workspaces/rust` | Workspace-details and Bun-glob cores implemented | Package-manager declarations, adapters, complete six-manager conversion, lock/workspace mutation semantics, rollback, process policy, bindings, packaging, callers, and removal proof. |
 | `packages/turbo-telemetry` | existing telemetry Rust crate plus package contract | In progress | Package event core is consolidated. Consent/config persistence, production binding, transport integration, caller cutover, and removal proof remain. |
 | ESLint plugin/config | Rust/WASM rule core with minimal JS adapter | Host-bound | Preserve ESLint node/range/fix semantics and package compatibility. |
 | VS Code and language-tool adapters | Rust LSP plus minimal extension bootstrap | Host-bound | Move business logic to Rust while retaining host-required JavaScript only. |

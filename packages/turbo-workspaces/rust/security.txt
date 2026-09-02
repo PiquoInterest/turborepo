@@ -3,23 +3,18 @@
 # Vulnerability disclosure policy: ../../../SECURITY.md
 
 Component: turbo-workspaces-rs
-Status: implemented-core-validation-pending
+Status: root-workspace-integrated
 Production-Cutover: blocked
 TypeScript-Removal: not-started
-TypeScript-Oracle: 4e7fb108a32798fc2a9f8c2f3b9caa3ae18c78ff
-TypeScript-Oracle-Result: 5/5 green; workflow 33551576871; job 100002027683
-Rust-RED: 2d4cc22e6a821c88882a87d604746dabbaa95fe2
-Rust-GREEN: 263ddc22d5b5f544768f4e089c92892339b0dce8
-Rust-Parity-Tests: 6
-Rust-Security-Tests: 5
-Rust-Execution: pending-hosted-runner
+Rust-Parity-Tests: 18
+Rust-Security-Tests: 11
 
-Security-Fix: TW-RS-001 fixed closed six-manager detection order
+Security-Fix: TW-RS-001 fixed six-manager detection order
 Security-Fix: TW-RS-002 no parser fallback after detector or reader error
-Security-Fix: TW-RS-003 managers receive only provider-validated absolute path
+Security-Fix: TW-RS-003 validated absolute path is the only manager path
 Security-Fix: TW-RS-004 at most six detections and one read
 Security-Blocker: TW-RS-005 stable bounded no-follow filesystem provider required
+Security-Fix: TW-RS-006 bounded Bun workspace-glob count and byte volume
+Security-Fix: TW-RS-007 terminal-active and invisible Bun glob text rejected
 New-Dependencies: none
 Unsafe-Code: none
-Shell-Execution: none
-Network-Authority: none
