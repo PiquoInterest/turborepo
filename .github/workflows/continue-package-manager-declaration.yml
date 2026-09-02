@@ -1,0 +1,234 @@
+name: Continue turbo-workspaces declaration migration
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/continue-package-manager-declaration.yml
+
+concurrency:
+  group: continue-turbo-workspaces-declaration
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  declaration-tdd:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout the exact migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository, branch, and source oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/__tests__/utils.test.ts)" = \
+            "2a99dc19e0deca5e2d4a71e11f931bed181426fa"
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/src/utils.ts)" = \
+            "f1545a2f43cfaae278bbc03e83dd56d79af76320"
+          test "$(git rev-parse HEAD:packages/turbo-workspaces/rust/src/lib.rs)" = \
+            "9b1d3fd093f8ecb46a4a0b0c2c8db30be106c836"
+          grep -Fq '"packages/turbo-workspaces/rust"' Cargo.toml
+          test ! -e packages/turbo-workspaces/rust/Cargo.lock
+
+      - name: Materialize reviewed migration assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset_dir=tools/migration/turbo-workspaces-declaration
+          mkdir -p "$asset_dir"
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          shas = [
+              "9999f6d036d19a34cae51116ab75ad47a546f7c3",
+              "8ef5d9b03fdb0b98f75a15a07b0ceb155292a562",
+              "7baad2a0e002105d964c7255350948b23c6134d1",
+              "59061b3d8cb2482c0eae741f05efc622bff061d3",
+              "a3ef593d0ca67b2a06695a4a785d65222c9f275b",
+              "83d9b24cf057c60468c4e3f3aa0dd2cebff74340",
+          ]
+          token = os.environ["GH_TOKEN"]
+          encoded = bytearray()
+          for sha in shas:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/PiquoInterest/turborepo/git/blobs/{sha}",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.load(response)
+              encoded.extend(base64.b64decode(payload["content"]))
+          if len(encoded) != 15_300:
+              raise SystemExit(f"unexpected encoded asset size: {len(encoded)}")
+          archive = base64.b64decode(encoded, validate=True)
+          if len(archive) != 11_475:
+              raise SystemExit(f"unexpected archive size: {len(archive)}")
+          Path("/tmp/turbo-workspaces-declaration.tar.gz").write_bytes(archive)
+          PY
+          test "$(sha256sum /tmp/turbo-workspaces-declaration.tar.gz | awk '{print $1}')" = \
+            "67edee9ff6dfd3ae67e97097f914f67c77346a492cf0ceb1a4a8b808f15fadc3"
+          tar -xzf /tmp/turbo-workspaces-declaration.tar.gz -C "$asset_dir"
+          rm /tmp/turbo-workspaces-declaration.tar.gz
+          chmod 0755 "$asset_dir/stage_package_manager_declaration.py"
+          test "$(sha256sum "$asset_dir/stage_package_manager_declaration.py" | awk '{print $1}')" = \
+            "8ab5eb3175a3ddea29050e26fa0e362d467b8b182be7d293b4741089b0f00688"
+          test "$(sha256sum "$asset_dir/red_section.rs" | awk '{print $1}')" = \
+            "45fffb6131cd8150beff16e37eed8986e97e7be9567edbc911a3dab66bf5fcc7"
+          test "$(sha256sum "$asset_dir/green_section.rs" | awk '{print $1}')" = \
+            "1f29ba311547288e35b18caef21c8cb505570210765e9b45268b906825fd38c2"
+
+      - name: Set up Node and locked JavaScript dependencies
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Configure commit identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Stage and prove the compiling behavioral RED
+        id: red
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/turbo-workspaces-declaration/stage_package_manager_declaration.py red
+          pnpm exec oxfmt --write \
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+          pnpm exec oxfmt --check \
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false
+          cargo fmt --all
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+          set +e
+          cargo test --locked -p turbo-workspaces-rs \
+            --test package_manager_declaration_parity \
+            --test package_manager_declaration_security \
+            > /tmp/package-manager-declaration-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/package-manager-declaration-red.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "package-manager declaration RED unexpectedly passed" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' /tmp/package-manager-declaration-red.log; then
+            echo "package-manager declaration RED failed to compile" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' /tmp/package-manager-declaration-red.log
+          grep -Eq \
+            'set_declaration_normalizes_a_leading_v|reads_npm_exact_version|rejects_oversized_top_level_package_manager' \
+            /tmp/package-manager-declaration-red.log
+          if grep -R --line-number --fixed-strings 'unsafe {' packages/turbo-workspaces/rust; then
+            echo 'declaration RED introduced unsafe code' >&2
+            exit 1
+          fi
+          git diff --check
+          git add \
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts \
+            packages/turbo-workspaces/rust/src/lib.rs \
+            packages/turbo-workspaces/rust/tests/package_manager_declaration_parity.rs \
+            packages/turbo-workspaces/rust/tests/package_manager_declaration_security.rs \
+            packages/turbo-workspaces/rust/security.txt
+          git diff --cached --check
+          git commit -m "test(turbo-workspaces): Add package-manager declaration RED contract"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$(git rev-parse HEAD^)"
+          git push origin HEAD:rust/typescript-deprecation
+
+      - name: Implement and prove the GREEN declaration core
+        id: green
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/turbo-workspaces-declaration/stage_package_manager_declaration.py green
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo test --locked -p turbo-workspaces-rs --all-targets
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false
+          if grep -R --line-number --fixed-strings 'unsafe {' packages/turbo-workspaces/rust; then
+            echo 'declaration GREEN introduced unsafe code' >&2
+            exit 1
+          fi
+          git diff --check
+          git add packages/turbo-workspaces/rust/src/lib.rs
+          git diff --cached --check
+          git commit -m "feat(turbo-workspaces): Port package-manager declaration policy"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$(git rev-parse HEAD^)"
+          git push origin HEAD:rust/typescript-deprecation
+
+      - name: Record parity, TDD, and security evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/migration/turbo-workspaces-declaration/stage_package_manager_declaration.py docs \
+            --red-sha "${{ steps.red.outputs.sha }}" \
+            --green-sha "${{ steps.green.outputs.sha }}"
+          cargo fmt --all --check
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo test --locked -p turbo-workspaces-rs --all-targets
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false
+          git diff --check
+          git add \
+            packages/turbo-workspaces/rust/README.md \
+            packages/turbo-workspaces/rust/TEST_INVENTORY.md \
+            packages/turbo-workspaces/rust/PARITY_MATRIX.md \
+            packages/turbo-workspaces/rust/SECURITY.md \
+            packages/turbo-workspaces/rust/security.txt \
+            docs/typescript-deprecation.md \
+            docs/rust-migration-test-inventory.md \
+            docs/rust-migration-security-findings.md
+          git diff --cached --check
+          git commit -m "docs(turbo-workspaces): Record declaration parity and hardening"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$(git rev-parse HEAD^)"
+          git push origin HEAD:rust/typescript-deprecation
+
+      - name: Remove one-shot migration automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/migration/turbo-workspaces-declaration
+          git rm .github/workflows/continue-package-manager-declaration.yml
+          git diff --cached --check
+          git commit -m "ci(turbo-workspaces): Remove declaration migration automation"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$(git rev-parse HEAD^)"
+          git push origin HEAD:rust/typescript-deprecation
