@@ -1,0 +1,36 @@
+name: Render workspace package oracle formatting
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/render-workspace-package-oracle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up locked Node workspace
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Render canonical formatter output
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=packages/turbo-workspaces/__tests__/workspace-packages.test.ts
+          pnpm exec oxfmt --write "$file"
+          pnpm exec oxfmt --check "$file"
+          echo 'FORMAT_BASE64_BEGIN'
+          base64 -w0 "$file"
+          echo
+          echo 'FORMAT_BASE64_END'
