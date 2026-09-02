@@ -1,0 +1,226 @@
+name: Repair turbo-workspaces declaration formatting gate
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/repair-declaration-formatting-gate.yml
+
+concurrency:
+  group: repair-turbo-workspaces-declaration-formatting
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout the exact migration branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: rust/typescript-deprecation
+          fetch-depth: 0
+
+      - name: Verify repository, branch, and reviewed parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "PiquoInterest/turborepo"
+          test "$GITHUB_REF_NAME" = "rust/typescript-deprecation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = \
+            "14d7ffa4f1858b7eb29595cf0ce0bfbb444745cc"
+          test "$(git rev-parse HEAD:.github/workflows/continue-package-manager-declaration.yml)" = \
+            "9b4fdfa07643dfaf8509a8f52e12aae1b894cb3a"
+
+      - name: Set up Node and locked JavaScript dependencies
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Set up repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Install immutable Turbo build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes capnproto
+          capnp --version
+
+      - name: Set up repository Zig toolchain
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.15.2"
+
+      - name: Build immutable Turbo for Git hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          hook_source="$RUNNER_TEMP/turbo-hook-source"
+          hook_target="$RUNNER_TEMP/turbo-hook-target"
+          hook_bin="$RUNNER_TEMP/turbo-hook-bin"
+          git worktree add --detach "$hook_source" \
+            813d54ae054923e85269979dfa98fe5e47331070
+          (
+            cd "$hook_source"
+            CARGO_TARGET_DIR="$hook_target" cargo build --locked -p turbo --bin turbo
+          )
+          turbo_binary="$hook_target/debug/turbo"
+          test -x "$turbo_binary"
+          test "$("$turbo_binary" --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+          mkdir -p "$hook_bin"
+          ln -s "$turbo_binary" "$hook_bin/turbo"
+          echo "$hook_bin" >> "$GITHUB_PATH"
+          git worktree remove --force "$hook_source"
+          rm -rf "$GITHUB_WORKSPACE/zig"
+
+      - name: Normalize the exact formatter debt reported by the protected hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --write \
+            docs/rust-migration-test-inventory.md \
+            docs/typescript-deprecation.md \
+            packages/create-turbo/__tests__/create-output-security.test.ts \
+            packages/create-turbo/__tests__/directory-security.test.ts \
+            packages/create-turbo/rust/CREATE_ERROR_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md \
+            packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md \
+            packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/PACKAGE_MANAGER_PROMPT_DIVERGENCES.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/TRANSFORM_PIPELINE_DIVERGENCES.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-workspaces/__tests__/bun-workspace-glob-security.test.ts \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts \
+            packages/turbo-workspaces/rust/PARITY_MATRIX.md \
+            packages/turbo-workspaces/rust/TEST_INVENTORY.md
+          pnpm exec oxfmt --check
+          git diff --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              "docs/rust-migration-test-inventory.md",
+              "docs/typescript-deprecation.md",
+              "packages/create-turbo/__tests__/create-output-security.test.ts",
+              "packages/create-turbo/__tests__/directory-security.test.ts",
+              "packages/create-turbo/rust/CREATE_ERROR_POLICY_DIVERGENCES.md",
+              "packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md",
+              "packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md",
+              "packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md",
+              "packages/create-turbo/rust/PACKAGE_MANAGER_PROMPT_DIVERGENCES.md",
+              "packages/create-turbo/rust/PARITY_MATRIX.md",
+              "packages/create-turbo/rust/TRANSFORM_PIPELINE_DIVERGENCES.md",
+              "packages/turbo-utils/rust/PARITY_MATRIX.md",
+              "packages/turbo-workspaces/__tests__/bun-workspace-glob-security.test.ts",
+              "packages/turbo-workspaces/__tests__/workspace-details.test.ts",
+              "packages/turbo-workspaces/rust/PARITY_MATRIX.md",
+              "packages/turbo-workspaces/rust/TEST_INVENTORY.md",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(
+                  f"formatter path set changed: expected={sorted(expected)}, actual={sorted(changed)}"
+              )
+          PY
+
+      - name: Commit the formatter-only repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/rust-migration-test-inventory.md \
+            docs/typescript-deprecation.md \
+            packages/create-turbo/__tests__/create-output-security.test.ts \
+            packages/create-turbo/__tests__/directory-security.test.ts \
+            packages/create-turbo/rust/CREATE_ERROR_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/DIRECTORY_PROMPT_DIVERGENCES.md \
+            packages/create-turbo/rust/OFFICIAL_STARTER_DIVERGENCES.md \
+            packages/create-turbo/rust/PACKAGE_MANAGER_INSTALL_POLICY_DIVERGENCES.md \
+            packages/create-turbo/rust/PACKAGE_MANAGER_PROMPT_DIVERGENCES.md \
+            packages/create-turbo/rust/PARITY_MATRIX.md \
+            packages/create-turbo/rust/TRANSFORM_PIPELINE_DIVERGENCES.md \
+            packages/turbo-utils/rust/PARITY_MATRIX.md \
+            packages/turbo-workspaces/__tests__/bun-workspace-glob-security.test.ts \
+            packages/turbo-workspaces/__tests__/workspace-details.test.ts \
+            packages/turbo-workspaces/rust/PARITY_MATRIX.md \
+            packages/turbo-workspaces/rust/TEST_INVENTORY.md
+          git diff --cached --check
+          git commit -m "style: Normalize migration formatter debt"
+
+      - name: Make the declaration workflow format its materialized oracle asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/continue-package-manager-declaration.yml")
+          text = path.read_text(encoding="utf-8")
+          old = '''          pnpm exec oxfmt --write \\
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+          pnpm exec oxfmt --check \\
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+'''
+          new = '''          pnpm exec oxfmt --write \\
+            tools/migration/turbo-workspaces-declaration/package-manager-declaration-security.test.ts \\
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+          pnpm exec oxfmt --check \\
+            tools/migration/turbo-workspaces-declaration/package-manager-declaration-security.test.ts \\
+            packages/turbo-workspaces/__tests__/package-manager-declaration-security.test.ts
+'''
+          if text.count(old) != 1:
+              raise SystemExit("declaration formatter anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          rm .github/workflows/repair-declaration-formatting-gate.yml
+          git add \
+            .github/workflows/continue-package-manager-declaration.yml \
+            .github/workflows/repair-declaration-formatting-gate.yml
+          git diff --cached --check
+          python3 <<'PY'
+          import subprocess
+
+          expected = {
+              ".github/workflows/continue-package-manager-declaration.yml",
+              ".github/workflows/repair-declaration-formatting-gate.yml",
+          }
+          changed = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"workflow repair path set changed: {sorted(changed)}")
+          PY
+          git commit -m "ci(turbo-workspaces): Format declaration oracle asset before push"
+
+      - name: Push the two sequential repair commits through protected hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v turbo
+          test "$(turbo --version)" = \
+            "$(node -p 'require("./packages/turbo/package.json").version')"
+          test -z "$(git status --porcelain)"
+          remote_head="$(git ls-remote origin refs/heads/rust/typescript-deprecation | awk 'NR == 1 {print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          GIT_TERMINAL_PROMPT=0 git push origin HEAD:rust/typescript-deprecation
