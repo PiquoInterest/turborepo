@@ -1,0 +1,145 @@
+name: Validate turbo-workspaces workspace package parser
+
+on:
+  push:
+    branches:
+      - rust/typescript-deprecation
+    paths:
+      - .github/workflows/validate-workspace-package-parser.yml
+      - packages/turbo-workspaces/__tests__/workspace-packages.test.ts
+      - packages/turbo-workspaces/rust/src/lib.rs
+      - packages/turbo-workspaces/rust/src/workspace_core.rs
+      - packages/turbo-workspaces/rust/src/workspace_packages.rs
+      - packages/turbo-workspaces/rust/tests/workspace_packages_parity.rs
+      - packages/turbo-workspaces/rust/tests/workspace_packages_security.rs
+      - packages/turbo-workspaces/rust/README.md
+      - packages/turbo-workspaces/rust/PARITY_MATRIX.md
+      - packages/turbo-workspaces/rust/SECURITY.md
+      - packages/turbo-workspaces/rust/security.txt
+      - packages/turbo-workspaces/rust/TEST_INVENTORY.md
+      - packages/turbo-workspaces/rust/WORKSPACE_PACKAGES_DIVERGENCES.md
+  pull_request:
+    paths:
+      - .github/workflows/validate-workspace-package-parser.yml
+      - packages/turbo-workspaces/__tests__/workspace-packages.test.ts
+      - packages/turbo-workspaces/rust/src/lib.rs
+      - packages/turbo-workspaces/rust/src/workspace_core.rs
+      - packages/turbo-workspaces/rust/src/workspace_packages.rs
+      - packages/turbo-workspaces/rust/tests/workspace_packages_parity.rs
+      - packages/turbo-workspaces/rust/tests/workspace_packages_security.rs
+
+concurrency:
+  group: validate-workspace-package-parser-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tdd-and-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FORCE_COLOR: "0"
+      TURBO_TELEMETRY_MESSAGE_DISABLED: "1"
+    steps:
+      - name: Checkout the migration revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Verify reviewed TDD ancestry and files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor \
+            9c8f77deee15c01baba73fdd510960e899756f0e HEAD
+          git merge-base --is-ancestor \
+            089112a3f85bc2cbaaf864991eb5b6129602ff30 HEAD
+          git merge-base --is-ancestor \
+            8b4aea45459aa09237aef7d8dd35ccf06503ae28 HEAD
+          test -f packages/turbo-workspaces/__tests__/workspace-packages.test.ts
+          test -f packages/turbo-workspaces/rust/src/workspace_packages.rs
+          test -f packages/turbo-workspaces/rust/tests/workspace_packages_parity.rs
+          test -f packages/turbo-workspaces/rust/tests/workspace_packages_security.rs
+          grep -Fq 'TW-RS-011' packages/turbo-workspaces/rust/security.txt
+          grep -Fq 'TW-RS-012' packages/turbo-workspaces/rust/security.txt
+          grep -Fq 'TW-RS-013' packages/turbo-workspaces/rust/security.txt
+
+      - name: Set up Node and locked JavaScript dependencies
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: 24
+
+      - name: Prove the TypeScript oracle remains GREEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec oxfmt --check \
+            packages/turbo-workspaces/__tests__/workspace-packages.test.ts
+          pnpm --filter @turbo/workspaces exec jest --runInBand --coverage=false \
+            __tests__/workspace-packages.test.ts
+
+      - name: Set up the repository Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: false
+          save-cache: false
+
+      - name: Prove the compiling behavioral Rust RED
+        shell: bash
+        run: |
+          set -euo pipefail
+          red_worktree="$RUNNER_TEMP/workspace-packages-red"
+          git worktree add --detach "$red_worktree" \
+            089112a3f85bc2cbaaf864991eb5b6129602ff30
+          trap 'git worktree remove --force "$red_worktree"' EXIT
+
+          set +e
+          (
+            cd "$red_worktree"
+            CARGO_TARGET_DIR="$RUNNER_TEMP/workspace-packages-red-target" \
+              cargo test --locked -p turbo-workspaces-rs \
+                --test workspace_packages_parity \
+                --test workspace_packages_security
+          ) > "$RUNNER_TEMP/workspace-packages-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/workspace-packages-red.log"
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "workspace-package RED unexpectedly passed" >&2
+            exit 1
+          fi
+          if grep -Fq 'could not compile' "$RUNNER_TEMP/workspace-packages-red.log"; then
+            echo "workspace-package RED failed to compile instead of failing behavior" >&2
+            exit 1
+          fi
+          grep -Fq 'test result: FAILED' "$RUNNER_TEMP/workspace-packages-red.log"
+          grep -Eq \
+            'an_array_is_returned_in_source_order|workspace_glob_count_is_bounded' \
+            "$RUNNER_TEMP/workspace-packages-red.log"
+
+      - name: Prove the Rust GREEN and security invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --locked -p turbo-workspaces-rs --all-targets
+          cargo test --locked -p turbo-workspaces-rs \
+            --test workspace_packages_parity \
+            --test workspace_packages_security
+          cargo clippy --locked -p turbo-workspaces-rs --all-targets -- -D warnings
+
+          if grep -R --line-number --fixed-strings 'unsafe {' \
+            packages/turbo-workspaces/rust/src/workspace_packages.rs \
+            packages/turbo-workspaces/rust/tests/workspace_packages_parity.rs \
+            packages/turbo-workspaces/rust/tests/workspace_packages_security.rs; then
+            echo "workspace-package parser introduced unsafe code" >&2
+            exit 1
+          fi
+
+          test "$(grep -c '^Security-Fix: TW-RS-011 ' packages/turbo-workspaces/rust/security.txt)" -eq 1
+          test "$(grep -c '^Security-Fix: TW-RS-012 ' packages/turbo-workspaces/rust/security.txt)" -eq 1
+          test "$(grep -c '^Security-Fix: TW-RS-013 ' packages/turbo-workspaces/rust/security.txt)" -eq 1
+          git diff --exit-code
